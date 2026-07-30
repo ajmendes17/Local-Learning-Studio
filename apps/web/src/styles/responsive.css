@@ -1,0 +1,35 @@
+@media (max-width: 900px) {
+  .course-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .course-workspace {
+    padding-top: 34px;
+  }
+
+  .course-title {
+    padding: 44px 0;
+  }
+
+  .workspace-main,
+  .structure-panel {
+    padding: 20px;
+  }
+
+  .course-stats {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .status-pill {
+    display: none;
+  }
+}
+

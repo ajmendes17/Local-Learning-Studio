@@ -5,9 +5,9 @@ dist/
 .env.local
 *.log
 coverage/
+*.tsbuildinfo
 data/*.sqlite
 data/*.sqlite-*
 courses/*
 !courses/.gitkeep
 !data/.gitkeep
-

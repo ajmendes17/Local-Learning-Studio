@@ -1,0 +1,245 @@
+:root {
+  color: #1c2823;
+  background: #f4f0e7;
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --ink: #1c2823;
+  --muted: #65736c;
+  --paper: #f4f0e7;
+  --line: rgb(28 40 35 / 14%);
+  --white: #fffdf7;
+  --moss: #496b55;
+  --clay: #b9683e;
+  --ochre: #ad7c28;
+  --plum: #72566f;
+  --ocean: #416c79;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #d58a4d;
+  outline-offset: 3px;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.site-header,
+.library-hero,
+.library-content,
+.course-workspace,
+.course-error {
+  width: min(1180px, calc(100% - 48px));
+  margin-inline: auto;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 84px;
+  border-bottom: 1px solid var(--line);
+}
+
+.site-header nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  cursor: pointer;
+}
+
+.brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--paper);
+  background: var(--ink);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.nav-link {
+  padding: 10px 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.nav-link--active {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.service-state {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.service-state > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c38a62;
+}
+
+.service-state--ready > span {
+  background: #4f8a68;
+  box-shadow: 0 0 0 4px rgb(79 138 104 / 14%);
+}
+
+.service-state--offline > span {
+  background: #a94d45;
+}
+
+.eyebrow,
+.section-kicker {
+  margin: 0 0 16px;
+  color: #a85f38;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.button-primary,
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 7px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button-primary {
+  border: 1px solid var(--ink);
+  color: var(--white);
+  background: var(--ink);
+}
+
+.button-primary:hover:not(:disabled) {
+  background: #304139;
+}
+
+.button-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.button-primary--large {
+  min-height: 52px;
+  padding-inline: 22px;
+}
+
+.button-primary--large > span {
+  font-size: 1.3rem;
+  font-weight: 400;
+}
+
+.button-secondary {
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.button-secondary:hover {
+  border-color: rgb(28 40 35 / 34%);
+}
+
+.error-banner,
+.form-error {
+  color: #873f38;
+  background: #f8e5df;
+}
+
+.error-banner {
+  margin-bottom: 22px;
+  padding: 14px 16px;
+  border: 1px solid rgb(135 63 56 / 18%);
+  border-radius: 7px;
+}
+
+.form-error {
+  padding: 10px 12px;
+  border-radius: 5px;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 720px) {
+  .site-header,
+  .library-hero,
+  .library-content,
+  .course-workspace,
+  .course-error {
+    width: min(100% - 32px, 1180px);
+  }
+
+  .site-header nav {
+    gap: 14px;
+  }
+
+  .brand > span:last-child {
+    display: none;
+  }
+
+  .nav-link {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
+

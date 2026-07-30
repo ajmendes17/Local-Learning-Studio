@@ -34,8 +34,8 @@ after successful validation.
 
 ### `packages/contracts`
 
-Owns data exchanged across boundaries. Types should become versioned runtime
-schemas before model-generated data or user files enter the system.
+Owns data exchanged across boundaries. Zod runtime schemas validate course,
+material, module, and assessment records before they cross the API boundary.
 
 ### `.codex/skills/learning-coach`
 
@@ -51,6 +51,8 @@ persistence, and error handling.
   generation timestamp, and model/run metadata.
 
 The repository includes only `.gitkeep` files in local data directories.
+See [COURSE-DATA-MODEL.md](./COURSE-DATA-MODEL.md) for table ownership,
+syllabus-derived structure, and integrity rules.
 
 ## Failure policy
 
@@ -59,11 +61,14 @@ Codex process, invalid structured response, failed source extraction, or failed
 database write must produce an explicit error and leave the last valid artifact
 unchanged.
 
-## Initial API
+## Course library API
 
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/api/health` | Confirm the local service and contract version |
+| `GET` | `/api/courses` | List class cards and derived counts |
+| `POST` | `/api/courses` | Create a class workspace |
+| `GET` | `/api/courses/:courseId` | Load class materials and structure |
+| `POST` | `/api/courses/:courseId/materials` | Store one class source |
 
 API additions should begin with a contract and an acceptance test.
-

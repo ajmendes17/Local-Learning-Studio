@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@fastify/multipart": "^10.1.0",
     "@local-learning-studio/contracts": "*",
     "fastify": "^5.10.0"
   },
@@ -20,4 +21,3 @@
     "typescript": "^7.0.2"
   }
 }
-

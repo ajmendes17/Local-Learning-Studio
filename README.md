@@ -29,7 +29,9 @@ rather than represented as finished.
 ├── packages/contracts/            # Shared TypeScript contracts
 ├── courses/                       # Local source material (ignored)
 ├── data/                          # Local databases (ignored)
-├── docs/ARCHITECTURE.md           # Boundaries and data flow
+├── docs/
+│   ├── ARCHITECTURE.md            # Boundaries and data flow
+│   └── COURSE-DATA-MODEL.md       # Course hierarchy and storage contract
 └── PROGRESS.md                    # Completed work and backlog
 ```
 
@@ -67,16 +69,20 @@ all workspaces.
 
 The foundation includes:
 
-- A responsive application shell and dashboard
-- A local health API with an integration test
-- Shared contracts for service status and future course records
-- Local-only storage locations
+- A responsive course-library homepage
+- Clickable class cards and per-class workspaces
+- A class-creation workflow
+- Per-class PDF, Markdown, text, DOCX, and PPTX uploads
+- SQLite-backed course and material records
+- Shared runtime contracts for courses, materials, modules, and assessments
+- Explicit local file separation under `courses/<course-id>/materials`
 - A project-local `learning-coach` skill
-- Architecture and progress documentation
+- Architecture, data-model, and progress documentation
 
-Course upload, document extraction, SQLite persistence, Codex execution,
-lesson generation, practice, and mastery tracking are not implemented yet.
-See [PROGRESS.md](./PROGRESS.md) for their order and acceptance criteria.
+Document extraction, syllabus analysis, module and assessment editing, Codex
+execution, lesson generation, practice, and mastery tracking are not
+implemented yet. See [PROGRESS.md](./PROGRESS.md) for their order and
+acceptance criteria.
 
 ## Privacy and cost boundary
 
@@ -88,4 +94,3 @@ OpenAI account and data settings.
 
 An API-backed or hosted mode may be added later, but it must remain an explicit
 configuration with separate credentials, cost controls, and documentation.
-

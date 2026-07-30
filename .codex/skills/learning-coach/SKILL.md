@@ -12,7 +12,8 @@ every output structured, and every failure explicit.
 ## Workflow
 
 1. Read the requested activity, current course record, learner state, and the
-   applicable contract under `packages/contracts`.
+   applicable contract under `packages/contracts`. For syllabus-derived
+   structure, also read `docs/COURSE-DATA-MODEL.md`.
 2. Retrieve only the source passages needed for the activity.
 3. Refuse to invent missing course facts or source locations. Report the
    specific missing input instead.
@@ -47,4 +48,3 @@ every output structured, and every failure explicit.
   evidence.
 - Never write persistence state directly; return proposed structured changes to
   the application.
-

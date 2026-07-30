@@ -31,12 +31,19 @@ its acceptance evidence is recorded here.
 
 ## Milestone 1: Local course library
 
-- [ ] Define course, source, module, and concept schemas.
-- [ ] Add SQLite migrations and repository interfaces.
-- [ ] Import PDF, Markdown, and plain-text sources.
+- [x] Define course, material, module, and assessment schemas.
+  - Evidence: shared Zod contracts validate API records at runtime.
+- [x] Add SQLite migrations and repository interfaces.
+  - Evidence: course and material records survive a service restart in tests.
+- [x] Store PDF, Markdown, text, DOCX, and PPTX sources by class.
+  - Evidence: uploads use collision-safe names under the owning course ID.
+- [ ] Extract supported source contents for retrieval.
+- [ ] Define concept and prerequisite schemas with the course map.
 - [ ] Preserve page, heading, and file provenance during extraction.
-- [ ] Show explicit import failures and unsupported-file messages.
-- [ ] Add a course-library UI with import status.
+- [x] Show explicit upload failures and unsupported-file messages.
+  - Evidence: unsupported files receive `415` and create no material record.
+- [x] Add a course-library UI with upload status.
+  - Evidence: verified empty, populated, class-detail, and upload states.
 
 Acceptance:
 
@@ -99,3 +106,4 @@ Acceptance:
 | Date | Scope | Result |
 |---|---|---|
 | 2026-07-29 | Initial project foundation | Passed skill validation, workspace type checks, 1 API test, 3 production builds, and `git diff --check` |
+| 2026-07-29 | Course library framework | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, and desktop/mobile browser flows for create, open, and upload |
