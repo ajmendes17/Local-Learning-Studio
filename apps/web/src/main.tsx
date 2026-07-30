@@ -5,6 +5,7 @@ import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/home.css";
 import "./styles/course.css";
+import "./styles/info.css";
 import "./styles/responsive.css";
 
 createRoot(document.getElementById("root")!).render(

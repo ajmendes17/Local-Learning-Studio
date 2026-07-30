@@ -54,6 +54,11 @@ The repository includes only `.gitkeep` files in local data directories.
 See [COURSE-DATA-MODEL.md](./COURSE-DATA-MODEL.md) for table ownership,
 syllabus-derived structure, and integrity rules.
 
+See [LEARNING-FEEDBACK-LOOPS.md](./LEARNING-FEEDBACK-LOOPS.md) for the planned
+source, diagnosis, instruction, practice, and retention cycles. That document
+also defines the separation between generated artifacts and append-only learner
+evidence.
+
 ## Failure policy
 
 There are no silent model, source, or persistence fallbacks. An unavailable

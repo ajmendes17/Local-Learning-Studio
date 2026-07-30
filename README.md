@@ -31,7 +31,8 @@ rather than represented as finished.
 ├── data/                          # Local databases (ignored)
 ├── docs/
 │   ├── ARCHITECTURE.md            # Boundaries and data flow
-│   └── COURSE-DATA-MODEL.md       # Course hierarchy and storage contract
+│   ├── COURSE-DATA-MODEL.md       # Course hierarchy and storage contract
+│   └── LEARNING-FEEDBACK-LOOPS.md # Adaptive learning-system blueprint
 └── PROGRESS.md                    # Completed work and backlog
 ```
 
@@ -70,6 +71,7 @@ all workspaces.
 The foundation includes:
 
 - A responsive course-library homepage
+- A “How it works” information page describing the planned learning loops
 - Clickable class cards and per-class workspaces
 - A class-creation workflow
 - Per-class PDF, Markdown, text, DOCX, and PPTX uploads

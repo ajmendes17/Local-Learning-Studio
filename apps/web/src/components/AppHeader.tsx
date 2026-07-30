@@ -1,9 +1,11 @@
 export type ServiceState = "checking" | "ready" | "offline";
+export type ActivePage = "library" | "info" | "course";
 
 interface AppHeaderProps {
   service: ServiceState;
-  inCourse: boolean;
+  activePage: ActivePage;
   onHome: () => void;
+  onInfo: () => void;
 }
 
 const serviceLabels: Record<ServiceState, string> = {
@@ -12,7 +14,12 @@ const serviceLabels: Record<ServiceState, string> = {
   offline: "Local service offline",
 };
 
-export function AppHeader({ service, inCourse, onHome }: AppHeaderProps) {
+export function AppHeader({
+  service,
+  activePage,
+  onHome,
+  onInfo,
+}: AppHeaderProps) {
   return (
     <header className="site-header">
       <button
@@ -29,14 +36,25 @@ export function AppHeader({ service, inCourse, onHome }: AppHeaderProps) {
       <nav aria-label="Primary navigation">
         <button
           type="button"
-          className={!inCourse ? "nav-link nav-link--active" : "nav-link"}
+          className={
+            activePage === "library" ? "nav-link nav-link--active" : "nav-link"
+          }
           onClick={onHome}
         >
           Library
         </button>
+        <button
+          type="button"
+          className={
+            activePage === "info" ? "nav-link nav-link--active" : "nav-link"
+          }
+          onClick={onInfo}
+        >
+          How it works
+        </button>
         <div className={`service-state service-state--${service}`}>
           <span aria-hidden="true" />
-          {serviceLabels[service]}
+          <span className="service-state__label">{serviceLabels[service]}</span>
         </div>
       </nav>
     </header>

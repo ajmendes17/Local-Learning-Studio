@@ -10,17 +10,26 @@ import { AppHeader, type ServiceState } from "./components/AppHeader";
 import { createCourse, getCourse, listCourses, uploadMaterial } from "./lib/api";
 import { CoursePage } from "./views/CoursePage";
 import { HomePage } from "./views/HomePage";
+import { InfoPage } from "./views/InfoPage";
 
-function courseIdFromPath() {
+type AppRoute =
+  | { kind: "library" }
+  | { kind: "info" }
+  | { kind: "course"; courseId: string };
+
+function routeFromPath(): AppRoute {
+  if (window.location.pathname === "/how-it-works") return { kind: "info" };
   const match = window.location.pathname.match(/^\/courses\/([^/]+)$/);
-  return match?.[1] ?? null;
+  return match?.[1]
+    ? { kind: "course", courseId: match[1] }
+    : { kind: "library" };
 }
 
 export function App() {
   const [service, setService] = useState<ServiceState>("checking");
+  const [route, setRoute] = useState<AppRoute>(routeFromPath);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<CourseDetail | null>(null);
-  const [selectedCourseId, setSelectedCourseId] = useState(courseIdFromPath);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,23 +71,23 @@ export function App() {
   }, [loadLibrary]);
 
   useEffect(() => {
-    if (selectedCourseId) {
-      void loadCourse(selectedCourseId);
+    if (route.kind === "course") {
+      void loadCourse(route.courseId);
     } else {
       setSelectedCourse(null);
-      void loadLibrary();
+      setLoading(false);
     }
-  }, [loadCourse, loadLibrary, selectedCourseId]);
+  }, [loadCourse, route]);
 
   useEffect(() => {
-    const handlePopState = () => setSelectedCourseId(courseIdFromPath());
+    const handlePopState = () => setRoute(routeFromPath());
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   function navigate(path: string) {
     window.history.pushState({}, "", path);
-    setSelectedCourseId(courseIdFromPath());
+    setRoute(routeFromPath());
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -89,19 +98,23 @@ export function App() {
   }
 
   async function handleUpload(file: File, kind: MaterialKind) {
-    if (!selectedCourseId) return;
-    await uploadMaterial(selectedCourseId, file, kind);
-    await Promise.all([loadCourse(selectedCourseId), loadLibrary()]);
+    if (route.kind !== "course") return;
+    await uploadMaterial(route.courseId, file, kind);
+    await Promise.all([loadCourse(route.courseId), loadLibrary()]);
   }
+
+  const activePage =
+    route.kind === "course" ? "course" : route.kind === "info" ? "info" : "library";
 
   return (
     <div className="app-shell">
       <AppHeader
         service={service}
+        activePage={activePage}
         onHome={() => navigate("/")}
-        inCourse={Boolean(selectedCourseId)}
+        onInfo={() => navigate("/how-it-works")}
       />
-      {selectedCourseId ? (
+      {route.kind === "course" ? (
         <CoursePage
           course={selectedCourse}
           loading={loading}
@@ -109,6 +122,8 @@ export function App() {
           onBack={() => navigate("/")}
           onUpload={handleUpload}
         />
+      ) : route.kind === "info" ? (
+        <InfoPage onStart={() => navigate("/")} />
       ) : (
         <HomePage
           courses={courses}

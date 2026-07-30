@@ -53,6 +53,11 @@ Acceptance:
 
 ## Milestone 2: Course map and training plan
 
+- [x] Define the end-to-end learning feedback loops.
+  - Evidence: `docs/LEARNING-FEEDBACK-LOOPS.md` specifies inputs, outputs,
+    evidence, conversations, artifacts, guardrails, and implementation order.
+- [x] Add an in-app explanation of the planned learning system.
+  - Evidence: `/how-it-works` presents the five linked loops and data boundaries.
 - [ ] Define versioned structured-output schemas.
 - [ ] Invoke locally authenticated Codex from the server.
 - [ ] Generate concepts, prerequisites, objectives, and source references.
@@ -107,3 +112,4 @@ Acceptance:
 |---|---|---|
 | 2026-07-29 | Initial project foundation | Passed skill validation, workspace type checks, 1 API test, 3 production builds, and `git diff --check` |
 | 2026-07-29 | Course library framework | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, and desktop/mobile browser flows for create, open, and upload |
+| 2026-07-29 | Learning feedback-loop plan and information page | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, route navigation, and desktop/mobile browser review |
