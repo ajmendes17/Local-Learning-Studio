@@ -154,6 +154,11 @@
   font-size: 0.72rem;
 }
 
+.material-row__name > .material-row__error {
+  color: #873f38;
+  line-height: 1.4;
+}
+
 .status-pill {
   padding: 5px 8px;
   border-radius: 999px;

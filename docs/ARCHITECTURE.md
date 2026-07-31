@@ -28,14 +28,16 @@ databases, Codex credentials, or process state directly.
 
 ### `apps/server`
 
-Owns trusted local operations and exposes a narrow API. Future model calls must
-be initiated here, validated against versioned contracts, and persisted only
-after successful validation.
+Owns trusted local operations and exposes a narrow API. Its modular extraction
+layer converts supported immutable uploads into course-scoped source passages.
+Future model calls must be initiated here, validated against versioned
+contracts, and persisted only after successful validation.
 
 ### `packages/contracts`
 
-Owns data exchanged across boundaries. Zod runtime schemas validate course,
-material, module, and assessment records before they cross the API boundary.
+Owns data exchanged across boundaries. Zod runtime schemas validate courses,
+materials, source locations, concepts, modules, assessments, and the
+`course-map.v1` proposal before they cross a boundary.
 
 ### `.codex/skills/learning-coach`
 
@@ -53,6 +55,9 @@ persistence, and error handling.
 The repository includes only `.gitkeep` files in local data directories.
 See [COURSE-DATA-MODEL.md](./COURSE-DATA-MODEL.md) for table ownership,
 syllabus-derived structure, and integrity rules.
+
+See [SOURCE-INGESTION.md](./SOURCE-INGESTION.md) for supported formats,
+processing states, provenance, and extractor extension points.
 
 See [LEARNING-FEEDBACK-LOOPS.md](./LEARNING-FEEDBACK-LOOPS.md) for the planned
 source, diagnosis, instruction, practice, and retention cycles. That document
@@ -75,5 +80,6 @@ unchanged.
 | `POST` | `/api/courses` | Create a class workspace |
 | `GET` | `/api/courses/:courseId` | Load class materials and structure |
 | `POST` | `/api/courses/:courseId/materials` | Store one class source |
+| `GET` | `/api/courses/:courseId/materials/:materialId/passages` | Read extracted, source-located passages |
 
 API additions should begin with a contract and an acceptance test.

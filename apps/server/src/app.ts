@@ -7,10 +7,12 @@ import {
   type HealthResponse,
 } from "@local-learning-studio/contracts";
 import Fastify from "fastify";
+import { MaterialProcessor } from "./extraction/material-processor.js";
 import { registerCourseRoutes } from "./routes/courses.js";
 import { CourseLibrary } from "./storage/course-library.js";
 import { openDatabase } from "./storage/database.js";
 import { MaterialStorage } from "./storage/material-storage.js";
+import { SourceLibrary } from "./storage/source-library.js";
 
 export interface AppOptions {
   databasePath?: string;
@@ -38,6 +40,9 @@ export function buildApp(options: AppOptions = {}) {
   const database = openDatabase(databasePath);
   const library = new CourseLibrary(database);
   const materialStorage = new MaterialStorage(courseRoot);
+  const sourceLibrary = new SourceLibrary(database);
+  sourceLibrary.recoverInterruptedExtractions();
+  const materialProcessor = new MaterialProcessor(sourceLibrary);
 
   void app.register(multipart, {
     limits: {
@@ -52,7 +57,12 @@ export function buildApp(options: AppOptions = {}) {
     apiVersion: API_VERSION,
   }));
 
-  void app.register(registerCourseRoutes, { library, materialStorage });
+  void app.register(registerCourseRoutes, {
+    library,
+    materialStorage,
+    materialProcessor,
+    sourceLibrary,
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof app.multipartErrors.RequestFileTooLargeError) {

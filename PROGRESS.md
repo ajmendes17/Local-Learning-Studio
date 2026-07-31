@@ -1,6 +1,6 @@
 # Project Progress
 
-Last updated: 2026-07-29
+Last updated: 2026-07-30
 
 This file is the durable implementation ledger. A task is complete only when
 its acceptance evidence is recorded here.
@@ -37,9 +37,16 @@ its acceptance evidence is recorded here.
   - Evidence: course and material records survive a service restart in tests.
 - [x] Store PDF, Markdown, text, DOCX, and PPTX sources by class.
   - Evidence: uploads use collision-safe names under the owning course ID.
-- [ ] Extract supported source contents for retrieval.
-- [ ] Define concept and prerequisite schemas with the course map.
-- [ ] Preserve page, heading, and file provenance during extraction.
+- [x] Extract supported source contents for retrieval.
+  - Evidence: Markdown, plain-text, and text-PDF uploads produce persisted
+    source passages; Office formats remain explicitly stored for later work.
+- [x] Define concept and prerequisite schemas with the course map.
+  - Evidence: shared runtime contracts cover concepts, prerequisite edges, and
+    a source-referenced `course-map.v1` proposal.
+- [x] Preserve page, heading, and file provenance during extraction.
+  - Evidence: PDFs retain page locations; text retains line locations;
+    Markdown also retains its nearest heading; all passages own a material ID
+    and content hash.
 - [x] Show explicit upload failures and unsupported-file messages.
   - Evidence: unsupported files receive `415` and create no material record.
 - [x] Add a course-library UI with upload status.
@@ -58,7 +65,10 @@ Acceptance:
     evidence, conversations, artifacts, guardrails, and implementation order.
 - [x] Add an in-app explanation of the planned learning system.
   - Evidence: `/how-it-works` presents the five linked loops and data boundaries.
-- [ ] Define versioned structured-output schemas.
+- [x] Define versioned structured-output schemas.
+  - Evidence: `CourseMapProposalSchema` requires `course-map.v1`, source
+    material IDs, passage references, and internally consistent module,
+    concept, prerequisite, and assessment keys.
 - [ ] Invoke locally authenticated Codex from the server.
 - [ ] Generate concepts, prerequisites, objectives, and source references.
 - [ ] Create a deadline-aware training plan.
@@ -113,3 +123,4 @@ Acceptance:
 | 2026-07-29 | Initial project foundation | Passed skill validation, workspace type checks, 1 API test, 3 production builds, and `git diff --check` |
 | 2026-07-29 | Course library framework | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, and desktop/mobile browser flows for create, open, and upload |
 | 2026-07-29 | Learning feedback-loop plan and information page | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, route navigation, and desktop/mobile browser review |
+| 2026-07-30 | Source ingestion and course-map contracts | Passed workspace type checks, 10 contract/API/storage/extraction tests, 3 production builds, `git diff --check`, and desktop/mobile browser review of a real extracted upload |

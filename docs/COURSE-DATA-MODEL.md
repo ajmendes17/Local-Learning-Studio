@@ -94,6 +94,21 @@ courses/<course-id>/materials/<material-id>--<safe-original-name>
 The database stores relative names only. It never accepts an absolute upload
 path from the browser.
 
+### `source_passages`
+
+Stores extracted source evidence:
+
+- `id`, `course_id`, `material_id`
+- `ordinal`: stable order within one material
+- `content`, `content_hash`: normalized text and its SHA-256 hash
+- `locator_kind`: page or lines
+- page locators: `page_start`, `page_end`
+- text locators: `line_start`, `line_end`, optional `heading`
+- `created_at`: extraction timestamp
+
+Passages cascade with their course or material. Page and line coordinates are
+mutually exclusive and enforced by a database check.
+
 ### `modules`
 
 Stores ordered instructional units:
@@ -114,12 +129,18 @@ Stores high-value evaluation events independently from modules:
 - optional `due_at` and `weight_percent`
 - `origin`: manual or syllabus
 
+### `concepts` and `concept_prerequisites`
+
+`concepts` stores course-local knowledge units with a title, description, and
+manual or syllabus origin. `concept_prerequisites` stores directed edges
+between two concepts in the same course. The runtime contract exists now so a
+future accepted `course-map.v1` proposal can be persisted without inventing a
+second representation.
+
 ## Future tables
 
 The following should be added only with their consuming feature:
 
-- `source_passages`: extracted text with page or heading coordinates and hashes
-- `concepts` and `concept_prerequisites`: the course knowledge graph
 - `module_concepts` and `module_materials`: many-to-many organization
 - `generation_runs`: model, prompt/schema versions, inputs, and result status
 - `learning_artifacts`: stored plans, lessons, practice, and assessments
@@ -148,7 +169,7 @@ The first library API supports:
 | `POST` | `/api/courses` | Create one course |
 | `GET` | `/api/courses/:courseId` | Load a course workspace |
 | `POST` | `/api/courses/:courseId/materials?kind=...` | Store one course file |
+| `GET` | `/api/courses/:courseId/materials/:materialId/passages` | Read course-scoped extracted passages |
 
-Module editing, assessment editing, deletion, extraction, and syllabus analysis
-remain explicit follow-up capabilities.
-
+Module editing, assessment editing, deletion, DOCX/PPTX extraction, OCR, and
+syllabus analysis remain explicit follow-up capabilities.

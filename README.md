@@ -32,13 +32,14 @@ rather than represented as finished.
 ├── docs/
 │   ├── ARCHITECTURE.md            # Boundaries and data flow
 │   ├── COURSE-DATA-MODEL.md       # Course hierarchy and storage contract
-│   └── LEARNING-FEEDBACK-LOOPS.md # Adaptive learning-system blueprint
+│   ├── LEARNING-FEEDBACK-LOOPS.md # Adaptive learning-system blueprint
+│   └── SOURCE-INGESTION.md         # Extraction states and provenance
 └── PROGRESS.md                    # Completed work and backlog
 ```
 
 ## Prerequisites
 
-- Node.js 22 or newer
+- Node.js 22.13 or newer
 - npm 10 or newer
 - Codex installed and authenticated for future AI-backed workflows
 
@@ -56,6 +57,10 @@ npm run dev
 
 Open [http://localhost:4317](http://localhost:4317). Vite proxies `/api`
 requests to the local service at `http://127.0.0.1:4318`.
+
+`DATABASE_PATH` and `COURSE_ROOT` can override the default local storage
+locations in `.env`, which is useful for isolated verification or alternate
+local libraries.
 
 ## Verify the project
 
@@ -75,16 +80,21 @@ The foundation includes:
 - Clickable class cards and per-class workspaces
 - A class-creation workflow
 - Per-class PDF, Markdown, text, DOCX, and PPTX uploads
+- Markdown, plain-text, and text-PDF extraction into source passages
+- Page, line, and Markdown-heading provenance with passage hashes
+- Explicit extraction states and visible failure reasons
 - SQLite-backed course and material records
-- Shared runtime contracts for courses, materials, modules, and assessments
+- Shared runtime contracts for courses, sources, concepts, course-map
+  proposals, modules, and assessments
 - Explicit local file separation under `courses/<course-id>/materials`
 - A project-local `learning-coach` skill
 - Architecture, data-model, and progress documentation
 
-Document extraction, syllabus analysis, module and assessment editing, Codex
-execution, lesson generation, practice, and mastery tracking are not
-implemented yet. See [PROGRESS.md](./PROGRESS.md) for their order and
-acceptance criteria.
+DOCX/PPTX extraction, OCR, syllabus analysis, module and assessment editing,
+Codex execution, lesson generation, practice, and mastery tracking are not
+implemented yet. See [SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the
+current extraction boundary and [PROGRESS.md](./PROGRESS.md) for implementation
+order and acceptance criteria.
 
 ## Privacy and cost boundary
 

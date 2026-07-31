@@ -63,5 +63,9 @@ export class MaterialStorage {
       () => undefined,
     );
   }
+
+  pathFor(courseId: string, storedName: string) {
+    return join(this.courseRoot, courseId, "materials", storedName);
+  }
 }
 

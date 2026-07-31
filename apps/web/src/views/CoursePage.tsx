@@ -29,7 +29,25 @@ function formatBytes(bytes: number) {
 }
 
 function MaterialRow({ material }: { material: CourseMaterial }) {
-  const extension = material.originalName.split(".").pop()?.toUpperCase() ?? "FILE";
+  const extension =
+    material.originalName.split(".").pop()?.toUpperCase() ?? "FILE";
+  const processingSummary =
+    material.status === "ready"
+      ? `${material.passageCount} source ${
+          material.passageCount === 1 ? "passage" : "passages"
+        }`
+      : material.status === "stored"
+        ? "Saved · extraction not available yet"
+        : material.status === "processing"
+          ? "Extracting source passages"
+          : material.errorMessage;
+  const statusLabel = {
+    failed: "Needs attention",
+    processing: "Processing",
+    ready: "Ready",
+    stored: "Stored",
+  }[material.status];
+
   return (
     <li className="material-row">
       <span className="file-mark" aria-hidden="true">
@@ -40,9 +58,18 @@ function MaterialRow({ material }: { material: CourseMaterial }) {
         <span>
           {materialKindLabels[material.kind]} · {formatBytes(material.sizeBytes)}
         </span>
+        {processingSummary ? (
+          <span
+            className={
+              material.status === "failed" ? "material-row__error" : undefined
+            }
+          >
+            {processingSummary}
+          </span>
+        ) : null}
       </span>
       <span className={`status-pill status-pill--${material.status}`}>
-        {material.status === "stored" ? "Stored" : material.status}
+        {statusLabel}
       </span>
     </li>
   );
@@ -175,4 +202,3 @@ export function CoursePage({
     </main>
   );
 }
-

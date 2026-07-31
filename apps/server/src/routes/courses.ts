@@ -4,19 +4,28 @@ import {
   CourseDetailSchema,
   CourseListResponseSchema,
   CreateCourseRequestSchema,
+  MaterialPassagesResponseSchema,
   MaterialKindSchema,
 } from "@local-learning-studio/contracts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { MaterialProcessor } from "../extraction/material-processor.js";
 import type { CourseLibrary } from "../storage/course-library.js";
 import type { MaterialStorage } from "../storage/material-storage.js";
+import type { SourceLibrary } from "../storage/source-library.js";
 
 const courseIdSchema = z.string().uuid();
+const passageQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional().default(100),
+  offset: z.coerce.number().int().nonnegative().optional().default(0),
+});
 const supportedExtensions = new Set([".docx", ".md", ".pdf", ".pptx", ".txt"]);
 
 interface CourseRouteOptions {
   library: CourseLibrary;
+  materialProcessor: MaterialProcessor;
   materialStorage: MaterialStorage;
+  sourceLibrary: SourceLibrary;
 }
 
 function firstIssue(error: z.ZodError) {
@@ -27,7 +36,7 @@ export async function registerCourseRoutes(
   app: FastifyInstance,
   options: CourseRouteOptions,
 ) {
-  const { library, materialStorage } = options;
+  const { library, materialProcessor, materialStorage, sourceLibrary } = options;
 
   app.get("/api/courses", async () =>
     CourseListResponseSchema.parse({ courses: library.listCourses() }),
@@ -60,6 +69,51 @@ export async function registerCourseRoutes(
       }
 
       return CourseDetailSchema.parse(course);
+    },
+  );
+
+  app.get<{
+    Params: { courseId: string; materialId: string };
+    Querystring: { limit?: string; offset?: string };
+  }>(
+    "/api/courses/:courseId/materials/:materialId/passages",
+    async (request, reply) => {
+      const parsedCourseId = courseIdSchema.safeParse(request.params.courseId);
+      const parsedMaterialId = courseIdSchema.safeParse(
+        request.params.materialId,
+      );
+      const parsedQuery = passageQuerySchema.safeParse(request.query);
+      if (!parsedCourseId.success || !parsedMaterialId.success) {
+        return reply.code(400).send({ error: "Source ID is invalid." });
+      }
+      if (!parsedQuery.success) {
+        return reply.code(400).send({
+          error: "Passage range is invalid.",
+          detail: "Use a nonnegative offset and a limit from 1 to 200.",
+        });
+      }
+      if (
+        !sourceLibrary.getMaterial(
+          parsedCourseId.data,
+          parsedMaterialId.data,
+        )
+      ) {
+        return reply.code(404).send({ error: "Course material not found." });
+      }
+
+      return MaterialPassagesResponseSchema.parse({
+        passages: sourceLibrary.getPassages(
+          parsedCourseId.data,
+          parsedMaterialId.data,
+          parsedQuery.data.limit,
+          parsedQuery.data.offset,
+        ),
+        total: sourceLibrary.countPassages(
+          parsedCourseId.data,
+          parsedMaterialId.data,
+        ),
+        ...parsedQuery.data,
+      });
     },
   );
 
@@ -105,8 +159,9 @@ export async function registerCourseRoutes(
       part.file,
     );
 
+    let material;
     try {
-      const material = library.createMaterial({
+      material = library.createMaterial({
         id: materialId,
         courseId: parsedId.data,
         originalName: part.filename,
@@ -114,12 +169,19 @@ export async function registerCourseRoutes(
         mediaType: part.mimetype || "application/octet-stream",
         kind: parsedKind.data,
         sizeBytes: stored.sizeBytes,
+        initialStatus: materialProcessor.canExtract(part.filename)
+          ? "processing"
+          : "stored",
       });
-      return reply.code(201).send(material);
     } catch (error) {
       await materialStorage.remove(parsedId.data, stored.storedName);
       throw error;
     }
+
+    const processed = await materialProcessor.process(
+      material,
+      materialStorage.pathFor(parsedId.data, stored.storedName),
+    );
+    return reply.code(201).send(processed);
   });
 }
-

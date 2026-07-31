@@ -4,7 +4,7 @@
   "private": true,
   "description": "A local-first, Codex-powered learning workspace.",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "workspaces": [
     "packages/contracts",

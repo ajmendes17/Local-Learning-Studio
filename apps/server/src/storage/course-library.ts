@@ -8,6 +8,7 @@ import type {
   CourseSummary,
   CreateCourseRequest,
   MaterialKind,
+  MaterialStatus,
 } from "@local-learning-studio/contracts";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -59,6 +60,7 @@ export interface NewMaterialRecord {
   mediaType: string;
   kind: MaterialKind;
   sizeBytes: number;
+  initialStatus?: MaterialStatus;
 }
 
 export class CourseLibrary {
@@ -107,6 +109,8 @@ export class CourseLibrary {
           kind,
           size_bytes AS sizeBytes,
           status,
+          (SELECT COUNT(*) FROM source_passages
+            WHERE material_id = materials.id) AS passageCount,
           error_message AS errorMessage,
           created_at AS createdAt
         FROM materials
@@ -146,7 +150,7 @@ export class CourseLibrary {
 
   createMaterial(record: NewMaterialRecord): CourseMaterial {
     const now = new Date().toISOString();
-    const status = "stored";
+    const status = record.initialStatus ?? "stored";
 
     this.database
       .prepare(`
@@ -179,9 +183,9 @@ export class CourseLibrary {
       kind: record.kind,
       sizeBytes: record.sizeBytes,
       status,
+      passageCount: 0,
       errorMessage: null,
       createdAt: now,
     };
   }
 }
-
