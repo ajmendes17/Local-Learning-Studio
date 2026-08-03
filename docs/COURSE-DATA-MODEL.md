@@ -138,13 +138,29 @@ between two concepts in the same course. The runtime contract exists now so a
 future accepted `course-map.v1` proposal can be persisted without inventing a
 second representation.
 
+### `learning_artifacts`
+
+Stores reviewable, versioned model output without mixing it into source
+evidence or accepted course structure:
+
+- `id`, `course_id`, `kind`, and `schema_version`
+- `status`: draft, accepted, or superseded
+- `source_fingerprint`: SHA-256 cache key for the exact source projection
+- `skill_name` and `model`: execution provenance
+- `payload_json`: contract-validated classification or course-map proposal
+- `created_at` and optional `accepted_at`
+
+Saving a replacement supersedes only the older draft. An accepted artifact
+remains available until another reviewed artifact replaces it.
+
 ## Future tables
 
 The following should be added only with their consuming feature:
 
 - `module_concepts` and `module_materials`: many-to-many organization
 - `generation_runs`: model, prompt/schema versions, inputs, and result status
-- `learning_artifacts`: stored plans, lessons, practice, and assessments
+- additional `learning_artifacts` kinds for plans, lessons, practice, and
+  assessments
 - `questions` and `answer_keys`: versioned prompts, grading modes, rubrics,
   deterministic keys, explanations, and source references
 - `attempts`: answers, confidence, hints, and feedback
@@ -177,5 +193,5 @@ The first library API supports:
 | `POST` | `/api/courses/:courseId/materials?kind=...` | Store one course file |
 | `GET` | `/api/courses/:courseId/materials/:materialId/passages` | Read course-scoped extracted passages |
 
-Module editing, assessment editing, deletion, DOCX/PPTX extraction, OCR, and
-syllabus analysis remain explicit follow-up capabilities.
+Module editing, assessment editing, deletion, OCR, and semantic source analysis
+remain explicit follow-up capabilities.

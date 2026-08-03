@@ -90,6 +90,9 @@ Acceptance:
 - [x] Scaffold and validate the specialized learning skills.
   - Evidence: each GUI action owns a concise skill with matching UI metadata;
     the overlapping broad skill has been removed.
+- [x] Add versioned source-classification and course-map artifact storage.
+  - Evidence: drafts are cached by source fingerprint, validated on read and
+    write, and accepted history is superseded only by a reviewed replacement.
 - [ ] Generate concepts, prerequisites, objectives, and source references.
 - [ ] Create a deadline-aware training plan.
 - [ ] Store artifacts so reopening a course does not regenerate them.

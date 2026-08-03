@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { CourseMapProposalSchema } from "@local-learning-studio/contracts";
+import {
+  CourseMapProposalSchema,
+  SourceClassificationProposalSchema,
+} from "@local-learning-studio/contracts";
 
 function validCourseMap() {
   const materialId = randomUUID();
@@ -65,5 +68,38 @@ test("course-map.v1 rejects dangling course and source references", () => {
       ["modules", 0, "conceptKeys", 0],
       ["assessments", 0, "moduleKey"],
     ],
+  );
+});
+
+test("source-classification.v1 requires unique, internally grounded sources", () => {
+  const materialId = randomUUID();
+  const proposal = {
+    schemaVersion: "source-classification.v1",
+    courseId: randomUUID(),
+    sourceMaterialIds: [materialId],
+    sources: [
+      {
+        materialId,
+        role: "syllabus",
+        summary: "Course policies and schedule.",
+        confidence: "high",
+        evidence: [{ materialId, passageId: randomUUID() }],
+      },
+    ],
+    gaps: [],
+    warnings: [],
+  };
+
+  assert.equal(
+    SourceClassificationProposalSchema.safeParse(proposal).success,
+    true,
+  );
+  proposal.sources.push({
+    ...proposal.sources[0]!,
+    evidence: [{ materialId: randomUUID(), passageId: randomUUID() }],
+  });
+  assert.equal(
+    SourceClassificationProposalSchema.safeParse(proposal).success,
+    false,
   );
 });

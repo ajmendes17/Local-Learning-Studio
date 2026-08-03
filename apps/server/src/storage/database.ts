@@ -175,6 +175,20 @@ export function openDatabase(databasePath: string) {
       UNIQUE(course_id, id)
     );
 
+    CREATE TABLE IF NOT EXISTS learning_artifacts (
+      id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      schema_version TEXT NOT NULL,
+      status TEXT NOT NULL,
+      source_fingerprint TEXT NOT NULL,
+      skill_name TEXT NOT NULL,
+      model TEXT NOT NULL,
+      payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
+      created_at TEXT NOT NULL,
+      accepted_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS concept_prerequisites (
       course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       concept_id TEXT NOT NULL,
@@ -195,6 +209,10 @@ export function openDatabase(databasePath: string) {
       ON assessments(course_id);
     CREATE INDEX IF NOT EXISTS concepts_course_id
       ON concepts(course_id);
+    CREATE INDEX IF NOT EXISTS learning_artifacts_course_kind
+      ON learning_artifacts(course_id, kind, created_at DESC);
+    CREATE INDEX IF NOT EXISTS learning_artifacts_fingerprint
+      ON learning_artifacts(course_id, kind, source_fingerprint);
   `);
 
   createSourcePassagesTable(database);
