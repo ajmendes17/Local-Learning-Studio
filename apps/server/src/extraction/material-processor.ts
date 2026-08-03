@@ -1,14 +1,17 @@
 import { extname } from "node:path";
 import type { CourseMaterial } from "@local-learning-studio/contracts";
 import type { SourceLibrary } from "../storage/source-library.js";
+import { OoxmlExtractor } from "./ooxml-extractor.js";
 import { PdfExtractor } from "./pdf-extractor.js";
 import { TextExtractor } from "./text-extractor.js";
 import type { MaterialExtractor } from "./types.js";
 
 const extractors = new Map<string, MaterialExtractor>([
+  [".docx", new OoxmlExtractor("docx")],
   [".md", new TextExtractor(true)],
   [".txt", new TextExtractor(false)],
   [".pdf", new PdfExtractor()],
+  [".pptx", new OoxmlExtractor("pptx")],
 ]);
 
 export class MaterialProcessor {
@@ -41,4 +44,3 @@ export class MaterialProcessor {
     return this.sources.getMaterial(material.courseId, material.id)!;
   }
 }
-

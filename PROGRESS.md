@@ -1,6 +1,6 @@
 # Project Progress
 
-Last updated: 2026-07-30
+Last updated: 2026-08-03
 
 This file is the durable implementation ledger. A task is complete only when
 its acceptance evidence is recorded here.
@@ -27,7 +27,8 @@ its acceptance evidence is recorded here.
 - [x] Create the project-local `learning-coach` skill.
   - Evidence: the skill passes the Codex skill validator.
 - [x] Document architecture, setup, boundaries, and verification.
-  - Evidence: `README.md`, `docs/ARCHITECTURE.md`, and this ledger exist.
+  - Evidence: `README.md`, `docs/ARCHITECTURE.md`, `docs/PRODUCT-PLAN.md`, and
+    this ledger exist.
 
 ## Milestone 1: Local course library
 
@@ -38,15 +39,16 @@ its acceptance evidence is recorded here.
 - [x] Store PDF, Markdown, text, DOCX, and PPTX sources by class.
   - Evidence: uploads use collision-safe names under the owning course ID.
 - [x] Extract supported source contents for retrieval.
-  - Evidence: Markdown, plain-text, and text-PDF uploads produce persisted
-    source passages; Office formats remain explicitly stored for later work.
+  - Evidence: Markdown, plain-text, text-PDF, DOCX, and PPTX uploads produce
+    persisted canonical source passages.
 - [x] Define concept and prerequisite schemas with the course map.
   - Evidence: shared runtime contracts cover concepts, prerequisite edges, and
     a source-referenced `course-map.v1` proposal.
 - [x] Preserve page, heading, and file provenance during extraction.
   - Evidence: PDFs retain page locations; text retains line locations;
-    Markdown also retains its nearest heading; all passages own a material ID
-    and content hash.
+    Markdown retains its nearest heading; DOCX retains paragraph ranges and
+    headings; PPTX retains slide ranges and titles; all passages own a material
+    ID and content hash.
 - [x] Show explicit upload failures and unsupported-file messages.
   - Evidence: unsupported files receive `415` and create no material record.
 - [x] Add a course-library UI with upload status.
@@ -70,6 +72,13 @@ Acceptance:
     material IDs, passage references, and internally consistent module,
     concept, prerequisite, and assessment keys.
 - [ ] Invoke locally authenticated Codex from the server.
+- [ ] Relocate and validate the learning skill under `.agents/skills` before
+  Codex integration so repository clones discover it automatically.
+- [ ] Add configurable task-to-model routing for Luna, Terra, and Sol with
+  explicit unavailable-model errors.
+- [x] Define the specialized skill inventory and deterministic boundaries.
+  - Evidence: `docs/SKILL-ARCHITECTURE.md` maps each GUI action to a narrow
+    skill, default model, and validated application boundary.
 - [ ] Generate concepts, prerequisites, objectives, and source references.
 - [ ] Create a deadline-aware training plan.
 - [ ] Store artifacts so reopening a course does not regenerate them.
@@ -84,6 +93,9 @@ Acceptance:
 ## Milestone 3: Guided study session
 
 - [ ] Build focused lesson, example, practice, and recap views.
+- [ ] Add deterministic multiple-choice, true/false, numeric, and
+  contract-approved exact-answer grading.
+- [ ] Route short-response grading through the configured lightweight model.
 - [ ] Add progressive hints that do not reveal answers immediately.
 - [ ] Check reasoning as well as final answers.
 - [ ] Generate comparable practice with solution validation.
@@ -99,6 +111,7 @@ Acceptance:
 
 - [ ] Define an explainable mastery model.
 - [ ] Schedule retrieval practice and delayed review.
+- [ ] Automatically version and revise the training plan after quiz evidence.
 - [ ] Adapt format based on measured outcomes and user preference.
 - [ ] Add progress and weak-point views without noisy gamification.
 - [ ] Provide export and deletion for learner data.
@@ -115,6 +128,7 @@ Acceptance:
 - [!] Hosted/API mode: define only after personal local mode is accepted.
 - [!] Multi-user accounts: out of scope for the personal MVP.
 - [!] Native distraction controls: separate product decision, not an MVP gate.
+- [x] Audio/video transcription: deferred beyond the first MVP.
 
 ## Verification log
 
@@ -124,3 +138,4 @@ Acceptance:
 | 2026-07-29 | Course library framework | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, and desktop/mobile browser flows for create, open, and upload |
 | 2026-07-29 | Learning feedback-loop plan and information page | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, route navigation, and desktop/mobile browser review |
 | 2026-07-30 | Source ingestion and course-map contracts | Passed workspace type checks, 10 contract/API/storage/extraction tests, 3 production builds, `git diff --check`, and desktop/mobile browser review of a real extracted upload |
+| 2026-08-03 | DOCX/PPTX extraction and skill architecture | Passed 13 contract/API/storage/extraction tests, workspace type checks, 3 production builds, `git diff --check`, skill discovery, and a zero-vulnerability production dependency audit |

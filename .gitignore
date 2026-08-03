@@ -6,8 +6,7 @@ dist/
 *.log
 coverage/
 *.tsbuildinfo
-data/*.sqlite
-data/*.sqlite-*
+data/*
 courses/*
 !courses/.gitkeep
 !data/.gitkeep

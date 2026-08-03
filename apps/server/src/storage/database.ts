@@ -2,6 +2,117 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+interface LegacyPassageRow {
+  id: string;
+  courseId: string;
+  materialId: string;
+  ordinal: number;
+  content: string;
+  contentHash: string;
+  locatorKind: "page" | "lines";
+  pageStart: number | null;
+  pageEnd: number | null;
+  lineStart: number | null;
+  lineEnd: number | null;
+  heading: string | null;
+  createdAt: string;
+}
+
+function createSourcePassagesTable(database: DatabaseSync) {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS source_passages (
+      id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      location_json TEXT NOT NULL CHECK(json_valid(location_json)),
+      created_at TEXT NOT NULL,
+      UNIQUE(material_id, ordinal)
+    );
+  `);
+}
+
+function migrateLegacySourcePassages(database: DatabaseSync) {
+  const columns = database.prepare("PRAGMA table_info(source_passages)").all() as
+    | Array<{ name: string }>
+    | undefined;
+  if (columns?.some(({ name }) => name === "location_json")) return;
+
+  const rows = database
+    .prepare(`
+      SELECT
+        id,
+        course_id AS courseId,
+        material_id AS materialId,
+        ordinal,
+        content,
+        content_hash AS contentHash,
+        locator_kind AS locatorKind,
+        page_start AS pageStart,
+        page_end AS pageEnd,
+        line_start AS lineStart,
+        line_end AS lineEnd,
+        heading,
+        created_at AS createdAt
+      FROM source_passages
+      ORDER BY material_id, ordinal
+    `)
+    .all() as unknown as LegacyPassageRow[];
+
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.exec("DROP INDEX IF EXISTS source_passages_course_material");
+    database.exec(
+      "ALTER TABLE source_passages RENAME TO source_passages_legacy",
+    );
+    createSourcePassagesTable(database);
+    const insert = database.prepare(`
+      INSERT INTO source_passages (
+        id, course_id, material_id, ordinal, content, content_hash,
+        location_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const row of rows) {
+      const location =
+        row.locatorKind === "page"
+          ? {
+              kind: "page",
+              pageStart: Number(row.pageStart),
+              pageEnd: Number(row.pageEnd),
+            }
+          : {
+              kind: "lines",
+              lineStart: Number(row.lineStart),
+              lineEnd: Number(row.lineEnd),
+              heading: row.heading,
+            };
+      insert.run(
+        row.id,
+        row.courseId,
+        row.materialId,
+        row.ordinal,
+        row.content,
+        row.contentHash,
+        JSON.stringify(location),
+        row.createdAt,
+      );
+    }
+
+    database.exec("DROP TABLE source_passages_legacy");
+    database.exec(`
+      CREATE INDEX source_passages_course_material
+        ON source_passages(course_id, material_id, ordinal)
+    `);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 export function openDatabase(databasePath: string) {
   if (databasePath !== ":memory:") {
     mkdirSync(dirname(databasePath), { recursive: true });
@@ -55,41 +166,6 @@ export function openDatabase(databasePath: string) {
       origin TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS source_passages (
-      id TEXT PRIMARY KEY,
-      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-      material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      content_hash TEXT NOT NULL,
-      locator_kind TEXT NOT NULL,
-      page_start INTEGER,
-      page_end INTEGER,
-      line_start INTEGER,
-      line_end INTEGER,
-      heading TEXT,
-      created_at TEXT NOT NULL,
-      UNIQUE(material_id, ordinal),
-      CHECK(
-        (
-          locator_kind = 'page'
-          AND page_start > 0
-          AND page_end >= page_start
-          AND line_start IS NULL
-          AND line_end IS NULL
-          AND heading IS NULL
-        )
-        OR
-        (
-          locator_kind = 'lines'
-          AND line_start > 0
-          AND line_end >= line_start
-          AND page_start IS NULL
-          AND page_end IS NULL
-        )
-      )
-    );
-
     CREATE TABLE IF NOT EXISTS concepts (
       id TEXT PRIMARY KEY,
       course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -113,14 +189,19 @@ export function openDatabase(databasePath: string) {
 
     CREATE INDEX IF NOT EXISTS materials_course_id
       ON materials(course_id);
-    CREATE INDEX IF NOT EXISTS source_passages_course_material
-      ON source_passages(course_id, material_id, ordinal);
     CREATE INDEX IF NOT EXISTS modules_course_id
       ON modules(course_id);
     CREATE INDEX IF NOT EXISTS assessments_course_id
       ON assessments(course_id);
     CREATE INDEX IF NOT EXISTS concepts_course_id
       ON concepts(course_id);
+  `);
+
+  createSourcePassagesTable(database);
+  migrateLegacySourcePassages(database);
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS source_passages_course_material
+      ON source_passages(course_id, material_id, ordinal);
   `);
 
   return database;

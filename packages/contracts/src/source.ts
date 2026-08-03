@@ -13,9 +13,25 @@ export const LineSourceLocationSchema = z.object({
   heading: z.string().nullable(),
 });
 
+export const ParagraphSourceLocationSchema = z.object({
+  kind: z.literal("paragraphs"),
+  paragraphStart: z.number().int().positive(),
+  paragraphEnd: z.number().int().positive(),
+  heading: z.string().nullable(),
+});
+
+export const SlideSourceLocationSchema = z.object({
+  kind: z.literal("slides"),
+  slideStart: z.number().int().positive(),
+  slideEnd: z.number().int().positive(),
+  title: z.string().nullable(),
+});
+
 export const SourceLocationSchema = z.discriminatedUnion("kind", [
   PageSourceLocationSchema,
   LineSourceLocationSchema,
+  ParagraphSourceLocationSchema,
+  SlideSourceLocationSchema,
 ]);
 export type SourceLocation = z.infer<typeof SourceLocationSchema>;
 

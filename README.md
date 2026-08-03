@@ -33,6 +33,8 @@ rather than represented as finished.
 │   ├── ARCHITECTURE.md            # Boundaries and data flow
 │   ├── COURSE-DATA-MODEL.md       # Course hierarchy and storage contract
 │   ├── LEARNING-FEEDBACK-LOOPS.md # Adaptive learning-system blueprint
+│   ├── PRODUCT-PLAN.md             # Durable product decisions and MVP scope
+│   ├── SKILL-ARCHITECTURE.md       # Specialized model-backed workflows
 │   └── SOURCE-INGESTION.md         # Extraction states and provenance
 └── PROGRESS.md                    # Completed work and backlog
 ```
@@ -80,8 +82,8 @@ The foundation includes:
 - Clickable class cards and per-class workspaces
 - A class-creation workflow
 - Per-class PDF, Markdown, text, DOCX, and PPTX uploads
-- Markdown, plain-text, and text-PDF extraction into source passages
-- Page, line, and Markdown-heading provenance with passage hashes
+- Markdown, plain-text, text-PDF, DOCX, and PPTX extraction into source passages
+- Page, line, paragraph, slide, and heading provenance with passage hashes
 - Explicit extraction states and visible failure reasons
 - SQLite-backed course and material records
 - Shared runtime contracts for courses, sources, concepts, course-map
@@ -90,11 +92,13 @@ The foundation includes:
 - A project-local `learning-coach` skill
 - Architecture, data-model, and progress documentation
 
-DOCX/PPTX extraction, OCR, syllabus analysis, module and assessment editing,
-Codex execution, lesson generation, practice, and mastery tracking are not
-implemented yet. See [SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the
-current extraction boundary and [PROGRESS.md](./PROGRESS.md) for implementation
-order and acceptance criteria.
+OCR, syllabus analysis, module and assessment editing, Codex execution, lesson
+generation, practice, and mastery tracking are not implemented yet. See
+[SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the current extraction
+boundary and [PROGRESS.md](./PROGRESS.md) for implementation order and
+acceptance criteria. Settled product and model-routing decisions live in
+[PRODUCT-PLAN.md](./docs/PRODUCT-PLAN.md), with the proposed narrow skill split
+in [SKILL-ARCHITECTURE.md](./docs/SKILL-ARCHITECTURE.md).
 
 ## Privacy and cost boundary
 

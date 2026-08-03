@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   API_VERSION,
@@ -13,6 +14,7 @@ import {
   MaterialPassagesResponseSchema,
 } from "@local-learning-studio/contracts";
 import { PDFDocument, StandardFonts } from "pdf-lib";
+import { strToU8, zipSync } from "fflate";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/storage/database.js";
 
@@ -51,6 +53,17 @@ function multipartFile(
     payload,
     contentType: `multipart/form-data; boundary=${boundary}`,
   };
+}
+
+function officePackage(entries: Record<string, string>) {
+  return zipSync(
+    Object.fromEntries(
+      Object.entries(entries).map(([name, content]) => [
+        name,
+        strToU8(content),
+      ]),
+    ),
+  );
 }
 
 test("GET /api/health reports the shared API version", async () => {
@@ -293,7 +306,7 @@ test("empty extractable sources fail visibly without losing the upload", async (
   await rm(root, { recursive: true });
 });
 
-test("Office files remain stored until an extractor is available", async () => {
+test("DOCX extraction preserves paragraph provenance and headings", async () => {
   const { app, root } = await createTestApp();
   const createResponse = await app.inject({
     method: "POST",
@@ -302,8 +315,89 @@ test("Office files remain stored until an extractor is available", async () => {
   });
   const course = CourseSummarySchema.parse(createResponse.json());
   const upload = multipartFile(
+    "reading.docx",
+    officePackage({
+      "word/document.xml": `
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+              <w:r><w:t>Cell Structure</w:t></w:r>
+            </w:p>
+            <w:p><w:r><w:t>Cells contain specialized organelles.</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Mitochondria produce ATP.</w:t></w:r></w:p>
+          </w:body>
+        </w:document>
+      `,
+    }),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  );
+
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.id}/materials?kind=reading`,
+    headers: { "content-type": upload.contentType },
+    payload: upload.payload,
+  });
+  const material = CourseMaterialSchema.parse(uploadResponse.json());
+  assert.equal(material.status, "ready");
+  assert.equal(material.passageCount, 1);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/materials/${material.id}/passages`,
+  });
+  const passages = MaterialPassagesResponseSchema.parse(response.json());
+  assert.deepEqual(
+    passages.passages.map(({ content, location }) => ({ content, location })),
+    [
+      {
+        content:
+          "Cells contain specialized organelles. Mitochondria produce ATP.",
+        location: {
+          kind: "paragraphs",
+          paragraphStart: 2,
+          paragraphEnd: 3,
+          heading: "Cell Structure",
+        },
+      },
+    ],
+  );
+
+  await app.close();
+  await rm(root, { recursive: true });
+});
+
+test("PPTX extraction preserves slide provenance", async () => {
+  const { app, root } = await createTestApp();
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/courses",
+    payload: { title: "Presentation Sources" },
+  });
+  const course = CourseSummarySchema.parse(createResponse.json());
+  const slide = (title: string, body: string) => `
+    <p:sld
+      xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:cSld><p:spTree>
+        <p:sp><p:txBody><a:p><a:r><a:t>${title}</a:t></a:r></a:p></p:txBody></p:sp>
+        <p:sp><p:txBody><a:p><a:r><a:t>${body}</a:t></a:r></a:p></p:txBody></p:sp>
+      </p:spTree></p:cSld>
+    </p:sld>
+  `;
+  const upload = multipartFile(
     "lecture.pptx",
-    "placeholder package",
+    officePackage({
+      "ppt/slides/slide1.xml": slide(
+        "Photosynthesis",
+        "Light reactions produce ATP.",
+      ),
+      "ppt/slides/slide2.xml": slide(
+        "Calvin Cycle",
+        "Carbon fixation produces sugar precursors.",
+      ),
+    }),
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   );
 
@@ -314,10 +408,147 @@ test("Office files remain stored until an extractor is available", async () => {
     payload: upload.payload,
   });
   const material = CourseMaterialSchema.parse(uploadResponse.json());
-  assert.equal(material.status, "stored");
-  assert.equal(material.passageCount, 0);
+  assert.equal(material.status, "ready");
+  assert.equal(material.passageCount, 2);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/materials/${material.id}/passages`,
+  });
+  const passages = MaterialPassagesResponseSchema.parse(response.json());
+  assert.deepEqual(
+    passages.passages.map(({ content, location }) => ({ content, location })),
+    [
+      {
+        content: "Photosynthesis Light reactions produce ATP.",
+        location: {
+          kind: "slides",
+          slideStart: 1,
+          slideEnd: 1,
+          title: "Photosynthesis",
+        },
+      },
+      {
+        content: "Calvin Cycle Carbon fixation produces sugar precursors.",
+        location: {
+          kind: "slides",
+          slideStart: 2,
+          slideEnd: 2,
+          title: "Calvin Cycle",
+        },
+      },
+    ],
+  );
 
   await app.close();
+  await rm(root, { recursive: true });
+});
+
+test("invalid Office packages fail visibly without losing the upload", async () => {
+  const { app, root } = await createTestApp();
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/courses",
+    payload: { title: "Broken Office Sources" },
+  });
+  const course = CourseSummarySchema.parse(createResponse.json());
+  const upload = multipartFile(
+    "lecture.pptx",
+    "not a zip package",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  );
+
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.id}/materials?kind=lecture-notes`,
+    headers: { "content-type": upload.contentType },
+    payload: upload.payload,
+  });
+  const material = CourseMaterialSchema.parse(uploadResponse.json());
+  assert.equal(material.status, "failed");
+  assert.equal(material.passageCount, 0);
+  assert.match(material.errorMessage ?? "", /package could not be read/i);
+
+  await app.close();
+  await rm(root, { recursive: true });
+});
+
+test("legacy passage locators migrate to canonical JSON", async () => {
+  const root = await mkdtemp(join(tmpdir(), "learning-studio-migration-"));
+  const databasePath = join(root, "legacy.sqlite");
+  const legacy = new DatabaseSync(databasePath);
+  const courseId = randomUUID();
+  const materialId = randomUUID();
+  const passageId = randomUUID();
+  const now = new Date().toISOString();
+
+  legacy.exec(`
+    CREATE TABLE courses (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      code TEXT NOT NULL DEFAULT '',
+      term TEXT NOT NULL DEFAULT '',
+      accent TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE materials (
+      id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      error_message TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE source_passages (
+      id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      locator_kind TEXT NOT NULL,
+      page_start INTEGER,
+      page_end INTEGER,
+      line_start INTEGER,
+      line_end INTEGER,
+      heading TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(material_id, ordinal)
+    );
+  `);
+  legacy
+    .prepare(
+      "INSERT INTO courses VALUES (?, 'Legacy', '', '', 'moss', ?, ?)",
+    )
+    .run(courseId, now, now);
+  legacy
+    .prepare(
+      "INSERT INTO materials VALUES (?, ?, 'notes.txt', 'notes.txt', 'text/plain', 'other', 5, 'ready', NULL, ?)",
+    )
+    .run(materialId, courseId, now);
+  legacy
+    .prepare(
+      "INSERT INTO source_passages VALUES (?, ?, ?, 0, 'proof', ?, 'lines', NULL, NULL, 4, 4, 'Theorem', ?)",
+    )
+    .run(passageId, courseId, materialId, "a".repeat(64), now);
+  legacy.close();
+
+  const migrated = openDatabase(databasePath);
+  const row = migrated
+    .prepare("SELECT location_json AS locationJson FROM source_passages")
+    .get() as { locationJson: string };
+  assert.deepEqual(JSON.parse(row.locationJson), {
+    kind: "lines",
+    lineStart: 4,
+    lineEnd: 4,
+    heading: "Theorem",
+  });
+  migrated.close();
   await rm(root, { recursive: true });
 });
 

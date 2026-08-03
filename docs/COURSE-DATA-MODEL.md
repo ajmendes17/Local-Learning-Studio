@@ -101,13 +101,14 @@ Stores extracted source evidence:
 - `id`, `course_id`, `material_id`
 - `ordinal`: stable order within one material
 - `content`, `content_hash`: normalized text and its SHA-256 hash
-- `locator_kind`: page or lines
-- page locators: `page_start`, `page_end`
-- text locators: `line_start`, `line_end`, optional `heading`
+- `location_json`: a validated versioned locator containing page, line,
+  paragraph, or slide coordinates and optional heading/title context
 - `created_at`: extraction timestamp
 
-Passages cascade with their course or material. Page and line coordinates are
-mutually exclusive and enforced by a database check.
+Passages cascade with their course or material. The application validates the
+locator against the shared discriminated-union contract before persistence and
+again when reading it. JSON storage lets later OCR add region provenance
+without rebuilding the table for every new locator shape.
 
 ### `modules`
 
@@ -144,6 +145,8 @@ The following should be added only with their consuming feature:
 - `module_concepts` and `module_materials`: many-to-many organization
 - `generation_runs`: model, prompt/schema versions, inputs, and result status
 - `learning_artifacts`: stored plans, lessons, practice, and assessments
+- `questions` and `answer_keys`: versioned prompts, grading modes, rubrics,
+  deterministic keys, explanations, and source references
 - `attempts`: answers, confidence, hints, and feedback
 - `mastery_evidence`: append-only evidence rather than a single opaque score
 - `review_schedule`: explainable next-review decisions
@@ -158,6 +161,9 @@ The following should be added only with their consuming feature:
 - Course list counts are derived from child tables, not separately maintained.
 - Deleting a course must remove both database children and its course directory.
 - Model-generated facts never become source passages.
+- Every model-backed run records its requested model and actual model metadata.
+- Deterministic grading never invokes Codex and always references a validated,
+  versioned answer key.
 
 ## API boundary
 

@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
   CourseMaterial,
-  SourceLocation,
   SourcePassage,
 } from "@local-learning-studio/contracts";
+import { SourceLocationSchema } from "@local-learning-studio/contracts";
 import type { DatabaseSync } from "node:sqlite";
 import type { ExtractedPassage } from "../extraction/types.js";
 
@@ -14,29 +14,8 @@ interface PassageRow {
   ordinal: number;
   content: string;
   contentHash: string;
-  locatorKind: "page" | "lines";
-  pageStart: number | null;
-  pageEnd: number | null;
-  lineStart: number | null;
-  lineEnd: number | null;
-  heading: string | null;
+  locationJson: string;
   createdAt: string;
-}
-
-function mapLocation(row: PassageRow): SourceLocation {
-  if (row.locatorKind === "page") {
-    return {
-      kind: "page",
-      pageStart: Number(row.pageStart),
-      pageEnd: Number(row.pageEnd),
-    };
-  }
-  return {
-    kind: "lines",
-    lineStart: Number(row.lineStart),
-    lineEnd: Number(row.lineEnd),
-    heading: row.heading,
-  };
 }
 
 function mapPassage(row: PassageRow): SourcePassage {
@@ -47,7 +26,7 @@ function mapPassage(row: PassageRow): SourcePassage {
     ordinal: Number(row.ordinal),
     content: row.content,
     contentHash: row.contentHash,
-    location: mapLocation(row),
+    location: SourceLocationSchema.parse(JSON.parse(row.locationJson)),
     createdAt: row.createdAt,
   };
 }
@@ -60,12 +39,7 @@ const passageSelect = `
     ordinal,
     content,
     content_hash AS contentHash,
-    locator_kind AS locatorKind,
-    page_start AS pageStart,
-    page_end AS pageEnd,
-    line_start AS lineStart,
-    line_end AS lineEnd,
-    heading,
+    location_json AS locationJson,
     created_at AS createdAt
   FROM source_passages
 `;
@@ -144,9 +118,8 @@ export class SourceLibrary {
     const insert = this.database.prepare(`
       INSERT INTO source_passages (
         id, course_id, material_id, ordinal, content, content_hash,
-        locator_kind, page_start, page_end, line_start, line_end, heading,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        location_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.database.exec("BEGIN IMMEDIATE");
@@ -164,12 +137,7 @@ export class SourceLibrary {
           ordinal,
           draft.content,
           createHash("sha256").update(draft.content).digest("hex"),
-          location.kind,
-          location.kind === "page" ? location.pageStart : null,
-          location.kind === "page" ? location.pageEnd : null,
-          location.kind === "lines" ? location.lineStart : null,
-          location.kind === "lines" ? location.lineEnd : null,
-          location.kind === "lines" ? location.heading : null,
+          JSON.stringify(SourceLocationSchema.parse(location)),
           createdAt,
         );
       });

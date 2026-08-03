@@ -39,11 +39,20 @@ Owns data exchanged across boundaries. Zod runtime schemas validate courses,
 materials, source locations, concepts, modules, assessments, and the
 `course-map.v1` proposal before they cross a boundary.
 
-### `.codex/skills/learning-coach`
+### `.agents/skills/learning-coach`
 
 Defines the reusable learning workflow and source-grounding rules for Codex.
 Application code remains responsible for authorization, validation,
 persistence, and error handling.
+
+### Model execution and routing
+
+The skill does not choose a runtime model. The local service owns a
+configuration-driven task router and invokes `codex exec --model <model>` from
+the repository root. Objective grading stays local; model-backed grading,
+artifact creation, and planning use the routing policy in `PRODUCT-PLAN.md`.
+The service must reject unavailable configured models explicitly rather than
+silently substituting another model.
 
 ## Storage
 
@@ -63,6 +72,12 @@ See [LEARNING-FEEDBACK-LOOPS.md](./LEARNING-FEEDBACK-LOOPS.md) for the planned
 source, diagnosis, instruction, practice, and retention cycles. That document
 also defines the separation between generated artifacts and append-only learner
 evidence.
+
+See [PRODUCT-PLAN.md](./PRODUCT-PLAN.md) for settled product scope, personal
+repository boundaries, rate-limit policy, and the initial model-routing matrix.
+
+See [SKILL-ARCHITECTURE.md](./SKILL-ARCHITECTURE.md) for the proposed
+specialized skills and the deterministic boundary around them.
 
 ## Failure policy
 

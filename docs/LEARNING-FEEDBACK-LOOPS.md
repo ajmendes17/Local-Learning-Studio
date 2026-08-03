@@ -146,9 +146,13 @@ prerequisite, or move to independent practice.
 
 1. Generate a problem against a versioned contract.
 2. Generate and validate its solution separately.
-3. Collect the answer, reasoning, confidence, and hint use.
-4. Distinguish correct, incorrect, incomplete, and unsupported reasoning.
-5. Provide concise feedback before another attempt or explanation.
+3. Grade multiple choice, true/false, and contract-approved exact answers
+   locally against the validated stored key.
+4. Route short responses to the configured lightweight grading model with only
+   the rubric, response, and relevant source blocks.
+5. Collect the answer, reasoning, confidence, and hint use.
+6. Distinguish correct, incorrect, incomplete, and unsupported reasoning.
+7. Provide concise feedback before another attempt or explanation.
 
 ### Output
 
@@ -189,6 +193,10 @@ retrieval rather than treating same-session success as durable mastery.
 
 Delayed performance confirms, weakens, or complicates prior evidence. The user
 can override the next activity without erasing history.
+
+Quiz completion automatically proposes a training-plan revision. Persist the
+prior version and show the evidence and rationale for every changed priority,
+review date, prerequisite, or activity.
 
 ## Conversation model
 
@@ -277,4 +285,3 @@ valid artifact.
 7. Explainable mastery projection
 8. Review scheduler and training-plan revision
 9. Data inspection, correction, export, and deletion
-
