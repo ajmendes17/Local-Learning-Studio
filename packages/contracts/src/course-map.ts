@@ -52,8 +52,8 @@ export const CourseMapProposalSchema = z
     schemaVersion: z.literal("course-map.v1"),
     courseId: z.string().uuid(),
     sourceMaterialIds: z.array(z.string().uuid()).min(1),
-    modules: z.array(CourseMapModuleProposalSchema),
-    concepts: z.array(CourseMapConceptProposalSchema),
+    modules: z.array(CourseMapModuleProposalSchema).min(1),
+    concepts: z.array(CourseMapConceptProposalSchema).min(1),
     assessments: z.array(CourseMapAssessmentProposalSchema),
     warnings: z.array(z.string()),
   })

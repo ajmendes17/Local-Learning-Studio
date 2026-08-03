@@ -155,6 +155,9 @@ test("GET /api/codex/status exposes setup readiness", async () => {
         version: "codex-cli 1.2.3",
         detail: "Run codex login.",
       }),
+      run: async () => {
+        throw new Error("Unexpected model run in status test.");
+      },
     },
   });
 

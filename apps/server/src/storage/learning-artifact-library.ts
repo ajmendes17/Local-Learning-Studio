@@ -112,7 +112,11 @@ export class LearningArtifactLibrary {
     return CourseMapArtifactSchema.parse(artifact);
   }
 
-  acceptCourseMap(courseId: string, artifactId: string) {
+  acceptCourseMap(
+    courseId: string,
+    artifactId: string,
+    apply?: (proposal: CourseMapProposal) => void,
+  ) {
     const row = this.database
       .prepare(`
         ${artifactSelect}
@@ -122,8 +126,10 @@ export class LearningArtifactLibrary {
     if (!row || row.status === "superseded") return null;
 
     const acceptedAt = new Date().toISOString();
+    const artifact = CourseMapArtifactSchema.parse(mapArtifact(row));
     this.database.exec("BEGIN IMMEDIATE");
     try {
+      apply?.(artifact.payload);
       this.database
         .prepare(`
           UPDATE learning_artifacts
@@ -146,7 +152,7 @@ export class LearningArtifactLibrary {
     }
 
     return CourseMapArtifactSchema.parse({
-      ...mapArtifact(row),
+      ...artifact,
       status: "accepted",
       acceptedAt,
     });

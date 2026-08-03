@@ -45,14 +45,17 @@ Uploading a syllabus does not create a separate representation. A future
 syllabus analysis run proposes normal `modules` and `assessments` with
 `origin = syllabus`.
 
-The workflow will be:
+The implemented review workflow is:
 
 1. Store the syllabus as an immutable material record.
 2. Extract text with page or heading provenance.
-3. Ask Codex for a proposed class structure against a versioned schema.
+3. Classify the current source fingerprint with the explicit classification
+   skill, then ask Codex for a proposed class structure against a versioned
+   schema.
 4. Show the proposal for review.
 5. Commit accepted modules and assessments in one database transaction.
-6. Retain the source material ID and generation record for traceability.
+6. Retain the source references, fingerprint, skill, and model record for
+   traceability.
 
 Manual and syllabus-generated records therefore use the same application and
 database paths. Users can edit the structure without breaking downstream
@@ -136,7 +139,9 @@ Stores high-value evaluation events independently from modules:
 manual or syllabus origin. `concept_prerequisites` stores directed edges
 between two concepts in the same course. The runtime contract exists now so a
 future accepted `course-map.v1` proposal can be persisted without inventing a
-second representation.
+second representation. `concept_learning_objectives` preserves ordered
+objectives and `module_concepts` preserves ordered module membership when an
+accepted map is applied.
 
 ### `learning_artifacts`
 
@@ -192,6 +197,10 @@ The first library API supports:
 | `GET` | `/api/courses/:courseId` | Load a course workspace |
 | `POST` | `/api/courses/:courseId/materials?kind=...` | Store one course file |
 | `GET` | `/api/courses/:courseId/materials/:materialId/passages` | Read course-scoped extracted passages |
+| `GET` | `/api/courses/:courseId/learning-artifacts` | Reopen current generated review artifacts |
+| `POST` | `/api/courses/:courseId/source-classification` | Generate or reuse semantic source classification |
+| `POST` | `/api/courses/:courseId/course-map` | Generate or reuse a course-map draft |
+| `POST` | `/api/courses/:courseId/course-map/:artifactId/accept` | Apply a current draft atomically |
 
-Module editing, assessment editing, deletion, OCR, and semantic source analysis
-remain explicit follow-up capabilities.
+Manual module editing, assessment editing, deletion, and OCR remain explicit
+follow-up capabilities.

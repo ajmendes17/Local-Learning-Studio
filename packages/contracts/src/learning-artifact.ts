@@ -53,3 +53,10 @@ export const CourseLearningArtifactsResponseSchema = z.object({
 export type CourseLearningArtifactsResponse = z.infer<
   typeof CourseLearningArtifactsResponseSchema
 >;
+
+export const GenerateLearningArtifactRequestSchema = z.object({
+  regenerate: z.boolean().optional().default(false),
+});
+export type GenerateLearningArtifactRequest = z.infer<
+  typeof GenerateLearningArtifactRequestSchema
+>;

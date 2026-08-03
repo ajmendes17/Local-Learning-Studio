@@ -93,9 +93,13 @@ Acceptance:
 - [x] Add versioned source-classification and course-map artifact storage.
   - Evidence: drafts are cached by source fingerprint, validated on read and
     write, and accepted history is superseded only by a reviewed replacement.
-- [ ] Generate concepts, prerequisites, objectives, and source references.
+- [x] Generate concepts, prerequisites, objectives, and source references.
+  - Evidence: the action-specific backend classifies current sources, invokes
+    `map-course`, validates every cited passage, and caches by fingerprint.
 - [ ] Create a deadline-aware training plan.
-- [ ] Store artifacts so reopening a course does not regenerate them.
+- [x] Store artifacts so reopening a course does not regenerate them.
+  - Evidence: matching source-classification and course-map fingerprints reuse
+    validated SQLite artifacts; the integration test verifies restart.
 - [ ] Add review and explicit regeneration controls.
 
 Acceptance:
@@ -155,3 +159,4 @@ Acceptance:
 | 2026-08-03 | DOCX/PPTX extraction and skill architecture | Passed 13 contract/API/storage/extraction tests, workspace type checks, 3 production builds, `git diff --check`, skill discovery, and a zero-vulnerability production dependency audit |
 | 2026-08-03 | Codex runner and model router | Passed 20 tests including structured-output validation, explicit failure and timeout handling, serialized calls, model selection, and setup status; workspace checks and production audit passed |
 | 2026-08-03 | Specialized learning skills | All 9 skill folders passed the Codex skill validator; implicit invocation is disabled and the broad transitional skill was removed |
+| 2026-08-03 | Source classification and course-map backend | Passed 23 tests including fingerprint caching, stale-draft rejection, citation validation, restart persistence, and transactional map acceptance; workspace checks and production audit passed |

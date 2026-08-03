@@ -94,11 +94,13 @@ The foundation includes:
 - Nine explicitly invoked, project-local learning skills
 - A serialized Codex runner with configurable Luna, Terra, and Sol routing
 - A local Codex installation/authentication readiness endpoint
+- Cached source classification through the explicit Luna workflow
+- Cached, source-grounded course-map drafts through the explicit Terra workflow
+- Transactional acceptance into modules, concepts, objectives, and assessments
 - Architecture, data-model, and progress documentation
 
-OCR, syllabus analysis, module and assessment editing, action-specific Codex
-workflows, lesson generation, practice, and mastery tracking are not
-implemented yet. See
+OCR, manual module and assessment editing, training-plan generation, lessons,
+practice, and mastery tracking are not implemented yet. See
 [SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the current extraction
 boundary and [PROGRESS.md](./PROGRESS.md) for implementation order and
 acceptance criteria. Settled product and model-routing decisions live in

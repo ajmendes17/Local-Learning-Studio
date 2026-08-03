@@ -101,5 +101,9 @@ unchanged.
 | `GET` | `/api/courses/:courseId` | Load class materials and structure |
 | `POST` | `/api/courses/:courseId/materials` | Store one class source |
 | `GET` | `/api/courses/:courseId/materials/:materialId/passages` | Read extracted, source-located passages |
+| `GET` | `/api/courses/:courseId/learning-artifacts` | Read the current classification and course-map review artifacts |
+| `POST` | `/api/courses/:courseId/source-classification` | Classify the current source fingerprint through Luna |
+| `POST` | `/api/courses/:courseId/course-map` | Build a source-grounded map through Terra |
+| `POST` | `/api/courses/:courseId/course-map/:artifactId/accept` | Transactionally apply a current reviewed map |
 
 API additions should begin with a contract and an acceptance test.

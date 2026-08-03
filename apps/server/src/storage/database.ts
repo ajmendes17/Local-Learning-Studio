@@ -201,6 +201,22 @@ export function openDatabase(databasePath: string) {
         REFERENCES concepts(course_id, id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS concept_learning_objectives (
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      concept_id TEXT NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      objective TEXT NOT NULL,
+      PRIMARY KEY(concept_id, position)
+    );
+
+    CREATE TABLE IF NOT EXISTS module_concepts (
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      module_id TEXT NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+      concept_id TEXT NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      PRIMARY KEY(module_id, concept_id)
+    );
+
     CREATE INDEX IF NOT EXISTS materials_course_id
       ON materials(course_id);
     CREATE INDEX IF NOT EXISTS modules_course_id
@@ -209,6 +225,8 @@ export function openDatabase(databasePath: string) {
       ON assessments(course_id);
     CREATE INDEX IF NOT EXISTS concepts_course_id
       ON concepts(course_id);
+    CREATE INDEX IF NOT EXISTS module_concepts_course_id
+      ON module_concepts(course_id, module_id, position);
     CREATE INDEX IF NOT EXISTS learning_artifacts_course_kind
       ON learning_artifacts(course_id, kind, created_at DESC);
     CREATE INDEX IF NOT EXISTS learning_artifacts_fingerprint

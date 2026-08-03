@@ -18,6 +18,11 @@ interface PassageRow {
   createdAt: string;
 }
 
+interface PassageHashRow {
+  materialId: string;
+  contentHash: string;
+}
+
 function mapPassage(row: PassageRow): SourcePassage {
   return {
     id: row.id,
@@ -107,6 +112,19 @@ export class SourceLibrary {
       `)
       .all(courseId, materialId, limit, offset) as unknown as PassageRow[];
     return rows.map(mapPassage);
+  }
+
+  getCoursePassageHashes(courseId: string): PassageHashRow[] {
+    return this.database
+      .prepare(`
+        SELECT
+          material_id AS materialId,
+          content_hash AS contentHash
+        FROM source_passages
+        WHERE course_id = ?
+        ORDER BY material_id, ordinal
+      `)
+      .all(courseId) as unknown as PassageHashRow[];
   }
 
   completeExtraction(

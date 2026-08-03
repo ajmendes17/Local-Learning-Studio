@@ -10,19 +10,25 @@ import Fastify from "fastify";
 import { CodexRunner } from "./codex/codex-runner.js";
 import { MaterialProcessor } from "./extraction/material-processor.js";
 import {
+  LearningWorkflowService,
+  type LearningCodexClient,
+} from "./learning/learning-workflow-service.js";
+import {
   registerCodexRoutes,
-  type CodexStatusProvider,
 } from "./routes/codex.js";
 import { registerCourseRoutes } from "./routes/courses.js";
+import { registerLearningRoutes } from "./routes/learning.js";
 import { CourseLibrary } from "./storage/course-library.js";
+import { CourseStructureLibrary } from "./storage/course-structure-library.js";
 import { openDatabase } from "./storage/database.js";
+import { LearningArtifactLibrary } from "./storage/learning-artifact-library.js";
 import { MaterialStorage } from "./storage/material-storage.js";
 import { SourceLibrary } from "./storage/source-library.js";
 
 export interface AppOptions {
   databasePath?: string;
   courseRoot?: string;
-  codex?: CodexStatusProvider;
+  codex?: LearningCodexClient;
 }
 
 function findProjectRoot() {
@@ -50,6 +56,15 @@ export function buildApp(options: AppOptions = {}) {
   sourceLibrary.recoverInterruptedExtractions();
   const materialProcessor = new MaterialProcessor(sourceLibrary);
   const codex = options.codex ?? new CodexRunner({ projectRoot });
+  const artifacts = new LearningArtifactLibrary(database);
+  const structures = new CourseStructureLibrary(database);
+  const learning = new LearningWorkflowService(
+    library,
+    sourceLibrary,
+    artifacts,
+    structures,
+    codex,
+  );
 
   void app.register(multipart, {
     limits: {
@@ -71,6 +86,7 @@ export function buildApp(options: AppOptions = {}) {
     sourceLibrary,
   });
   void app.register(registerCodexRoutes, { codex });
+  void app.register(registerLearningRoutes, { learning });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof app.multipartErrors.RequestFileTooLargeError) {
