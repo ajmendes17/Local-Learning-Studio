@@ -25,16 +25,15 @@ workflow is accepted.
 - Keep SQLite, uploaded sources, normalized evidence, learner records, and
   generated artifacts local.
 - Invoke Codex through `codex exec` from the repository root.
-- Check the reusable `learning-coach` workflow into
-  `.agents/skills/learning-coach` so a clone discovers it without a global
-  skill copy.
+- Check narrow workflows into `.agents/skills` so a clone discovers them
+  without global skill copies.
 - Validate every model response against a versioned JSON schema before
   persistence.
 - Fail explicitly when Codex, a source extractor, a requested model, or a
   structured response is unavailable.
 - Consider Tauri packaging only after the localhost workflow is accepted.
-- Split model-backed GUI actions into narrow skills after the Codex runner is
-  available; keep deterministic application work out of skills.
+- Invoke model-backed GUI actions through narrow skills; keep deterministic
+  application work out of skills.
 
 ## Personal repository boundary
 
@@ -145,8 +144,8 @@ For the personal and downloadable modes, each user:
 A plugin or packaged desktop installer may improve distribution later, but it
 must preserve repo-local data ownership and explicit model routing.
 
-The proposed skill inventory and migration away from the broad initial skill
-are defined in `SKILL-ARCHITECTURE.md`.
+The implemented skill inventory and migration away from the broad initial
+skill are defined in `SKILL-ARCHITECTURE.md`.
 
 ## Definition of the personal MVP
 

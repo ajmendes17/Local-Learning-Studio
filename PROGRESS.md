@@ -24,8 +24,9 @@ its acceptance evidence is recorded here.
   - Evidence: `/api/health` is covered by an injection test.
 - [x] Add shared TypeScript contracts.
   - Evidence: server and web import the same `HealthResponse` contract.
-- [x] Create the project-local `learning-coach` skill.
-  - Evidence: the skill passes the Codex skill validator.
+- [x] Create project-local learning skills.
+  - Evidence: nine narrow skills under `.agents/skills` pass the Codex skill
+    validator and disable implicit invocation.
 - [x] Document architecture, setup, boundaries, and verification.
   - Evidence: `README.md`, `docs/ARCHITECTURE.md`, `docs/PRODUCT-PLAN.md`, and
     this ledger exist.
@@ -75,10 +76,10 @@ Acceptance:
   - Evidence: the runner uses ephemeral, read-only `codex exec` calls, sends
     prompts over stdin, requests schema-constrained output, and revalidates the
     final JSON.
-- [x] Relocate and validate the learning skill under `.agents/skills` before
-  Codex integration so repository clones discover it automatically.
-  - Evidence: the repository skill is discovered at
-    `.agents/skills/learning-coach` and the old `.codex/skills` copy is gone.
+- [x] Locate and validate learning skills under `.agents/skills` so repository
+  clones discover them automatically.
+  - Evidence: all nine repository skills validate under `.agents/skills`; the
+    old `.codex/skills` copy is gone.
 - [x] Add configurable task-to-model routing for Luna, Terra, and Sol with
   explicit unavailable-model errors.
   - Evidence: every typed task maps to a configurable model; failures are
@@ -86,6 +87,9 @@ Acceptance:
 - [x] Define the specialized skill inventory and deterministic boundaries.
   - Evidence: `docs/SKILL-ARCHITECTURE.md` maps each GUI action to a narrow
     skill, default model, and validated application boundary.
+- [x] Scaffold and validate the specialized learning skills.
+  - Evidence: each GUI action owns a concise skill with matching UI metadata;
+    the overlapping broad skill has been removed.
 - [ ] Generate concepts, prerequisites, objectives, and source references.
 - [ ] Create a deadline-aware training plan.
 - [ ] Store artifacts so reopening a course does not regenerate them.
@@ -147,3 +151,4 @@ Acceptance:
 | 2026-07-30 | Source ingestion and course-map contracts | Passed workspace type checks, 10 contract/API/storage/extraction tests, 3 production builds, `git diff --check`, and desktop/mobile browser review of a real extracted upload |
 | 2026-08-03 | DOCX/PPTX extraction and skill architecture | Passed 13 contract/API/storage/extraction tests, workspace type checks, 3 production builds, `git diff --check`, skill discovery, and a zero-vulnerability production dependency audit |
 | 2026-08-03 | Codex runner and model router | Passed 20 tests including structured-output validation, explicit failure and timeout handling, serialized calls, model selection, and setup status; workspace checks and production audit passed |
+| 2026-08-03 | Specialized learning skills | All 9 skill folders passed the Codex skill validator; implicit invocation is disabled and the broad transitional skill was removed |

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Compose Study Lesson"
+  short_description: "Compose the next focused study lesson"
+  default_prompt: "Use $compose-study-lesson to construct the next planned lesson."
+policy:
+  allow_implicit_invocation: false

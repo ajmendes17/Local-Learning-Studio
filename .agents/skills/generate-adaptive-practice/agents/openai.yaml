@@ -1,0 +1,6 @@
+interface:
+  display_name: "Generate Adaptive Practice"
+  short_description: "Generate practice at current mastery"
+  default_prompt: "Use $generate-adaptive-practice to create targeted practice problems."
+policy:
+  allow_implicit_invocation: false

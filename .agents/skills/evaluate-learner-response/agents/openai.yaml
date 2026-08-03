@@ -1,0 +1,6 @@
+interface:
+  display_name: "Evaluate Learner Response"
+  short_description: "Evaluate reasoning and misconceptions"
+  default_prompt: "Use $evaluate-learner-response to evaluate this learner response."
+policy:
+  allow_implicit_invocation: false

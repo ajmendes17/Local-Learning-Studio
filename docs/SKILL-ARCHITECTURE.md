@@ -11,7 +11,7 @@ selection does not depend on ambiguous natural-language triggering. Shared
 learning rules remain in project documentation and versioned contracts instead
 of being copied into every skill.
 
-## Proposed skills
+## Implemented skills
 
 | GUI action | Skill | Responsibility | Default model |
 |---|---|---|---|
@@ -60,7 +60,8 @@ source scope.
 
 ## Migration from `learning-coach`
 
-Keep the current broad `learning-coach` skill only while the Codex runner and
-specialized skills are being implemented. Initialize and validate each new
-skill independently, migrate one GUI action at a time, then remove the broad
-skill to avoid overlapping triggers and duplicated instructions.
+The broad `learning-coach` skill has been removed. All nine narrow skills were
+initialized with the supported skill scaffold, validated independently, and
+configured with implicit invocation disabled. The future GUI must invoke the
+exact `$skill-name`; the server remains responsible for choosing the model and
+validating the response.

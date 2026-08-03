@@ -1,0 +1,6 @@
+interface:
+  display_name: "Explain Course Concept"
+  short_description: "Explain one concept from course sources"
+  default_prompt: "Use $explain-course-concept to explain the selected course concept."
+policy:
+  allow_implicit_invocation: false

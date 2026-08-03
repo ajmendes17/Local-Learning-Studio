@@ -1,0 +1,6 @@
+interface:
+  display_name: "Classify Course Sources"
+  short_description: "Classify imported passages and source roles"
+  default_prompt: "Use $classify-course-sources to classify the imported course sources."
+policy:
+  allow_implicit_invocation: false

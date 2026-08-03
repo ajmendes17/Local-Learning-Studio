@@ -1,0 +1,6 @@
+interface:
+  display_name: "Map Course"
+  short_description: "Map course concepts and source evidence"
+  default_prompt: "Use $map-course to propose a source-grounded course map."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Generate Course Quiz"
+  short_description: "Generate a balanced source-grounded quiz"
+  default_prompt: "Use $generate-course-quiz to create a balanced course assessment."
+policy:
+  allow_implicit_invocation: false

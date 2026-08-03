@@ -1,0 +1,6 @@
+interface:
+  display_name: "Plan Remediation"
+  short_description: "Plan review from mistakes and retention"
+  default_prompt: "Use $plan-remediation to plan the next remediation session."
+policy:
+  allow_implicit_invocation: false

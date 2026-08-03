@@ -41,10 +41,10 @@ materials, source locations, concepts, modules, assessments, and the
 
 ### `.agents/skills`
 
-Defines reusable learning workflows and source-grounding rules for Codex. The
-broad `learning-coach` skill remains only during migration to narrow action
-skills. Application code remains responsible for authorization, validation,
-persistence, and error handling.
+Defines nine narrow learning workflows and source-grounding rules for Codex.
+They disable implicit invocation so the local service can select the exact
+workflow for each GUI action. Application code remains responsible for
+authorization, validation, persistence, and error handling.
 
 ### Model execution and routing
 
@@ -80,7 +80,7 @@ evidence.
 See [PRODUCT-PLAN.md](./PRODUCT-PLAN.md) for settled product scope, personal
 repository boundaries, rate-limit policy, and the initial model-routing matrix.
 
-See [SKILL-ARCHITECTURE.md](./SKILL-ARCHITECTURE.md) for the proposed
+See [SKILL-ARCHITECTURE.md](./SKILL-ARCHITECTURE.md) for the implemented
 specialized skills and the deterministic boundary around them.
 
 ## Failure policy

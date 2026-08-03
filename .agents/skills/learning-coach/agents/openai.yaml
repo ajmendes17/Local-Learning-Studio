@@ -1,4 +1,0 @@
-interface:
-  display_name: "Learning Coach"
-  short_description: "Build source-grounded adaptive study experiences"
-  default_prompt: "Use $learning-coach to create the next source-grounded learning activity."

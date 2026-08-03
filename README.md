@@ -22,7 +22,7 @@ rather than represented as finished.
 
 ```text
 .
-├── .agents/skills/learning-coach/ # Transitional project-local workflow
+├── .agents/skills/                # Narrow project-local learning workflows
 ├── apps/
 │   ├── server/                    # Local Fastify service
 │   └── web/                       # React + Vite interface
@@ -91,7 +91,7 @@ The foundation includes:
 - Shared runtime contracts for courses, sources, concepts, course-map
   proposals, modules, and assessments
 - Explicit local file separation under `courses/<course-id>/materials`
-- A project-local `learning-coach` skill
+- Nine explicitly invoked, project-local learning skills
 - A serialized Codex runner with configurable Luna, Terra, and Sol routing
 - A local Codex installation/authentication readiness endpoint
 - Architecture, data-model, and progress documentation
@@ -102,7 +102,7 @@ implemented yet. See
 [SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the current extraction
 boundary and [PROGRESS.md](./PROGRESS.md) for implementation order and
 acceptance criteria. Settled product and model-routing decisions live in
-[PRODUCT-PLAN.md](./docs/PRODUCT-PLAN.md), with the proposed narrow skill split
+[PRODUCT-PLAN.md](./docs/PRODUCT-PLAN.md), with the implemented narrow skill split
 in [SKILL-ARCHITECTURE.md](./docs/SKILL-ARCHITECTURE.md).
 
 ## Privacy and cost boundary
