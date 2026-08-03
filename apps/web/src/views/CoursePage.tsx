@@ -1,16 +1,29 @@
 import type {
+  CodexStatusResponse,
   CourseDetail,
+  CourseLearningArtifactsResponse,
   CourseMaterial,
   MaterialKind,
 } from "@local-learning-studio/contracts";
+import {
+  CourseMapPanel,
+  type LearningAction,
+} from "../components/CourseMapPanel";
 import { MaterialUpload } from "../components/MaterialUpload";
 
 interface CoursePageProps {
   course: CourseDetail | null;
   loading: boolean;
   error: string | null;
+  artifacts: CourseLearningArtifactsResponse | null;
+  codex: CodexStatusResponse | null;
+  learningAction: LearningAction;
+  learningError: string | null;
   onBack: () => void;
   onUpload: (file: File, kind: MaterialKind) => Promise<void>;
+  onAnalyze: (regenerate: boolean) => Promise<void>;
+  onBuildMap: (regenerate: boolean) => Promise<void>;
+  onAcceptMap: () => Promise<void>;
 }
 
 const materialKindLabels: Record<MaterialKind, string> = {
@@ -79,8 +92,15 @@ export function CoursePage({
   course,
   loading,
   error,
+  artifacts,
+  codex,
+  learningAction,
+  learningError,
   onBack,
   onUpload,
+  onAnalyze,
+  onBuildMap,
+  onAcceptMap,
 }: CoursePageProps) {
   if (loading && !course) {
     return <main className="course-loading">Opening class…</main>;
@@ -190,15 +210,34 @@ export function CoursePage({
             </div>
           </div>
           <div className="syllabus-note">
-            <span>Next capability</span>
-            <strong>Build structure from a syllabus</strong>
+            <span>Learning structure</span>
+            <strong>
+              {artifacts?.courseMapCurrent
+                ? artifacts.courseMap?.status === "accepted"
+                  ? "Course map active"
+                  : "Draft ready to review"
+                : "Build from course evidence"}
+            </strong>
             <p>
-              A reviewed syllabus analysis will propose modules, exams, due
-              dates, and weights without changing your course automatically.
+              Codex proposes source-grounded modules, concepts, and assessments.
+              You decide when a current draft becomes active.
             </p>
           </div>
         </aside>
       </section>
+
+      <CourseMapPanel
+        artifacts={artifacts}
+        codex={codex}
+        readySourceCount={
+          course.materials.filter(({ status }) => status === "ready").length
+        }
+        action={learningAction}
+        error={learningError}
+        onAnalyze={onAnalyze}
+        onBuildMap={onBuildMap}
+        onAccept={onAcceptMap}
+      />
     </main>
   );
 }

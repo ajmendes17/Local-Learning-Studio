@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  CodexStatusResponse,
   CourseDetail,
+  CourseLearningArtifactsResponse,
   CourseSummary,
   CreateCourseRequest,
   HealthResponse,
   MaterialKind,
 } from "@local-learning-studio/contracts";
 import { AppHeader, type ServiceState } from "./components/AppHeader";
-import { createCourse, getCourse, listCourses, uploadMaterial } from "./lib/api";
+import type { LearningAction } from "./components/CourseMapPanel";
+import {
+  acceptCourseMap,
+  classifyCourseSources,
+  createCourse,
+  generateCourseMap,
+  getCodexStatus,
+  getCourse,
+  getLearningArtifacts,
+  listCourses,
+  uploadMaterial,
+} from "./lib/api";
 import { CoursePage } from "./views/CoursePage";
 import { HomePage } from "./views/HomePage";
 import { InfoPage } from "./views/InfoPage";
@@ -30,6 +43,11 @@ export function App() {
   const [route, setRoute] = useState<AppRoute>(routeFromPath);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<CourseDetail | null>(null);
+  const [artifacts, setArtifacts] =
+    useState<CourseLearningArtifactsResponse | null>(null);
+  const [codex, setCodex] = useState<CodexStatusResponse | null>(null);
+  const [learningAction, setLearningAction] = useState<LearningAction>(null);
+  const [learningError, setLearningError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,10 +67,26 @@ export function App() {
     try {
       setError(null);
       setLoading(true);
-      setSelectedCourse(await getCourse(courseId));
+      const [course, learningArtifacts, codexStatus] = await Promise.all([
+        getCourse(courseId),
+        getLearningArtifacts(courseId),
+        getCodexStatus().catch(
+          (): CodexStatusResponse => ({
+            installed: false,
+            authenticated: false,
+            ready: false,
+            version: null,
+            detail: "The local Codex status check failed.",
+          }),
+        ),
+      ]);
+      setSelectedCourse(course);
+      setArtifacts(learningArtifacts);
+      setCodex(codexStatus);
     } catch (requestError) {
       setError((requestError as Error).message);
       setSelectedCourse(null);
+      setArtifacts(null);
     } finally {
       setLoading(false);
     }
@@ -75,6 +109,8 @@ export function App() {
       void loadCourse(route.courseId);
     } else {
       setSelectedCourse(null);
+      setArtifacts(null);
+      setLearningError(null);
       setLoading(false);
     }
   }, [loadCourse, route]);
@@ -103,6 +139,57 @@ export function App() {
     await Promise.all([loadCourse(route.courseId), loadLibrary()]);
   }
 
+  async function refreshLearningArtifacts(courseId: string) {
+    setArtifacts(await getLearningArtifacts(courseId));
+  }
+
+  async function handleAnalyzeSources(regenerate: boolean) {
+    if (route.kind !== "course") return;
+    setLearningAction("analyzing");
+    setLearningError(null);
+    try {
+      await classifyCourseSources(route.courseId, regenerate);
+      await refreshLearningArtifacts(route.courseId);
+    } catch (requestError) {
+      setLearningError((requestError as Error).message);
+    } finally {
+      setLearningAction(null);
+    }
+  }
+
+  async function handleBuildCourseMap(regenerate: boolean) {
+    if (route.kind !== "course") return;
+    setLearningAction("mapping");
+    setLearningError(null);
+    try {
+      await generateCourseMap(route.courseId, regenerate);
+      await refreshLearningArtifacts(route.courseId);
+    } catch (requestError) {
+      setLearningError((requestError as Error).message);
+    } finally {
+      setLearningAction(null);
+    }
+  }
+
+  async function handleAcceptCourseMap() {
+    if (route.kind !== "course" || !artifacts?.courseMap) return;
+    setLearningAction("accepting");
+    setLearningError(null);
+    try {
+      await acceptCourseMap(route.courseId, artifacts.courseMap.id);
+      const [course] = await Promise.all([
+        getCourse(route.courseId),
+        refreshLearningArtifacts(route.courseId),
+        loadLibrary(),
+      ]);
+      setSelectedCourse(course);
+    } catch (requestError) {
+      setLearningError((requestError as Error).message);
+    } finally {
+      setLearningAction(null);
+    }
+  }
+
   const activePage =
     route.kind === "course" ? "course" : route.kind === "info" ? "info" : "library";
 
@@ -119,8 +206,15 @@ export function App() {
           course={selectedCourse}
           loading={loading}
           error={error}
+          artifacts={artifacts}
+          codex={codex}
+          learningAction={learningAction}
+          learningError={learningError}
           onBack={() => navigate("/")}
           onUpload={handleUpload}
+          onAnalyze={handleAnalyzeSources}
+          onBuildMap={handleBuildCourseMap}
+          onAcceptMap={handleAcceptCourseMap}
         />
       ) : route.kind === "info" ? (
         <InfoPage onStart={() => navigate("/")} />
@@ -136,4 +230,3 @@ export function App() {
     </div>
   );
 }
-

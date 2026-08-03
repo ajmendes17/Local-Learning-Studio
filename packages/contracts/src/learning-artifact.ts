@@ -49,6 +49,8 @@ export type LearningArtifact = z.infer<typeof LearningArtifactSchema>;
 export const CourseLearningArtifactsResponseSchema = z.object({
   classification: SourceClassificationArtifactSchema.nullable(),
   courseMap: CourseMapArtifactSchema.nullable(),
+  classificationCurrent: z.boolean(),
+  courseMapCurrent: z.boolean(),
 });
 export type CourseLearningArtifactsResponse = z.infer<
   typeof CourseLearningArtifactsResponseSchema

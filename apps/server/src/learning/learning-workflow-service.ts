@@ -56,13 +56,31 @@ export class LearningWorkflowService {
   ) {}
 
   getArtifacts(courseId: string) {
-    this.requireCourse(courseId);
+    const projection = buildCourseSourceProjection(
+      this.requireCourse(courseId),
+      this.sources,
+    );
+    const classification = this.artifacts.latest(
+      courseId,
+      "source-classification",
+    );
+    const courseMap = this.artifacts.latest(courseId, "course-map");
+    const classificationCurrent =
+      classification?.kind === "source-classification" &&
+      classification.sourceFingerprint === projection.sourceFingerprint;
+    const expectedMapFingerprint = classificationCurrent
+      ? this.courseMapFingerprint(
+          projection.sourceFingerprint,
+          classification.payload,
+        )
+      : null;
     return CourseLearningArtifactsResponseSchema.parse({
-      classification: this.artifacts.latest(
-        courseId,
-        "source-classification",
-      ),
-      courseMap: this.artifacts.latest(courseId, "course-map"),
+      classification,
+      courseMap,
+      classificationCurrent,
+      courseMapCurrent:
+        courseMap?.kind === "course-map" &&
+        courseMap.sourceFingerprint === expectedMapFingerprint,
     });
   }
 

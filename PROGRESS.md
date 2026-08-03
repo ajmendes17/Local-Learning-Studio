@@ -100,7 +100,10 @@ Acceptance:
 - [x] Store artifacts so reopening a course does not regenerate them.
   - Evidence: matching source-classification and course-map fingerprints reuse
     validated SQLite artifacts; the integration test verifies restart.
-- [ ] Add review and explicit regeneration controls.
+- [x] Add review and explicit regeneration controls.
+  - Evidence: the course workspace shows classification and map freshness,
+    warnings, model provenance, modules, assessments, acceptance, reanalysis,
+    and regeneration without automatically applying drafts.
 
 Acceptance:
 
@@ -160,3 +163,4 @@ Acceptance:
 | 2026-08-03 | Codex runner and model router | Passed 20 tests including structured-output validation, explicit failure and timeout handling, serialized calls, model selection, and setup status; workspace checks and production audit passed |
 | 2026-08-03 | Specialized learning skills | All 9 skill folders passed the Codex skill validator; implicit invocation is disabled and the broad transitional skill was removed |
 | 2026-08-03 | Source classification and course-map backend | Passed 23 tests including fingerprint caching, stale-draft rejection, citation validation, restart persistence, and transactional map acceptance; workspace checks and production audit passed |
+| 2026-08-03 | Course-map review interface | Verified empty, draft, and accepted states in the local browser; acceptance updated 3 module and 2 assessment records, the 390 px layout had no horizontal overflow, and browser console review found no errors or warnings |

@@ -97,6 +97,8 @@ The foundation includes:
 - Cached source classification through the explicit Luna workflow
 - Cached, source-grounded course-map drafts through the explicit Terra workflow
 - Transactional acceptance into modules, concepts, objectives, and assessments
+- A responsive in-course review workflow showing source roles, map freshness,
+  warnings, modules, assessments, model provenance, and regeneration controls
 - Architecture, data-model, and progress documentation
 
 OCR, manual module and assessment editing, training-plan generation, lessons,

@@ -261,6 +261,8 @@ test("course sources flow through cached classification, map review, and accepta
   );
   assert.equal(artifacts.classification?.id, refreshedClassification.id);
   assert.equal(artifacts.courseMap?.status, "accepted");
+  assert.equal(artifacts.classificationCurrent, true);
+  assert.equal(artifacts.courseMapCurrent, true);
 
   await app.close();
   const reopened = buildApp({ databasePath, courseRoot, codex });

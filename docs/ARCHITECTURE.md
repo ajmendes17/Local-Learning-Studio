@@ -24,7 +24,10 @@ Local service ---- shared contracts
 ### `apps/web`
 
 Owns presentation and user interaction. It must not read course files,
-databases, Codex credentials, or process state directly.
+databases, Codex credentials, or process state directly. The course workspace
+shows the deterministic Import → Classify → Review map state, disables model
+actions when local Codex is unavailable, and requires explicit acceptance
+before a draft becomes active structure.
 
 ### `apps/server`
 

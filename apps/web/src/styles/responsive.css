@@ -7,6 +7,21 @@
   .workspace-grid {
     grid-template-columns: 1fr;
   }
+
+  .map-pipeline,
+  .source-role-grid,
+  .map-module-list {
+    grid-template-columns: 1fr;
+  }
+
+  .map-step {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .map-step:last-child {
+    border-bottom: 0;
+  }
 }
 
 @media (max-width: 820px) {
@@ -35,8 +50,26 @@
   }
 
   .workspace-main,
-  .structure-panel {
+  .structure-panel,
+  .learning-map {
     padding: 20px;
+  }
+
+  .learning-map__heading,
+  .map-subheading,
+  .map-action-card,
+  .map-review-actions {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .map-action-card {
+    display: grid;
+  }
+
+  .map-review-actions > div:last-child {
+    flex-direction: column;
   }
 
   .course-stats {

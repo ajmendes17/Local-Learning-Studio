@@ -1,9 +1,13 @@
 import {
   ApiErrorSchema,
+  CodexStatusResponseSchema,
+  CourseLearningArtifactsResponseSchema,
+  CourseMapArtifactSchema,
   CourseDetailSchema,
   CourseListResponseSchema,
   CourseMaterialSchema,
   CourseSummarySchema,
+  SourceClassificationArtifactSchema,
   type CreateCourseRequest,
   type MaterialKind,
 } from "@local-learning-studio/contracts";
@@ -54,3 +58,52 @@ export async function uploadMaterial(
   return CourseMaterialSchema.parse(await readResponse(response));
 }
 
+export async function getCodexStatus() {
+  const response = await fetch("/api/codex/status");
+  return CodexStatusResponseSchema.parse(await readResponse(response));
+}
+
+export async function getLearningArtifacts(courseId: string) {
+  const response = await fetch(`/api/courses/${courseId}/learning-artifacts`);
+  return CourseLearningArtifactsResponseSchema.parse(
+    await readResponse(response),
+  );
+}
+
+export async function classifyCourseSources(
+  courseId: string,
+  regenerate = false,
+) {
+  const response = await fetch(
+    `/api/courses/${courseId}/source-classification`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ regenerate }),
+    },
+  );
+  return SourceClassificationArtifactSchema.parse(await readResponse(response));
+}
+
+export async function generateCourseMap(
+  courseId: string,
+  regenerate = false,
+) {
+  const response = await fetch(`/api/courses/${courseId}/course-map`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ regenerate }),
+  });
+  return CourseMapArtifactSchema.parse(await readResponse(response));
+}
+
+export async function acceptCourseMap(
+  courseId: string,
+  artifactId: string,
+) {
+  const response = await fetch(
+    `/api/courses/${courseId}/course-map/${artifactId}/accept`,
+    { method: "POST" },
+  );
+  return CourseMapArtifactSchema.parse(await readResponse(response));
+}
