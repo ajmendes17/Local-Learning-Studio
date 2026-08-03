@@ -7,7 +7,12 @@ import {
   type HealthResponse,
 } from "@local-learning-studio/contracts";
 import Fastify from "fastify";
+import { CodexRunner } from "./codex/codex-runner.js";
 import { MaterialProcessor } from "./extraction/material-processor.js";
+import {
+  registerCodexRoutes,
+  type CodexStatusProvider,
+} from "./routes/codex.js";
 import { registerCourseRoutes } from "./routes/courses.js";
 import { CourseLibrary } from "./storage/course-library.js";
 import { openDatabase } from "./storage/database.js";
@@ -17,6 +22,7 @@ import { SourceLibrary } from "./storage/source-library.js";
 export interface AppOptions {
   databasePath?: string;
   courseRoot?: string;
+  codex?: CodexStatusProvider;
 }
 
 function findProjectRoot() {
@@ -43,6 +49,7 @@ export function buildApp(options: AppOptions = {}) {
   const sourceLibrary = new SourceLibrary(database);
   sourceLibrary.recoverInterruptedExtractions();
   const materialProcessor = new MaterialProcessor(sourceLibrary);
+  const codex = options.codex ?? new CodexRunner({ projectRoot });
 
   void app.register(multipart, {
     limits: {
@@ -63,6 +70,7 @@ export function buildApp(options: AppOptions = {}) {
     materialProcessor,
     sourceLibrary,
   });
+  void app.register(registerCodexRoutes, { codex });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof app.multipartErrors.RequestFileTooLargeError) {

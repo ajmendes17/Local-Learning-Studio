@@ -39,20 +39,24 @@ Owns data exchanged across boundaries. Zod runtime schemas validate courses,
 materials, source locations, concepts, modules, assessments, and the
 `course-map.v1` proposal before they cross a boundary.
 
-### `.agents/skills/learning-coach`
+### `.agents/skills`
 
-Defines the reusable learning workflow and source-grounding rules for Codex.
-Application code remains responsible for authorization, validation,
+Defines reusable learning workflows and source-grounding rules for Codex. The
+broad `learning-coach` skill remains only during migration to narrow action
+skills. Application code remains responsible for authorization, validation,
 persistence, and error handling.
 
 ### Model execution and routing
 
-The skill does not choose a runtime model. The local service owns a
-configuration-driven task router and invokes `codex exec --model <model>` from
-the repository root. Objective grading stays local; model-backed grading,
-artifact creation, and planning use the routing policy in `PRODUCT-PLAN.md`.
-The service must reject unavailable configured models explicitly rather than
-silently substituting another model.
+The skill does not choose a runtime model. The local service owns a typed,
+configuration-driven task router and invokes `codex exec --ephemeral` with a
+task model, read-only sandbox, repository working root, output schema, and
+final-message file. Calls are serialized to protect the user's allowance. The
+runner validates the final JSON again with the shared Zod contract and never
+silently substitutes another model.
+
+Only action-specific services may call the runner. The HTTP API does not expose
+an arbitrary-prompt endpoint.
 
 ## Storage
 
@@ -91,6 +95,7 @@ unchanged.
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/api/health` | Confirm the local service and contract version |
+| `GET` | `/api/codex/status` | Check local Codex installation and authentication |
 | `GET` | `/api/courses` | List class cards and derived counts |
 | `POST` | `/api/courses` | Create a class workspace |
 | `GET` | `/api/courses/:courseId` | Load class materials and structure |

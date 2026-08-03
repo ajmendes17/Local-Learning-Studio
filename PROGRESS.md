@@ -71,11 +71,18 @@ Acceptance:
   - Evidence: `CourseMapProposalSchema` requires `course-map.v1`, source
     material IDs, passage references, and internally consistent module,
     concept, prerequisite, and assessment keys.
-- [ ] Invoke locally authenticated Codex from the server.
-- [ ] Relocate and validate the learning skill under `.agents/skills` before
+- [x] Invoke locally authenticated Codex from the server.
+  - Evidence: the runner uses ephemeral, read-only `codex exec` calls, sends
+    prompts over stdin, requests schema-constrained output, and revalidates the
+    final JSON.
+- [x] Relocate and validate the learning skill under `.agents/skills` before
   Codex integration so repository clones discover it automatically.
-- [ ] Add configurable task-to-model routing for Luna, Terra, and Sol with
+  - Evidence: the repository skill is discovered at
+    `.agents/skills/learning-coach` and the old `.codex/skills` copy is gone.
+- [x] Add configurable task-to-model routing for Luna, Terra, and Sol with
   explicit unavailable-model errors.
+  - Evidence: every typed task maps to a configurable model; failures are
+    returned explicitly and never trigger model substitution.
 - [x] Define the specialized skill inventory and deterministic boundaries.
   - Evidence: `docs/SKILL-ARCHITECTURE.md` maps each GUI action to a narrow
     skill, default model, and validated application boundary.
@@ -139,3 +146,4 @@ Acceptance:
 | 2026-07-29 | Learning feedback-loop plan and information page | Passed workspace type checks, 4 API/storage tests, 3 production builds, `git diff --check`, route navigation, and desktop/mobile browser review |
 | 2026-07-30 | Source ingestion and course-map contracts | Passed workspace type checks, 10 contract/API/storage/extraction tests, 3 production builds, `git diff --check`, and desktop/mobile browser review of a real extracted upload |
 | 2026-08-03 | DOCX/PPTX extraction and skill architecture | Passed 13 contract/API/storage/extraction tests, workspace type checks, 3 production builds, `git diff --check`, skill discovery, and a zero-vulnerability production dependency audit |
+| 2026-08-03 | Codex runner and model router | Passed 20 tests including structured-output validation, explicit failure and timeout handling, serialized calls, model selection, and setup status; workspace checks and production audit passed |

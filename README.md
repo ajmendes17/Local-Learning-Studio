@@ -22,7 +22,7 @@ rather than represented as finished.
 
 ```text
 .
-├── .codex/skills/learning-coach/  # Project-local Codex workflow
+├── .agents/skills/learning-coach/ # Transitional project-local workflow
 ├── apps/
 │   ├── server/                    # Local Fastify service
 │   └── web/                       # React + Vite interface
@@ -43,11 +43,12 @@ rather than represented as finished.
 
 - Node.js 22.13 or newer
 - npm 10 or newer
-- Codex installed and authenticated for future AI-backed workflows
+- Codex installed and authenticated for AI-backed workflows
 
-The installed Codex application is not yet invoked by the starter service.
-That integration is deliberately scheduled after the structured contracts and
-course-ingestion pipeline are defined.
+The local service verifies the Codex CLI and its saved authentication through
+`GET /api/codex/status`. Model-backed actions use non-interactive, ephemeral,
+read-only runs with schema-validated output. There is intentionally no generic
+prompt endpoint.
 
 ## Start locally
 
@@ -62,7 +63,8 @@ requests to the local service at `http://127.0.0.1:4318`.
 
 `DATABASE_PATH` and `COURSE_ROOT` can override the default local storage
 locations in `.env`, which is useful for isolated verification or alternate
-local libraries.
+local libraries. `CODEX_MODEL_LUNA`, `CODEX_MODEL_TERRA`, and
+`CODEX_MODEL_SOL` can override the task-router defaults.
 
 ## Verify the project
 
@@ -90,10 +92,13 @@ The foundation includes:
   proposals, modules, and assessments
 - Explicit local file separation under `courses/<course-id>/materials`
 - A project-local `learning-coach` skill
+- A serialized Codex runner with configurable Luna, Terra, and Sol routing
+- A local Codex installation/authentication readiness endpoint
 - Architecture, data-model, and progress documentation
 
-OCR, syllabus analysis, module and assessment editing, Codex execution, lesson
-generation, practice, and mastery tracking are not implemented yet. See
+OCR, syllabus analysis, module and assessment editing, action-specific Codex
+workflows, lesson generation, practice, and mastery tracking are not
+implemented yet. See
 [SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the current extraction
 boundary and [PROGRESS.md](./PROGRESS.md) for implementation order and
 acceptance criteria. Settled product and model-routing decisions live in
