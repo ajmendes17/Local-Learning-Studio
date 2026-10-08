@@ -61,6 +61,17 @@ npm run dev
 Open [http://localhost:4317](http://localhost:4317). Vite proxies `/api`
 requests to the local service at `http://127.0.0.1:4318`.
 
+## Hand-tracking demo
+
+Open **Hand demo**, turn on the camera, and choose **Calibrate pointing**. Hold
+a pointing gesture at each highlighted browser corner until it captures; the
+demo pauses and waits for a new aim before moving to the next target. The
+calibration also records a wrist and knuckle center for open and closed hand
+poses. The live grid highlights the estimated quadrant in green for pointing,
+blue for an open hand, and red for a closed fist. It represents browser
+viewport coordinates, not macOS desktop coordinates. Camera frames are
+processed in this tab and are not sent to the local service; the MediaPipe
+runtime loads from jsDelivr when the camera starts.
 `DATABASE_PATH` and `COURSE_ROOT` can override the default local storage
 locations in `.env`, which is useful for isolated verification or alternate
 local libraries. `CODEX_MODEL_LUNA`, `CODEX_MODEL_TERRA`, and

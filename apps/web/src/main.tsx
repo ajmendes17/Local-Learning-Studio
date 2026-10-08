@@ -7,6 +7,7 @@ import "./styles/home.css";
 import "./styles/course.css";
 import "./styles/info.css";
 import "./styles/responsive.css";
+import "./styles/hand-tracking.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

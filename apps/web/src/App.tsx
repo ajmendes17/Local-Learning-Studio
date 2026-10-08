@@ -24,13 +24,16 @@ import {
 import { CoursePage } from "./views/CoursePage";
 import { HomePage } from "./views/HomePage";
 import { InfoPage } from "./views/InfoPage";
+import { HandTrackingPage } from "./views/HandTrackingPage";
 
 type AppRoute =
   | { kind: "library" }
+  | { kind: "hand-tracking" }
   | { kind: "info" }
   | { kind: "course"; courseId: string };
 
 function routeFromPath(): AppRoute {
+  if (window.location.pathname === "/hand-tracking") return { kind: "hand-tracking" };
   if (window.location.pathname === "/how-it-works") return { kind: "info" };
   const match = window.location.pathname.match(/^\/courses\/([^/]+)$/);
   return match?.[1]
@@ -191,7 +194,7 @@ export function App() {
   }
 
   const activePage =
-    route.kind === "course" ? "course" : route.kind === "info" ? "info" : "library";
+    route.kind === "hand-tracking" ? "hand-tracking" : route.kind === "course" ? "course" : route.kind === "info" ? "info" : "library";
 
   return (
     <div className="app-shell">
@@ -199,6 +202,7 @@ export function App() {
         service={service}
         activePage={activePage}
         onHome={() => navigate("/")}
+        onHandTracking={() => navigate("/hand-tracking")}
         onInfo={() => navigate("/how-it-works")}
       />
       {route.kind === "course" ? (
@@ -216,6 +220,8 @@ export function App() {
           onBuildMap={handleBuildCourseMap}
           onAcceptMap={handleAcceptCourseMap}
         />
+      ) : route.kind === "hand-tracking" ? (
+        <HandTrackingPage />
       ) : route.kind === "info" ? (
         <InfoPage onStart={() => navigate("/")} />
       ) : (

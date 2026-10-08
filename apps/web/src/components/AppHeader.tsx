@@ -1,10 +1,11 @@
 export type ServiceState = "checking" | "ready" | "offline";
-export type ActivePage = "library" | "info" | "course";
+export type ActivePage = "library" | "hand-tracking" | "info" | "course";
 
 interface AppHeaderProps {
   service: ServiceState;
   activePage: ActivePage;
   onHome: () => void;
+  onHandTracking: () => void;
   onInfo: () => void;
 }
 
@@ -18,6 +19,7 @@ export function AppHeader({
   service,
   activePage,
   onHome,
+  onHandTracking,
   onInfo,
 }: AppHeaderProps) {
   return (
@@ -34,6 +36,13 @@ export function AppHeader({
         <span>Local Learning Studio</span>
       </button>
       <nav aria-label="Primary navigation">
+        <button
+          type="button"
+          className={activePage === "hand-tracking" ? "nav-link nav-link--active" : "nav-link"}
+          onClick={onHandTracking}
+        >
+          Hand demo
+        </button>
         <button
           type="button"
           className={
@@ -60,4 +69,3 @@ export function AppHeader({
     </header>
   );
 }
-
