@@ -12,6 +12,11 @@ The system should not compress those answers into one opaque score. It should
 retain the evidence, uncertainty, source provenance, and reason for each next
 step.
 
+Each loop is scoped to one class. Concept identity, assessments, attempts,
+mastery evidence, and method observations do not transfer to another class by
+default. A future Obsidian vault mirrors that boundary with a separate folder
+per class.
+
 ## The linked loop
 
 ```text
@@ -38,8 +43,12 @@ Delayed review and retention evidence
       `--------------------> next activity
 ```
 
-Each stage produces durable data for the next stage. Generated material is an
-artifact, not a source of truth.
+Each stage produces durable data for the next stage. Generated lessons are saved
+per class and can be reopened; each submitted response appends evidence to that
+class profile. Generated material is an artifact, not a source of truth. A
+lesson can use general knowledge when course materials are absent. Materials
+remain optional for ordinary learning and can be selected later to ground
+practice exams or other source-sensitive work.
 
 ## Loop 1: Source grounding
 
@@ -167,6 +176,39 @@ Correct answers with weak reasoning, heavy hints, or low confidence do not mean
 the same thing as independent, well-explained answers. Repeated items should
 vary surface details without changing the targeted concept.
 
+### Confidence- and history-aware first stage (implemented)
+
+The application records confidence and revealed-hint count with each attempt,
+then supplies up to five recent attempts for the same class-local concept to
+practice generation. Keep the first version explainable:
+
+- Incorrect response: show targeted feedback, then offer another generated
+  question on the same concept with a changed surface form or reasoning path.
+- Correct with low confidence: affirm the result and offer a fresh check on the
+  concept before suggesting a new concept.
+- Correct with high confidence and no hints: show the next topic as an option;
+  do not auto-advance or declare mastery from one attempt.
+- Repeated miss or high hint use: offer a worked example or a clarifying side
+  chat before another independent check.
+- Repeating the exact question is an optional immediate check after feedback,
+  not the default evidence for progress.
+
+The current multiple-choice flow deterministically scores its validated key,
+stores confidence and hint use, and requests new practice through
+`generate-adaptive-practice` with the bounded recent attempt window. Exact
+question retry remains a separate learner-controlled action. Use
+`evaluate-learner-response` for short free-response reasoning that needs rubric
+interpretation and `plan-remediation` for proposing the smallest next step
+from recent evidence. Persistence and objective grading remain application
+responsibilities; skills receive only the current concept's bounded evidence
+window and do not diagnose stable learner traits from sparse data.
+
+This is stage one of a planned progression. Later stages can identify recurring
+error patterns across more attempts, compare outcomes across learning methods,
+and let the learner tune how strongly history influences recommendations.
+Observed habits must remain revisable, contextual signals rather than fixed
+learning-style labels.
+
 ## Loop 5: Retention and planning
 
 ### Input
@@ -263,25 +305,41 @@ valid artifact.
 
 ## Typical study session
 
-1. Confirm the goal and available time.
+1. Begin directly with a topic; ask for a time budget only when it is useful.
 2. Run one retrieval warm-up.
 3. Select an objective from course priorities and evidence.
 4. Teach only what is needed.
-5. Work one guided example.
-6. Ask for independent practice and confidence.
-7. Give feedback tied to the learner's reasoning.
-8. Record proposed evidence after validation.
-9. Summarize the weak point and schedule delayed review.
-10. Explain why the next activity was chosen.
+5. Work one guided example or ask a clarifying side-chat question.
+6. Answer the knowledge check and record confidence.
+7. Give immediate feedback.
+8. Append the attempt and keep the lesson available for later.
+9. Show transparent topic signals without calling one response mastery.
+10. Use a later response to decide whether to continue, revisit, or try another topic.
 
 ## Implementation order
 
 1. Source-passage and concept schemas
 2. Reviewed syllabus-to-course-map proposal
 3. Activity and artifact contracts
-4. Attempt and append-only evidence records
+4. Attempt, saved lesson, and append-only evidence records
 5. Diagnostic conversation state machine
 6. Practice generation and solution validation
 7. Explainable mastery projection
 8. Review scheduler and training-plan revision
 9. Data inspection, correction, export, and deletion
+
+## Adaptation rollout
+
+1. **Recent signals:** supply a bounded window of same-concept attempts
+   (outcome, confidence, hints, method, timestamp) and offer a new question on
+   that concept after a miss or low-confidence success. Keep exact-question
+   repetition optional. Reuse `generate-adaptive-practice` for new items and
+   `plan-remediation` when recent evidence points to a short explanation or
+   worked example; keep objective scoring and persistence deterministic.
+2. **Recurring patterns:** once enough evidence exists, identify repeated
+   misconception candidates and compare outcomes by activity/method. Show the
+   evidence and uncertainty behind each pattern.
+3. **Learner control:** expose a simple preference for how strongly prior
+   attempts influence recommendations, plus controls to correct or clear
+   observations. Never convert these preferences into fixed learning-style
+   labels.

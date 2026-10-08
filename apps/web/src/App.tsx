@@ -25,14 +25,18 @@ import { CoursePage } from "./views/CoursePage";
 import { HomePage } from "./views/HomePage";
 import { InfoPage } from "./views/InfoPage";
 import { HandTrackingPage } from "./views/HandTrackingPage";
+import { StudyPage } from "./views/StudyPage";
 
 type AppRoute =
   | { kind: "library" }
+  | { kind: "course-study"; courseId: string }
   | { kind: "hand-tracking" }
   | { kind: "info" }
   | { kind: "course"; courseId: string };
 
 function routeFromPath(): AppRoute {
+  const studyMatch = window.location.pathname.match(/^\/courses\/([^/]+)\/study$/);
+  if (studyMatch?.[1]) return { kind: "course-study", courseId: studyMatch[1] };
   if (window.location.pathname === "/hand-tracking") return { kind: "hand-tracking" };
   if (window.location.pathname === "/how-it-works") return { kind: "info" };
   const match = window.location.pathname.match(/^\/courses\/([^/]+)$/);
@@ -108,7 +112,7 @@ export function App() {
   }, [loadLibrary]);
 
   useEffect(() => {
-    if (route.kind === "course") {
+    if (route.kind === "course" || route.kind === "course-study") {
       void loadCourse(route.courseId);
     } else {
       setSelectedCourse(null);
@@ -193,8 +197,9 @@ export function App() {
     }
   }
 
-  const activePage =
-    route.kind === "hand-tracking" ? "hand-tracking" : route.kind === "course" ? "course" : route.kind === "info" ? "info" : "library";
+  const activePage = route.kind === "course-study" ? "study" :
+    route.kind === "hand-tracking" ? "hand-tracking" :
+    route.kind === "course" ? "course" : route.kind === "info" ? "info" : "library";
 
   return (
     <div className="app-shell">
@@ -205,7 +210,9 @@ export function App() {
         onHandTracking={() => navigate("/hand-tracking")}
         onInfo={() => navigate("/how-it-works")}
       />
-      {route.kind === "course" ? (
+      {route.kind === "course-study" ? (
+        <StudyPage courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} onBack={() => navigate(`/courses/${route.courseId}`)} />
+      ) : route.kind === "course" ? (
         <CoursePage
           course={selectedCourse}
           loading={loading}
@@ -219,6 +226,7 @@ export function App() {
           onAnalyze={handleAnalyzeSources}
           onBuildMap={handleBuildCourseMap}
           onAcceptMap={handleAcceptCourseMap}
+          onStudy={() => navigate(`/courses/${route.courseId}/study`)}
         />
       ) : route.kind === "hand-tracking" ? (
         <HandTrackingPage />

@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Class Knowledge and Obsidian Sync Boundary",
+    "output": "obsidian-sync-boundary.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "study-and-write",
+        "label": "Study and persist",
+        "focus": [
+          "learner",
+          "web",
+          "api",
+          "sqlite",
+          "sync"
+        ],
+        "note": "Learning remains class-scoped in SQLite; a sync adapter projects selected records into the matching Obsidian class folder."
+      },
+      {
+        "id": "vault-edits",
+        "label": "Vault edits and conflicts",
+        "focus": [
+          "vault",
+          "sync",
+          "sqlite"
+        ],
+        "note": "Import learner edits explicitly. Refresh managed sections only when unchanged; route divergent edits to review."
+      },
+      {
+        "id": "materials",
+        "label": "Optional course grounding",
+        "focus": [
+          "materials",
+          "api",
+          "codex",
+          "sqlite"
+        ],
+        "note": "Materials can ground selected exam practice, while ordinary direct study can use general knowledge without uploads."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "learner",
+      "type": "external",
+      "label": "Learner",
+      "sublabel": "Study, review, edit notes",
+      "pos": [
+        35,
+        280
+      ],
+      "size": [
+        145,
+        66
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Local Studio UI",
+      "sublabel": "Class study workspace",
+      "pos": [
+        235,
+        280
+      ],
+      "size": [
+        155,
+        66
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Local service",
+      "sublabel": "Class-scoped routes",
+      "pos": [
+        465,
+        280
+      ],
+      "size": [
+        165,
+        66
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "SQLite learner store",
+      "sublabel": "Canonical structured evidence",
+      "pos": [
+        720,
+        180
+      ],
+      "size": [
+        175,
+        74
+      ]
+    },
+    {
+      "id": "materials",
+      "type": "database",
+      "label": "Class materials",
+      "sublabel": "Local files + source passages",
+      "pos": [
+        720,
+        390
+      ],
+      "size": [
+        175,
+        74
+      ]
+    },
+    {
+      "id": "codex",
+      "type": "external",
+      "label": "Codex CLI",
+      "sublabel": "Named learning skills",
+      "pos": [
+        965,
+        390
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "sync",
+      "type": "backend",
+      "label": "Obsidian adapter",
+      "sublabel": "Planned: export/import boundary",
+      "pos": [
+        965,
+        220
+      ],
+      "size": [
+        170,
+        74
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "external",
+      "label": "User Obsidian vault",
+      "sublabel": "One folder per class",
+      "pos": [
+        965,
+        35
+      ],
+      "size": [
+        160,
+        74
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Local Learning Studio \u00b7 structured data owner",
+      "wraps": [
+        "web",
+        "api",
+        "sqlite",
+        "materials",
+        "codex",
+        "sync"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "User-owned Obsidian vault",
+      "wraps": [
+        "vault"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "study-ui",
+      "from": "learner",
+      "to": "web",
+      "label": "study / answer / confidence",
+      "variant": "emphasis",
+      "labelDy": -45
+    },
+    {
+      "id": "ui-api",
+      "from": "web",
+      "to": "api",
+      "label": "localhost API"
+    },
+    {
+      "id": "api-db",
+      "from": "api",
+      "to": "sqlite",
+      "label": "persist class-scoped records",
+      "variant": "emphasis",
+      "labelDy": -105
+    },
+    {
+      "id": "api-materials",
+      "from": "api",
+      "to": "materials",
+      "label": "optional retrieval",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "api-codex",
+      "from": "api",
+      "to": "codex",
+      "label": "structured skill request",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "db-sync",
+      "from": "sqlite",
+      "to": "sync",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sync-vault-write",
+      "from": "sync",
+      "to": "vault",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "vault-sync-read",
+      "from": "vault",
+      "to": "sync",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "codex-api",
+      "from": "codex",
+      "to": "api",
+      "label": "validated proposal",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Ownership",
+      "items": [
+        "SQLite owns structured course and attempt records.",
+        "Obsidian is a user-owned, human-readable companion.",
+        "Every lookup and export stays within one course ID."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Sync contract to decide",
+      "items": [
+        "Use stable course-local note IDs and frontmatter.",
+        "Separate app-managed blocks from learner-authored Markdown.",
+        "Never silently overwrite edits; surface conflicts for review."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Learning response",
+      "items": [
+        "After a miss or low-confidence correct answer, explain and offer a new question or representation.",
+        "Prefer retrying the concept with a different item; exact-question retry is an optional immediate check.",
+        "Use existing evaluate-learner-response and plan-remediation skills for free response and next-step proposals."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Personal Learning Data and Obsidian",
+    "output": "artifacts/obsidian-learning-dataflow.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1360,
+      790
+    ],
+    "views": [
+      {
+        "id": "exam-plan",
+        "label": "Optional planning",
+        "focus": [
+          "learner",
+          "planner",
+          "plan",
+          "session"
+        ],
+        "note": "Start learning directly, or request an optional time budget."
+      },
+      {
+        "id": "knowledge-loop",
+        "label": "Learning cycle",
+        "focus": [
+          "session",
+          "evidence",
+          "profile",
+          "sync"
+        ],
+        "note": "Knowledge checks update mastery and advance the next session."
+      },
+      {
+        "id": "obsidian-vault",
+        "label": "Materials and Obsidian",
+        "focus": [
+          "materials",
+          "session",
+          "evidence",
+          "profile",
+          "vault"
+        ],
+        "note": "Optional materials ground teaching and checks; Obsidian preserves progress."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "learner",
+      "type": "external",
+      "label": "You",
+      "sublabel": "exam \u00b7 topics \u00b7 available time",
+      "pos": [
+        35,
+        280
+      ],
+      "size": [
+        170,
+        72
+      ]
+    },
+    {
+      "id": "materials",
+      "type": "external",
+      "label": "Course materials",
+      "sublabel": "optional notes and slides",
+      "pos": [
+        285,
+        450
+      ],
+      "size": [
+        180,
+        70
+      ]
+    },
+    {
+      "id": "planner",
+      "type": "backend",
+      "label": "Time planner (optional)",
+      "sublabel": "use only when you request it",
+      "pos": [
+        300,
+        230
+      ],
+      "size": [
+        195,
+        80
+      ]
+    },
+    {
+      "id": "plan",
+      "type": "database",
+      "label": "Study plan",
+      "sublabel": "time per topic + rationale",
+      "pos": [
+        590,
+        160
+      ],
+      "size": [
+        185,
+        74
+      ]
+    },
+    {
+      "id": "session",
+      "type": "frontend",
+      "label": "Learning session",
+      "sublabel": "start now \u00b7 teach \u00b7 practice",
+      "pos": [
+        590,
+        320
+      ],
+      "size": [
+        185,
+        74
+      ]
+    },
+    {
+      "id": "evidence",
+      "type": "database",
+      "label": "Knowledge checks",
+      "sublabel": "checks use answers + sources",
+      "pos": [
+        590,
+        480
+      ],
+      "size": [
+        185,
+        74
+      ]
+    },
+    {
+      "id": "profile",
+      "type": "database",
+      "label": "Persistent knowledge profile",
+      "sublabel": "mastery \u00b7 uncertainty \u00b7 next topic",
+      "pos": [
+        875,
+        300
+      ],
+      "size": [
+        205,
+        82
+      ]
+    },
+    {
+      "id": "sync",
+      "type": "backend",
+      "label": "Obsidian update",
+      "sublabel": "advance mastered topics",
+      "pos": [
+        1120,
+        300
+      ],
+      "size": [
+        175,
+        82
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "database",
+      "label": "Your Obsidian vault",
+      "sublabel": "topics \u00b7 mastery \u00b7 history",
+      "pos": [
+        875,
+        490
+      ],
+      "size": [
+        205,
+        74
+      ]
+    },
+    {
+      "id": "reflections",
+      "type": "external",
+      "label": "Your reflections",
+      "sublabel": "corrections \u00b7 helpful methods",
+      "pos": [
+        1140,
+        490
+      ],
+      "size": [
+        175,
+        74
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Local app \u00b7 structured source of truth",
+      "wraps": [
+        "planner",
+        "plan",
+        "session",
+        "evidence",
+        "profile"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Obsidian \u00b7 user-owned notes",
+      "wraps": [
+        "vault",
+        "reflections"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "learner",
+      "to": "materials",
+      "label": "optional materials",
+      "variant": "dashed"
+    },
+    {
+      "from": "planner",
+      "to": "plan",
+      "label": "optional time allocation",
+      "variant": "dashed",
+      "labelAt": [
+        543,
+        408
+      ]
+    },
+    {
+      "from": "plan",
+      "to": "session",
+      "label": "planned next activity",
+      "variant": "dashed",
+      "labelDy": 70
+    },
+    {
+      "from": "session",
+      "to": "evidence",
+      "label": "knowledge check results",
+      "variant": "emphasis",
+      "labelAt": [
+        683,
+        408
+      ]
+    },
+    {
+      "from": "evidence",
+      "to": "profile",
+      "label": "update concept state",
+      "labelAt": [
+        825,
+        408
+      ],
+      "labelDx": -80
+    },
+    {
+      "from": "profile",
+      "to": "sync",
+      "label": "mastery + next-topic state",
+      "variant": "emphasis",
+      "labelAt": [
+        1100,
+        396
+      ]
+    },
+    {
+      "from": "sync",
+      "to": "vault",
+      "label": "persist knowledge tree",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": -10
+    },
+    {
+      "from": "vault",
+      "to": "reflections",
+      "label": "learner edits",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -35
+    },
+    {
+      "from": "materials",
+      "to": "evidence",
+      "label": "ground knowledge checks",
+      "variant": "dashed",
+      "labelDy": 0
+    },
+    {
+      "from": "profile",
+      "to": "sync",
+      "label": "mastery unlock",
+      "variant": "emphasis",
+      "labelDy": -67,
+      "labelDx": 70
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Continuous learning cycle",
+      "items": [
+        "Study a topic \u2192 answer knowledge checks \u2192 record confidence and reasoning",
+        "Strong enough evidence updates mastery and advances the next topic in the local profile and Obsidian",
+        "Next session resumes from the persisted profile instead of starting over"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Materials and planning are optional inputs",
+      "items": [
+        "Notes, slides, and readings can ground both teaching and knowledge checks",
+        "Start learning immediately without a schedule, or request an optional time budget",
+        "When budgeting is requested, spread time across exam topics using urgency and current knowledge"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "What Obsidian keeps connected",
+      "items": [
+        "Assessment date and topic scope link to course and concept notes",
+        "Concept notes show mastery, uncertainty, evidence history, and suggested next topic",
+        "Learner reflections and useful study-method observations remain visible and revisable"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Project Progress
 
-Last updated: 2026-08-03
+Last updated: 2026-10-08
 
 This file is the durable implementation ledger. A task is complete only when
 its acceptance evidence is recorded here.
@@ -63,6 +63,10 @@ Acceptance:
 
 ## Milestone 2: Course map and training plan
 
+The training workflow is exam/quiz-first. A learner can enter an assessment
+time and its topics and receive a useful plan without uploading class materials;
+sources are optional grounding that can be added later.
+
 - [x] Define the end-to-end learning feedback loops.
   - Evidence: `docs/LEARNING-FEEDBACK-LOOPS.md` specifies inputs, outputs,
     evidence, conversations, artifacts, guardrails, and implementation order.
@@ -96,7 +100,10 @@ Acceptance:
 - [x] Generate concepts, prerequisites, objectives, and source references.
   - Evidence: the action-specific backend classifies current sources, invokes
     `map-course`, validates every cited passage, and caches by fingerprint.
-- [ ] Create a deadline-aware training plan.
+- [ ] Create an exam/quiz record with scheduled time and editable topic scope.
+- [ ] Create a deadline- and availability-aware plan from assessment topics,
+  learner knowledge evidence, importance, and uncertainty, even when no course
+  materials have been uploaded.
 - [x] Store artifacts so reopening a course does not regenerate them.
   - Evidence: matching source-classification and course-map fingerprints reuse
     validated SQLite artifacts; the integration test verifies restart.
@@ -110,23 +117,57 @@ Acceptance:
 - Generated claims cite imported source locations.
 - Invalid structured output is rejected without overwriting valid artifacts.
 - A saved plan can be reopened without another model run.
+- A learner can create a useful topic-based exam plan without uploading notes;
+  the plan states which scope comes from the learner and which topics are
+  model-suggested pending confirmation.
 
 ## Milestone 3: Guided study session
 
-- [ ] Build focused lesson, example, practice, and recap views.
+- [~] Build a direct-start lesson, worked-example, analogy, and quiz-first
+  flow with immediate objective feedback, confidence capture, and a side chat.
+  - Evidence: `/courses/:courseId/study` invokes Codex CLI through the structured
+    lesson and explanation tasks; objective attempts use class-scoped API routes.
+- [x] Place the Study space inside each class and isolate learner profile,
+  assessment, concept, attempt, and evidence storage by class ID.
+  - Evidence: nested class Study route, class-specific profile endpoint, and
+    same-class concept/assessment reference checks; Obsidian folders are planned.
+- [ ] Retrieve selected course passages for study sessions and clarification
+  chat when materials are attached.
+- [x] Persist and reopen generated lesson/session artifacts per class.
+  - Evidence: validated lesson content is stored in `study_sessions`; the Study tab lists recent lessons and reopens the saved content without regenerating it.
 - [ ] Add deterministic multiple-choice, true/false, numeric, and
   contract-approved exact-answer grading.
 - [ ] Route short-response grading through the configured lightweight model.
 - [ ] Add progressive hints that do not reveal answers immediately.
 - [ ] Check reasoning as well as final answers.
 - [ ] Generate comparable practice with solution validation.
-- [ ] Save attempts, confidence, hints, and misconceptions.
+- [x] Save attempts with confidence and hint use, then offer same-concept practice.
+  - Evidence: the Study tab records each response, confidence, and revealed-hint count; offers a newly generated question using up to five recent same-class attempts; saves the new question as a session artifact; and keeps exact-question retry optional.
+- [x] Set the staged direction for confidence- and history-aware adaptation.
+  - Evidence: stage one uses recent same-concept attempts to guide feedback and offer a new question on the concept; later stages add recurring patterns, method outcomes, and learner-controlled adaptation strength. See `docs/LEARNING-FEEDBACK-LOOPS.md` and `docs/SKILL-ARCHITECTURE.md`.
 
 Acceptance:
 
 - A complete session can run without leaving the primary study surface.
 - Feedback distinguishes unsupported, incorrect, and incomplete reasoning.
 - Session history survives restart and drives the next recommendation.
+
+## Personal knowledge profile and Obsidian companion
+
+- [x] Define class-scoped assessment, topic, stable concept, attempt, and
+  append-only mastery-evidence records that do not require course materials.
+  - Evidence: SQLite storage and validated class-scoped API schemas/routes persist assessment
+    scope, optional concept links, response evidence, confidence, hint use,
+    learning method, outcome, source references, independence, and rationale.
+- [x] Record append-only class-local attempts and show transparent per-concept evidence
+  summaries; define calibrated knowledge-state rules and promotion thresholds.
+  - Evidence: `GET /api/courses/:courseId/learner/profile` reports attempt count, correct count,
+    latest outcome, and last practice time; it does not claim calibrated mastery.
+- [ ] Configure an Obsidian vault root and create one separate folder per class;
+  define stable class-local note IDs, generated/user-owned sections, and
+  bidirectional edit/conflict behavior.
+- [ ] Export and synchronize a navigable knowledge tree with links to courses,
+  assessments, topics, concepts, evidence, and learner-authored reflections.
 
 ## Milestone 4: Adaptive review
 
@@ -142,6 +183,20 @@ Acceptance:
 - The next activity can be explained from recorded evidence.
 - Users can override recommendations without corrupting mastery history.
 - All local learner data can be exported and permanently deleted.
+
+## Future interaction experiments
+
+The hand-tracking proof of concept can estimate a calibrated quadrant and
+recognize pointing, open-hand, and closed-fist poses. The following interactions
+are ideas only; they are not implemented yet:
+
+- [ ] Gesture navigation and dashboard layout: use deliberate quadrant-based
+  pointing or swipes to move between LLS sections and reposition dashboard
+  panels. Keep mouse and keyboard controls available; evaluate usability and
+  engagement without assuming navigation gestures improve learning outcomes.
+- [ ] Two-hand zoom: track the distance between both palm centers, zooming in
+  as the hands move apart and out as they move together. Add smoothing and a
+  deliberate activation rule to reduce accidental zooming.
 
 ## Later decisions
 
@@ -164,3 +219,4 @@ Acceptance:
 | 2026-08-03 | Specialized learning skills | All 9 skill folders passed the Codex skill validator; implicit invocation is disabled and the broad transitional skill was removed |
 | 2026-08-03 | Source classification and course-map backend | Passed 23 tests including fingerprint caching, stale-draft rejection, citation validation, restart persistence, and transactional map acceptance; workspace checks and production audit passed |
 | 2026-08-03 | Course-map review interface | Verified empty, draft, and accepted states in the local browser; acceptance updated 3 module and 2 assessment records, the 390 px layout had no horizontal overflow, and browser console review found no errors or warnings |
+| 2026-10-07 | Persisted class study loop | In progress: session persistence, reopen/history routes, evidence summary UI, and docs updated; workspace checks pending |

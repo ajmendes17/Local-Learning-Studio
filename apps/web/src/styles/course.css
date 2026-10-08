@@ -655,3 +655,7 @@
   color: var(--muted);
   line-height: 1.6;
 }
+.course-study-callout { display:flex; align-items:center; justify-content:space-between; gap:24px; margin:0 0 28px; padding:20px 23px; border:1px solid var(--line); border-radius:9px; background:var(--white); }
+.course-study-callout h2 { margin:0; font:400 1.65rem Georgia,"Times New Roman",serif; }
+.course-study-callout p:last-child { margin:7px 0 0; color:var(--muted); font-size:.76rem; }
+@media(max-width:620px) { .course-study-callout { align-items:flex-start; flex-direction:column; } }

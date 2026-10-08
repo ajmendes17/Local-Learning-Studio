@@ -61,17 +61,23 @@ npm run dev
 Open [http://localhost:4317](http://localhost:4317). Vite proxies `/api`
 requests to the local service at `http://127.0.0.1:4318`.
 
-## Hand-tracking demo
+To try the hand-tracking proof of concept, open **Hand demo** in the app and
+choose **Turn camera on**. Allow camera access when prompted. The MediaPipe
+model is stored in `apps/web/public/models`; the MediaPipe browser runtime is
+loaded from jsDelivr when the demo starts. Camera frames are processed in the
+browser and are not sent to the local service.
 
-Open **Hand demo**, turn on the camera, and choose **Calibrate pointing**. Hold
-a pointing gesture at each highlighted browser corner until it captures; the
-demo pauses and waits for a new aim before moving to the next target. The
-calibration also records a wrist and knuckle center for open and closed hand
-poses. The live grid highlights the estimated quadrant in green for pointing,
-blue for an open hand, and red for a closed fist. It represents browser
-viewport coordinates, not macOS desktop coordinates. Camera frames are
-processed in this tab and are not sent to the local service; the MediaPipe
-runtime loads from jsDelivr when the camera starts.
+With the camera on, choose **Calibrate pointing** and hold a pointing gesture
+at each highlighted browser corner until it captures. The demo pauses and waits
+for your aim to change before moving on. The saved mapping reports browser
+viewport quadrants for pointing, open-hand, and fist poses, using the palm's
+direction for the latter two. It does not map macOS desktop coordinates.
+Detected poses other than pointing and open hand currently default to closed
+fist. The live pointing grid highlights the selected quadrant, shows the
+smoothed coordinate estimate, and keeps the four calibration targets visible.
+After calibration, choose **Expand grid** to fill the browser viewport while
+you inspect the tracking.
+
 `DATABASE_PATH` and `COURSE_ROOT` can override the default local storage
 locations in `.env`, which is useful for isolated verification or alternate
 local libraries. `CODEX_MODEL_LUNA`, `CODEX_MODEL_TERRA`, and
@@ -99,6 +105,11 @@ The foundation includes:
 - Page, line, paragraph, slide, and heading provenance with passage hashes
 - Explicit extraction states and visible failure reasons
 - SQLite-backed course and material records
+- Class-scoped learner assessments, topics, concepts, attempts, and append-only
+  mastery evidence, with class-local learner API routes
+- A direct study space inside each class with Codex-generated explanations,
+  worked examples, quiz-first practice, immediate feedback, clarification chat,
+  and optional time budgeting
 - Shared runtime contracts for courses, sources, concepts, course-map
   proposals, modules, and assessments
 - Explicit local file separation under `courses/<course-id>/materials`
@@ -112,8 +123,9 @@ The foundation includes:
   warnings, modules, assessments, model provenance, and regeneration controls
 - Architecture, data-model, and progress documentation
 
-OCR, manual module and assessment editing, training-plan generation, lessons,
-practice, and mastery tracking are not implemented yet. See
+OCR, Obsidian vault synchronization, reusable generated lesson history,
+course-material retrieval inside the direct study session, and calibrated
+mastery thresholds are not implemented yet. See
 [SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the current extraction
 boundary and [PROGRESS.md](./PROGRESS.md) for implementation order and
 acceptance criteria. Settled product and model-routing decisions live in

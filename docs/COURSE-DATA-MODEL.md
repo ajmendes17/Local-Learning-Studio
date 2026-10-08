@@ -30,6 +30,7 @@ Course
 │   ├── Papers
 │   └── Projects
 └── Learner state
+    ├── Saved study sessions
     ├── Attempts
     ├── Mastery evidence
     └── Review schedule
@@ -160,6 +161,36 @@ remains available until another reviewed artifact replaces it.
 
 ## Future tables
 
+### Class-scoped learner records (implemented)
+
+Each record belongs to one class. This isolation means a learner can reuse a
+topic name in another class without sharing its mastery history. A study space
+can start with only an assessment date and topic list; uploaded materials are
+optional.
+
+The migration adds nullable `course_id` columns so existing database files
+open without destructive rewrites. New API writes require a valid class ID.
+Legacy unassigned rows are excluded from class profiles until explicitly
+assigned or exported.
+
+- `learner_assessments`: class ID, assessment ID, title, kind, scheduled time, available
+  study minutes, and creation/update timestamps.
+- `learner_topics`: class, assessment, and topic IDs, optional linked concept ID, title,
+  order, importance, and provenance (`learner`, `model`, or `material`).
+- `learner_concepts`: class ID, stable class-local concept ID/key, title, description, and timestamps.
+- `study_attempts`: class and attempt/concept IDs, optional assessment ID, activity kind,
+  prompt, response, reasoning, pre-answer confidence, revealed hint count, learning method,
+  outcome, source material/passage references, and timestamp.
+- `study_sessions`: class ID, stable concept ID, requested topic and method, validated generated lesson, question, progressive hints, and timestamp. Saved sessions reopen without a model run. A newly generated question is stored as its own session artifact.
+- `mastery_evidence`: class and evidence/attempt/concept IDs, evidence kind, outcome,
+  independence (`independent`, `hinted`, `assisted`, or `unknown`), rationale,
+  and timestamp. Evidence is appended with its attempt and is not overwritten.
+
+The profile API is class-scoped and currently projects attempt counts, correct counts, latest
+outcome, and last-practiced time per concept. These are transparent summaries,
+not a calibrated mastery score. Evidence aggregation and promotion thresholds
+remain follow-up work.
+
 The following should be added only with their consuming feature:
 
 - `module_concepts` and `module_materials`: many-to-many organization
@@ -168,8 +199,6 @@ The following should be added only with their consuming feature:
   assessments
 - `questions` and `answer_keys`: versioned prompts, grading modes, rubrics,
   deterministic keys, explanations, and source references
-- `attempts`: answers, confidence, hints, and feedback
-- `mastery_evidence`: append-only evidence rather than a single opaque score
 - `review_schedule`: explainable next-review decisions
 
 ## Integrity rules
@@ -201,6 +230,21 @@ The first library API supports:
 | `POST` | `/api/courses/:courseId/source-classification` | Generate or reuse semantic source classification |
 | `POST` | `/api/courses/:courseId/course-map` | Generate or reuse a course-map draft |
 | `POST` | `/api/courses/:courseId/course-map/:artifactId/accept` | Apply a current draft atomically |
+| `GET` | `/api/courses/:courseId/learner/profile` | Read this class's assessments and concept evidence summaries |
+| `POST` | `/api/courses/:courseId/learner/assessments` | Create an assessment and ordered topic scope in this class |
+| `POST` | `/api/courses/:courseId/learner/concepts` | Create a stable class-local concept |
+| `POST` | `/api/courses/:courseId/learner/attempts` | Append a same-class study attempt and evidence record atomically |
+| `POST` | `/api/courses/:courseId/learner/study-session` | Generate and persist a lesson and knowledge check with this class's context |
+| `GET` | `/api/courses/:courseId/learner/study-sessions` | List recent saved lessons and their aggregate attempt signals |
+| `GET` | `/api/courses/:courseId/learner/study-sessions/:sessionId` | Reopen a saved lesson scoped to this class |
+| `POST` | `/api/courses/:courseId/learner/study-sessions/:sessionId/next-question` | Generate and save a new question using up to five recent attempts for the same class-local concept |
+| `POST` | `/api/courses/:courseId/learner/clarify` | Ask a clarification question within this class |
 
 Manual module editing, assessment editing, deletion, and OCR remain explicit
 follow-up capabilities.
+
+The intended Obsidian layout is
+`<configured-vault>/Local Learning Studio/<course-id>--<slug>/`, with that
+class's `Assessments/`, `Concepts/`, `Evidence/`, and `Materials/` notes beneath
+it. This is a documented target only; vault discovery and synchronization are
+not implemented yet.

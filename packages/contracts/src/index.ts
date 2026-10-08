@@ -3,5 +3,6 @@ export * from "./codex.js";
 export * from "./course.js";
 export * from "./course-map.js";
 export * from "./learning-artifact.js";
+export * from "./learner.js";
 export * from "./source.js";
 export * from "./source-classification.js";

@@ -80,6 +80,13 @@ source, diagnosis, instruction, practice, and retention cycles. That document
 also defines the separation between generated artifacts and append-only learner
 evidence.
 
+Learner records are scoped by `course_id`. The Study surface is nested under a
+class workspace (`/courses/:courseId/study`), and all learner profile, attempt,
+study-session, and clarification routes use that class ID. The server verifies
+the class and rejects concept/assessment references owned by another class.
+Obsidian synchronization is planned as a configured vault root with one
+class-specific subfolder; no vault files are read or written yet.
+
 See [PRODUCT-PLAN.md](./PRODUCT-PLAN.md) for settled product scope, personal
 repository boundaries, rate-limit policy, and the initial model-routing matrix.
 
@@ -108,5 +115,11 @@ unchanged.
 | `POST` | `/api/courses/:courseId/source-classification` | Classify the current source fingerprint through Luna |
 | `POST` | `/api/courses/:courseId/course-map` | Build a source-grounded map through Terra |
 | `POST` | `/api/courses/:courseId/course-map/:artifactId/accept` | Transactionally apply a current reviewed map |
+| `GET` | `/api/courses/:courseId/learner/profile` | Read only this class's learner profile |
+| `POST` | `/api/courses/:courseId/learner/assessments` | Store this class's exam/quiz and topics |
+| `POST` | `/api/courses/:courseId/learner/attempts` | Append same-class attempt and evidence |
+| `POST` | `/api/courses/:courseId/learner/study-session` | Generate a class-scoped lesson and check |
+| `POST` | `/api/courses/:courseId/learner/study-sessions/:sessionId/next-question` | Generate same-concept practice from up to five recent class-scoped attempts |
+| `POST` | `/api/courses/:courseId/learner/clarify` | Ask a class-scoped clarification question |
 
 API additions should begin with a contract and an acceptance test.

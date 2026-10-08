@@ -24,6 +24,7 @@ interface CoursePageProps {
   onAnalyze: (regenerate: boolean) => Promise<void>;
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAcceptMap: () => Promise<void>;
+  onStudy: () => void;
 }
 
 const materialKindLabels: Record<MaterialKind, string> = {
@@ -101,6 +102,7 @@ export function CoursePage({
   onAnalyze,
   onBuildMap,
   onAcceptMap,
+  onStudy,
 }: CoursePageProps) {
   if (loading && !course) {
     return <main className="course-loading">Opening class…</main>;
@@ -145,6 +147,10 @@ export function CoursePage({
             Assessments
           </span>
         </div>
+      </section>
+      <section className="course-study-callout">
+        <div><p className="section-kicker">Class knowledge base</p><h2>Study this class</h2><p>Lessons, assessments, attempts, and knowledge evidence stay separate for {course.title}.</p></div>
+        <button type="button" className="button-primary" onClick={onStudy}>Open study space →</button>
       </section>
 
       {error ? <div className="error-banner">{error}</div> : null}

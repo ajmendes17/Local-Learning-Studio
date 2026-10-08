@@ -52,6 +52,7 @@ select:focus-visible {
 .site-header,
 .library-hero,
 .library-content,
+.knowledge-page,
 .course-workspace,
 .course-error {
   width: min(1180px, calc(100% - 48px));
@@ -218,6 +219,7 @@ select:focus-visible {
   .site-header,
   .library-hero,
   .library-content,
+.knowledge-page,
   .course-workspace,
   .course-error {
     width: min(100% - 32px, 1180px);

@@ -1,0 +1,346 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Personal Learning Knowledge System",
+    "output": "artifacts/obsidian-learning-dataflow.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1580,
+      1160
+    ],
+    "views": [
+      {
+        "id": "exam-plan",
+        "label": "Exam to plan",
+        "focus": [
+          "assessment",
+          "scope",
+          "planner",
+          "plan",
+          "session"
+        ],
+        "note": "Start from an exam date and topics; optional notes improve grounding."
+      },
+      {
+        "id": "evidence-loop",
+        "label": "Knowledge evidence",
+        "focus": [
+          "session",
+          "evidence",
+          "profile",
+          "planner",
+          "plan"
+        ],
+        "note": "Attempts update a durable, uncertain profile and reshape time allocation."
+      },
+      {
+        "id": "obsidian-sync",
+        "label": "Obsidian vault",
+        "focus": [
+          "profile",
+          "identity",
+          "vault",
+          "user-notes",
+          "sync"
+        ],
+        "note": "Stable linked notes expose the profile while preserving user-authored reflections."
+      }
+    ]
+  },
+  "stages": [
+    {
+      "label": "Learner input"
+    },
+    {
+      "label": "Plan and practice"
+    },
+    {
+      "label": "Local learning record"
+    },
+    {
+      "label": "Obsidian companion"
+    },
+    {
+      "label": "Planning feedback"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "assessment",
+      "type": "frontend",
+      "label": "Exam or quiz",
+      "sublabel": "date + study time",
+      "stage": 0,
+      "row": 0,
+      "width": 170,
+      "tag": "learner-defined"
+    },
+    {
+      "id": "scope",
+      "type": "frontend",
+      "label": "Topic scope",
+      "sublabel": "entered or reviewed topics",
+      "stage": 0,
+      "row": 2,
+      "width": 170,
+      "tag": "materials optional"
+    },
+    {
+      "id": "materials",
+      "type": "external",
+      "label": "Course materials",
+      "sublabel": "slides \u00b7 notes \u00b7 readings",
+      "stage": 0,
+      "row": 4,
+      "width": 170,
+      "tag": "optional context"
+    },
+    {
+      "id": "planner",
+      "type": "backend",
+      "label": "Time-budget planner",
+      "sublabel": "urgency \u00b7 scope \u00b7 knowledge gaps",
+      "stage": 1,
+      "row": 1,
+      "width": 190,
+      "tag": "explained allocation"
+    },
+    {
+      "id": "plan",
+      "type": "database",
+      "label": "Versioned study plan",
+      "sublabel": "topic time \u00b7 activities \u00b7 rationale",
+      "stage": 1,
+      "row": 3,
+      "width": 180,
+      "tag": "revisable"
+    },
+    {
+      "id": "session",
+      "type": "frontend",
+      "label": "Study session",
+      "sublabel": "teach \u00b7 retrieve \u00b7 practice",
+      "stage": 1,
+      "row": 4,
+      "width": 180,
+      "tag": "adaptive strategies"
+    },
+    {
+      "id": "profile",
+      "type": "database",
+      "label": "Knowledge profile",
+      "sublabel": "cross-course concepts + uncertainty",
+      "stage": 2,
+      "row": 1,
+      "width": 190,
+      "tag": "local SQLite"
+    },
+    {
+      "id": "evidence",
+      "type": "database",
+      "label": "Learning evidence",
+      "sublabel": "answers \u00b7 confidence \u00b7 method outcomes",
+      "stage": 2,
+      "row": 4,
+      "width": 190,
+      "tag": "append-only"
+    },
+    {
+      "id": "identity",
+      "type": "backend",
+      "label": "Stable note IDs",
+      "sublabel": "concept \u00b7 course \u00b7 assessment",
+      "stage": 3,
+      "row": 0,
+      "width": 180,
+      "tag": "rename-safe links"
+    },
+    {
+      "id": "vault",
+      "type": "database",
+      "label": "Obsidian vault",
+      "sublabel": "concepts \u2194 courses \u2194 exams",
+      "stage": 3,
+      "row": 2,
+      "width": 180,
+      "tag": "user-owned location"
+    },
+    {
+      "id": "user-notes",
+      "type": "external",
+      "label": "Learner reflections",
+      "sublabel": "personal notes + method feedback",
+      "stage": 3,
+      "row": 4,
+      "width": 180,
+      "tag": "user-authored"
+    },
+    {
+      "id": "sync",
+      "type": "backend",
+      "label": "Sync + conflict review",
+      "sublabel": "preserve both edits",
+      "stage": 3,
+      "row": 4,
+      "width": 180,
+      "tag": "proposed boundary"
+    },
+    {
+      "id": "record",
+      "type": "database",
+      "label": "Assessment topics",
+      "sublabel": "scope linked to concept IDs",
+      "stage": 4,
+      "row": 0,
+      "width": 180,
+      "tag": "scheduled + editable"
+    }
+  ],
+  "flows": [
+    {
+      "from": "assessment",
+      "to": "planner",
+      "label": "date + study budget",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -22
+    },
+    {
+      "from": "scope",
+      "to": "planner",
+      "label": "requested topic scope",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 22
+    },
+    {
+      "from": "materials",
+      "to": "session",
+      "label": "optional source passages",
+      "variant": "dashed",
+      "route": "straight",
+      "labelDy": 22
+    },
+    {
+      "from": "planner",
+      "to": "plan",
+      "label": "allocate time across topics",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 22
+    },
+    {
+      "from": "plan",
+      "to": "session",
+      "label": "next focused activity",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 22
+    },
+    {
+      "from": "session",
+      "to": "evidence",
+      "label": "answer + learner feedback",
+      "variant": "emphasis",
+      "route": "vertical-channel",
+      "labelDy": 22
+    },
+    {
+      "from": "evidence",
+      "to": "profile",
+      "label": "update evidence-backed state",
+      "route": "vertical-channel",
+      "labelDy": 20
+    },
+    {
+      "from": "profile",
+      "to": "planner",
+      "label": "known \u00b7 uncertain \u00b7 unassessed",
+      "route": "vertical-channel",
+      "channelX": 395,
+      "labelDy": -22
+    },
+    {
+      "from": "profile",
+      "to": "identity",
+      "label": "stable concept links",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -22
+    },
+    {
+      "from": "identity",
+      "to": "vault",
+      "label": "generate linked notes",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 22
+    },
+    {
+      "from": "user-notes",
+      "to": "sync",
+      "label": "reflections + corrections",
+      "route": "straight",
+      "labelDy": 22
+    },
+    {
+      "from": "vault",
+      "to": "sync",
+      "label": "user edits + renames",
+      "route": "straight",
+      "labelDy": -22
+    },
+    {
+      "from": "sync",
+      "to": "profile",
+      "label": "reviewed learner facts",
+      "variant": "dashed",
+      "route": "vertical-channel",
+      "labelDy": 32
+    },
+    {
+      "from": "scope",
+      "to": "record",
+      "label": "topic list + provenance",
+      "route": "bottom-channel",
+      "labelDy": 28
+    },
+    {
+      "from": "assessment",
+      "to": "record",
+      "label": "scheduled exam time",
+      "route": "top-channel",
+      "labelDy": -20
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "What the learner sees",
+      "items": [
+        "Exam notes link to reviewed topic lists and scheduled times",
+        "Concept pages show demonstrated knowledge, uncertainty, and unassessed gaps",
+        "Estimates link back to attempts, confidence, and optional source passages"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "How planning stays balanced",
+      "items": [
+        "Available study time is budgeted across the requested scope",
+        "Evidence and uncertainty adjust emphasis without starving other topics",
+        "Plan versions explain changed priorities and time allocations"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "What belongs in Obsidian",
+      "items": [
+        "A user-owned vault holds linked, human-readable companion notes",
+        "Generated structure and authored reflections have clear ownership",
+        "Stable IDs and explicit conflict handling prevent silent overwrite"
+      ]
+    }
+  ]
+}

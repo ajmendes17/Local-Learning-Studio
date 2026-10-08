@@ -25,6 +25,12 @@ of being copied into every skill.
 | Take quiz | `generate-course-quiz` | Create a balanced assessment with validated keys, rubrics, source coverage, and difficulty distribution | Terra |
 | Review mistakes | `plan-remediation` | Convert recent errors and retention evidence into the smallest useful remediation session and plan revision | Terra |
 
+Study actions run inside a selected class workspace. Their inputs include only
+that class's concept profile, relevant evidence, and any selected passages;
+they must not retrieve learner history from another class. Direct study can
+start without a schedule, while time-budget planning is an explicit optional
+action.
+
 Sol is an escalation for difficult synthesis or quality audits, not a default
 skill model. The server selects the runtime model; skills do not select models
 themselves.
@@ -65,3 +71,42 @@ initialized with the supported skill scaffold, validated independently, and
 configured with implicit invocation disabled. The future GUI must invoke the
 exact `$skill-name`; the server remains responsible for choosing the model and
 validating the response.
+
+
+## Persisted direct study
+
+The default direct-study action uses `compose-study-lesson` with general
+knowledge when no source passages are supplied. The server validates the result,
+associates it with the class-local concept, and saves it as a `study_sessions`
+record. Reopening a saved session reads the validated stored payload without
+calling Codex. Submitted answers go through deterministic answer-key checking
+and append-only class learner evidence.
+
+A future practice-exam action may retrieve explicitly selected course materials
+and pass source references into generation and validation; it is an extension
+of this loop rather than a prerequisite for direct learning.
+
+## Confidence- and history-aware adaptation
+
+Stage one records confidence and revealed-hint count with each answer, then
+supplies up to five recent attempts for that class-local concept to
+`generate-adaptive-practice`. A miss or low-confidence success offers a new
+item on the same concept with a changed surface form or reasoning path. An
+exact-question retry remains optional. Repeated errors or high hint use can
+suggest an example or clarification before another independent check.
+
+The existing `evaluate-learner-response` skill remains responsible for
+interpreting short free responses against a rubric. The existing
+`plan-remediation` skill can propose a focused next step from recent attempts.
+Neither skill grades objective keys, reads the full profile, nor writes learner
+state. The application selects the bounded evidence window, validates
+proposals, persists attempts, and explains the suggested action. Later stages
+may add recurring-pattern analysis, method outcome comparisons, and
+learner-controlled adaptation strength without assigning fixed learning-style
+labels.
+
+The Study UI reveals progressive hints, records confidence and hint use, and
+offers both a new question and an exact-question retry. New-question generation
+is class-scoped and saves a new session artifact. Later stages may add
+recurring-pattern analysis, method outcome comparisons, and learner-controlled
+adaptation strength without assigning fixed learning-style labels.

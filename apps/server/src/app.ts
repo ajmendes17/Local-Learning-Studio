@@ -18,10 +18,12 @@ import {
 } from "./routes/codex.js";
 import { registerCourseRoutes } from "./routes/courses.js";
 import { registerLearningRoutes } from "./routes/learning.js";
+import { registerLearnerRoutes } from "./routes/learner.js";
 import { CourseLibrary } from "./storage/course-library.js";
 import { CourseStructureLibrary } from "./storage/course-structure-library.js";
 import { openDatabase } from "./storage/database.js";
 import { LearningArtifactLibrary } from "./storage/learning-artifact-library.js";
+import { LearnerLibrary } from "./storage/learner-library.js";
 import { MaterialStorage } from "./storage/material-storage.js";
 import { SourceLibrary } from "./storage/source-library.js";
 
@@ -65,6 +67,7 @@ export function buildApp(options: AppOptions = {}) {
     structures,
     codex,
   );
+  const learner = new LearnerLibrary(database);
 
   void app.register(multipart, {
     limits: {
@@ -87,6 +90,7 @@ export function buildApp(options: AppOptions = {}) {
   });
   void app.register(registerCodexRoutes, { codex });
   void app.register(registerLearningRoutes, { learning });
+  void app.register(registerLearnerRoutes, { learner, codex, courses: library });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof app.multipartErrors.RequestFileTooLargeError) {

@@ -1,5 +1,5 @@
 export type ServiceState = "checking" | "ready" | "offline";
-export type ActivePage = "library" | "hand-tracking" | "info" | "course";
+export type ActivePage = "library" | "study" | "hand-tracking" | "info" | "course";
 
 interface AppHeaderProps {
   service: ServiceState;
