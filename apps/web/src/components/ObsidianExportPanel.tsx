@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { clearLearnerDrafts, type LearnerDraftStorage } from "../lib/learner-data";
 
 interface VaultStatus { configured: boolean; vaultPath: string | null; folderPath: string; mode: "local-files" }
 interface VaultValidation { courseFolder: string; notesChecked: number; linksChecked: number; issueCount: number; issues: string[]; healthy: boolean }
@@ -11,6 +12,8 @@ export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: strin
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [deletePanelOpen, setDeletePanelOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   async function loadStatus() {
     try {
@@ -69,6 +72,28 @@ export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: strin
     finally { setBusy(false); }
   }
 
+  async function deleteLearnerData(event: React.FormEvent) {
+    event.preventDefault(); setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch(`/api/courses/${courseId}/learner/data`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmation: deleteConfirmation }),
+      });
+      const result = await response.json() as { error?: string; deleted?: Record<string, number> };
+      if (!response.ok) throw new Error(result.error ?? "Could not remove this class’s learner data.");
+      const storages: LearnerDraftStorage[] = [];
+      try { storages.push(window.localStorage); } catch { /* Browser storage can be disabled. */ }
+      try { storages.push(window.sessionStorage); } catch { /* Browser storage can be disabled. */ }
+      clearLearnerDrafts(storages, courseId);
+      const removedCount = Object.values(result.deleted ?? {}).reduce((sum, count) => sum + count, 0);
+      setDeleteConfirmation("");
+      setDeletePanelOpen(false);
+      setMessage(`Removed ${removedCount} saved learner record${removedCount === 1 ? "" : "s"} from this class and cleared its browser drafts. Course materials and accepted course-map data remain. Obsidian files, downloads, and backups were not changed.`);
+    } catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
+  }
+
   async function validateNotes() {
     setBusy(true); setError(""); setMessage("");
     try {
@@ -105,6 +130,7 @@ export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: strin
     </form>
     <div className="obsidian-export__actions"><p>Exports {courseTitle} as editable Markdown files. To add comments from Obsidian, write <code>- [Passage 3] Your comment</code> under a source note’s <strong>My notes</strong> section, then import. Imports append; edit or delete them in the app. Re-export refreshes generated sections and keeps your notes.</p><div><button className="button-secondary" type="button" disabled={busy || !status?.configured} onClick={() => void validateNotes()}>{busy ? "Checking…" : "Check notes"}</button><button className="button-secondary" type="button" disabled={busy || !status?.configured} onClick={() => void importComments()}>{busy ? "Importing…" : "Import comments"}</button><button className="button-primary" type="button" disabled={busy || !status?.configured} onClick={() => void exportNotes()}>{busy ? "Working…" : "Export this class →"}</button></div></div>
     <div className="learner-data-export"><div><strong>Keep a portable learner-data copy</strong><p>Download your saved learner profile, assessment topics, lesson sessions, responses, study patterns, and evidence as JSON.</p></div><button className="button-secondary" type="button" disabled={busy} onClick={() => void exportLearnerData()}>{busy ? "Preparing…" : "Download learner data →"}</button></div>
+    <div className="learner-data-delete"><div><strong>Remove this class’s saved learner data</strong><p>This removes saved attempts, lessons, assessment topic lists, learning patterns, source comments, and unfinished browser drafts. Course materials and the accepted course map stay. Obsidian files, downloaded exports, and backups are not changed.</p></div>{deletePanelOpen ? <form onSubmit={(event) => void deleteLearnerData(event)}><label>Type <code>DELETE ALL LEARNER DATA</code> to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label><div><button className="button-secondary" type="button" disabled={busy} onClick={() => { setDeletePanelOpen(false); setDeleteConfirmation(""); }}>Cancel</button><button className="learner-data-delete__confirm" type="submit" disabled={busy || deleteConfirmation !== "DELETE ALL LEARNER DATA"}>{busy ? "Removing…" : "Remove saved learner data"}</button></div></form> : <button className="learner-data-delete__open" type="button" disabled={busy} onClick={() => setDeletePanelOpen(true)}>Review removal…</button>}</div>
     <p className="obsidian-export__message" role="status">{error || message || (status?.configured ? `Local file export · ${status.folderPath}. Obsidian Sync is managed separately by Obsidian.` : "Enter your vault’s full folder path to connect it. The app writes local Markdown files and does not change Obsidian Sync settings.")}</p>
   </section>;
 }

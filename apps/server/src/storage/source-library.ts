@@ -134,6 +134,11 @@ export class SourceLibrary {
     } as unknown as SourceAnnotation));
   }
 
+  getCourseAnnotations(courseId: string): SourceAnnotation[] {
+    const materials = this.database.prepare("SELECT id FROM materials WHERE course_id=? ORDER BY created_at,id").all(courseId) as Array<{ id: string }>;
+    return materials.flatMap(({ id }) => this.getAnnotations(courseId, id));
+  }
+
   createAnnotation(courseId: string, materialId: string, passageId: string, body: string) {
     const passageRow = this.database.prepare(`${passageSelect} WHERE course_id=? AND material_id=? AND id=?`)
       .get(courseId, materialId, passageId) as unknown as PassageRow | undefined;

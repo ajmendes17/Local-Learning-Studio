@@ -714,6 +714,25 @@ test("learner-data export includes the full class profile, saved sessions, and r
   try {
     const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Portable data fixture" } });
     const courseId = course.json().id as string;
+    const otherCourse = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Unaffected class" } });
+    const otherCourseId = otherCourse.json().id as string;
+    const otherScope = await app.inject({
+      method: "POST", url: `/api/courses/${otherCourseId}/learner/assessments`,
+      payload: { title: "Other class exam", kind: "exam", topics: [{ title: "Other topic", importance: "normal", provenance: "learner" }] },
+    });
+    assert.equal(otherScope.statusCode, 201, otherScope.body);
+    const source = uploadPayload("Exam notes.md", "# Bell states\n\nThe professor emphasized relative phase and normalization.");
+    const material = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/materials?kind=reading`,
+      headers: { "content-type": source.contentType }, payload: source.payload,
+    });
+    assert.equal(material.statusCode, 201, material.body);
+    const passages = await app.inject({ method: "GET", url: `/api/courses/${courseId}/materials/${material.json().id}/passages` });
+    const annotation = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/materials/${material.json().id}/annotations`,
+      payload: { passageId: passages.json().passages[0].id, body: "Remember the relative phase." },
+    });
+    assert.equal(annotation.statusCode, 201, annotation.body);
     const scope = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/assessments`,
       payload: { title: "Final review", kind: "exam", topics: [{ title: "Bell states", importance: "high", provenance: "learner" }] },
@@ -751,10 +770,42 @@ test("learner-data export includes the full class profile, saved sessions, and r
     assert.equal(data.attempts.length, 1);
     assert.equal(data.attempts[0].response, responseText);
     assert.equal(data.attempts[0].independence, "hinted");
+    assert.equal(data.sourceAnnotations.length, 1);
+    assert.equal(data.sourceAnnotations[0].body, "Remember the relative phase.");
     assert.deepEqual(data.learningPatterns, []);
     assert.deepEqual(data.patternReviews, []);
     const missing = await app.inject({ method: "GET", url: `/api/courses/${randomUUID()}/learner/export` });
     assert.equal(missing.statusCode, 404);
+
+    const rejectedDelete = await app.inject({
+      method: "DELETE", url: `/api/courses/${courseId}/learner/data`,
+      payload: { confirmation: "DELETE THE CLASS" },
+    });
+    assert.equal(rejectedDelete.statusCode, 400);
+    assert.equal((await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/export` })).json().attempts.length, 1);
+    const deleted = await app.inject({
+      method: "DELETE", url: `/api/courses/${courseId}/learner/data`,
+      payload: { confirmation: "DELETE ALL LEARNER DATA" },
+    });
+    assert.equal(deleted.statusCode, 200, deleted.body);
+    assert.equal(deleted.json().deleted.study_attempts, 1);
+    assert.equal(deleted.json().deleted.study_sessions, 1);
+    assert.equal(deleted.json().deleted.learner_assessments, 1);
+    assert.equal(deleted.json().deleted.learner_topics, 1);
+    assert.equal(deleted.json().deleted.learner_concepts, 1);
+    assert.equal(deleted.json().deleted.mastery_evidence, 1);
+    assert.equal(deleted.json().deleted.source_annotations, 1);
+    const afterDelete = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/export` });
+    assert.equal(afterDelete.json().profile.assessments.length, 0);
+    assert.equal(afterDelete.json().profile.concepts.length, 0);
+    assert.equal(afterDelete.json().studySessions.length, 0);
+    assert.equal(afterDelete.json().attempts.length, 0);
+    assert.equal(afterDelete.json().sourceAnnotations.length, 0);
+    const otherClassProfile = await app.inject({ method: "GET", url: `/api/courses/${otherCourseId}/learner/profile` });
+    assert.equal(otherClassProfile.json().assessments[0].title, "Other class exam", "deletion must leave another class untouched");
+    const materialStillExists = await app.inject({ method: "GET", url: `/api/courses/${courseId}` });
+    assert.equal(materialStillExists.statusCode, 200, "learner-data removal must preserve course source files");
+    assert.equal(materialStillExists.json().materials.length, 1);
   } finally {
     await app.close();
     await rm(root, { recursive: true });

@@ -581,4 +581,33 @@ export class LearnerLibrary {
       lastPracticedAt: row.lastPracticedAt,
     }));
   }
+
+  deleteLearnerData(courseId: string) {
+    const tables = [
+      "source_annotation_imports",
+      "source_annotations",
+      "mastery_evidence",
+      "study_attempts",
+      "study_sessions",
+      "learner_topics",
+      "learner_patterns",
+      "learner_pattern_reviews",
+      "learner_assessments",
+      "learner_concepts",
+    ] as const;
+    this.database.exec("BEGIN IMMEDIATE");
+    let counts: Record<typeof tables[number], number>;
+    try {
+      counts = Object.fromEntries(tables.map((table) => {
+        const row = this.database.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE course_id=?`).get(courseId) as { count: number };
+        return [table, Number(row.count)];
+      })) as Record<typeof tables[number], number>;
+      for (const table of tables) this.database.prepare(`DELETE FROM ${table} WHERE course_id=?`).run(courseId);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return counts;
+  }
 }

@@ -209,9 +209,18 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       methodProgress: LearnerMethodProgressResponseSchema.parse(options.learner.getMethodProgress(courseId)),
       studySessions: options.learner.getStudySessionsForExport(courseId),
       attempts: options.learner.getAttemptsForObsidianExport(courseId),
+      sourceAnnotations: options.sources.getCourseAnnotations(courseId),
       learningPatterns: options.learner.getLearnerPatterns(courseId),
       patternReviews: options.learner.listPatternReviews(courseId, Number.MAX_SAFE_INTEGER),
     };
+  });
+
+  app.delete<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/data", async (request, reply) => {
+    const courseId = courseIdFor(request.params);
+    if (!courseId) return reply.code(404).send({ error: "Class not found." });
+    const body = z.object({ confirmation: z.literal("DELETE ALL LEARNER DATA") }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Type DELETE ALL LEARNER DATA to confirm removal of this class’s saved learner records." });
+    return { deleted: options.learner.deleteLearnerData(courseId), courseId };
   });
 
   app.get<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/patterns", async (request, reply) => {
