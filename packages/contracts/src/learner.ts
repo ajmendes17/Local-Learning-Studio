@@ -207,10 +207,10 @@ export function summarizeStudyCoverage(
 
 export function recommendNextStudyTopic<T extends { title: string }>(
   topics: T[],
-  signals: Array<{ title: string; attemptCount: number; sessionCount?: number; latestOutcome?: string | null; lastPracticedAt?: string | null; lastSessionAt?: string | null }>,
+  signals: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; sessionCount?: number; latestOutcome?: string | null; lastPracticedAt?: string | null; lastSessionAt?: string | null }>,
   independenceSignals: Array<{ title: string; scoredAttemptCount: number; independentScoredAttemptCount: number }> = [],
   confidenceSignals: Array<{ title: string; latestOutcome: string | null; latestConfidence: number | null }> = [],
-): { topic: T; reason: "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced" } | null {
+): { topic: T; reason: "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced" } | null {
   if (!topics.length) return null;
   const signalByTitle = new Map(signals.map((signal) => [signal.title.trim().normalize("NFKC").toLocaleLowerCase(), signal]));
   const candidates = topics.map((topic, index) => ({
@@ -230,19 +230,9 @@ export function recommendNextStudyTopic<T extends { title: string }>(
     return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
   };
   const needsReview = candidates
-    .filter(({ signal }) => signal?.latestOutcome && ["incorrect", "incomplete", "unsupported", "not-graded"].includes(signal.latestOutcome))
+    .filter(({ signal }) => signal?.latestOutcome === "incorrect")
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(b.signal?.lastPracticedAt) - timestamp(a.signal?.lastPracticedAt) || a.index - b.index)[0];
   if (needsReview) return { topic: needsReview.topic, reason: "needs-review" };
-
-  const lessonOnly = candidates
-    .filter(({ signal }) => (signal?.sessionCount ?? 0) > 0 && (signal?.attemptCount ?? 0) === 0)
-    .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(b.signal?.lastSessionAt) - timestamp(a.signal?.lastSessionAt) || a.index - b.index)[0];
-  if (lessonOnly) return { topic: lessonOnly.topic, reason: "lesson-only" };
-
-  const notPracticed = candidates
-    .filter(({ signal }) => !signal || signal.attemptCount === 0)
-    .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || a.index - b.index)[0];
-  if (notPracticed) return { topic: notPracticed.topic, reason: "not-practiced" };
 
   const needsIndependentCheck = candidates
     .filter(({ topic }) => {
@@ -260,12 +250,30 @@ export function recommendNextStudyTopic<T extends { title: string }>(
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0];
   if (lowConfidenceCorrect) return { topic: lowConfidenceCorrect.topic, reason: "low-confidence-correct" };
 
+  const needsScoredCheck = candidates
+    .filter(({ signal }) => Boolean(signal && signal.attemptCount > 0 && (
+      (signal.scoredAttemptCount != null && signal.attemptCount > signal.scoredAttemptCount)
+      || ["incomplete", "unsupported", "not-graded"].includes(signal.latestOutcome ?? "")
+    )))
+    .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0];
+  if (needsScoredCheck) return { topic: needsScoredCheck.topic, reason: "needs-scored-check" };
+
+  const lessonOnly = candidates
+    .filter(({ signal }) => (signal?.sessionCount ?? 0) > 0 && (signal?.attemptCount ?? 0) === 0)
+    .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(b.signal?.lastSessionAt) - timestamp(a.signal?.lastSessionAt) || a.index - b.index)[0];
+  if (lessonOnly) return { topic: lessonOnly.topic, reason: "lesson-only" };
+
+  const notPracticed = candidates
+    .filter(({ signal }) => !signal || signal.attemptCount === 0)
+    .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || a.index - b.index)[0];
+  if (notPracticed) return { topic: notPracticed.topic, reason: "not-practiced" };
+
   const leastRecentlyPracticed = candidates
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0]!;
   return { topic: leastRecentlyPracticed.topic, reason: "least-recently-practiced" };
 }
 
-type StudyRecommendationReason = "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
+type StudyRecommendationReason = "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
 
 export function prioritizeStudyRecommendations<T extends {
   title: string;
@@ -277,11 +285,12 @@ export function prioritizeStudyRecommendations<T extends {
 }>(recommendations: T[]): T[] {
   const reasonRank: Record<StudyRecommendationReason, number> = {
     "needs-review": 0,
-    "lesson-only": 1,
-    "not-practiced": 2,
-    "needs-independent-check": 3,
-    "low-confidence-correct": 4,
-    "least-recently-practiced": 5,
+    "needs-independent-check": 1,
+    "low-confidence-correct": 2,
+    "lesson-only": 3,
+    "needs-scored-check": 4,
+    "not-practiced": 5,
+    "least-recently-practiced": 6,
   };
   const importanceRank = (importance?: T["importance"]) => importance === "high" ? 2 : importance === "low" ? 0 : 1;
   const timestamp = (value?: string | null) => {

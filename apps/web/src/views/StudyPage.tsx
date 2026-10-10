@@ -58,7 +58,7 @@ interface MethodProgress { method: string; attemptCount: number; scoredAttemptCo
 interface AssessmentScope { id: string; title: string; instructorText: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
 interface StudyRecommendation {
   title: string;
-  reason: "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
+  reason: "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
   latestOutcome: string | null;
   lastPracticedAt: string | null;
   assessmentId?: string;
@@ -704,6 +704,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     ? nextRecommendation.latestOutcome === "incorrect" ? "Your latest check was incorrect."
       : nextRecommendation.latestOutcome === "incomplete" ? "Your latest check was incomplete."
         : "Your latest check needs another pass."
+    : nextRecommendation?.reason === "needs-scored-check"
+      ? "Your saved response was not graded. Try a scored knowledge check to add clearer progress."
     : nextRecommendation?.reason === "lesson-only"
       ? "You’ve opened this lesson; a first knowledge check can show what you recall."
     : nextRecommendation?.reason === "not-practiced"
@@ -720,7 +722,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     : null;
   const recommendationMethod: Method = nextRecommendation?.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect"
     ? "error-analysis"
-    : nextRecommendation?.reason === "needs-independent-check"
+    : nextRecommendation?.reason === "needs-independent-check" || nextRecommendation?.reason === "needs-scored-check"
       ? "quiz"
       : nextRecommendation?.reason === "low-confidence-correct"
         ? "free-recall"

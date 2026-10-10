@@ -241,7 +241,7 @@ test("homework next-topic recommendation prioritizes review, untouched topics, t
     { title: "Bell states", attemptCount: 1, latestOutcome: "not-graded", lastPracticedAt: "2026-10-09T10:00:00.000Z" },
     { title: "Partial trace", attemptCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-08T10:00:00.000Z" },
   ]);
-  assert.deepEqual(unscored, { topic: topics[0], reason: "needs-review" });
+  assert.deepEqual(unscored, { topic: topics[0], reason: "needs-scored-check" });
   const priority = recommendNextStudyTopic([
     { title: "Optional detail", importance: "low" },
     { title: "Core theorem", importance: "high" },
@@ -277,11 +277,21 @@ test("recommendations ask for an independent check after assisted-only correct a
   const independentlyChecked = independence.map((signal) => ({ ...signal, independentScoredAttemptCount: signal.scoredAttemptCount }));
   assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), signals, independentlyChecked, lowConfidence), { topic: topics[0], reason: "low-confidence-correct" });
   assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), signals, independentlyChecked, lowConfidence.map((signal) => ({ ...signal, latestConfidence: 0.75 }))), { topic: topics[0], reason: "least-recently-practiced" });
-  assert.deepEqual(recommendNextStudyTopic(topics, signals, independentlyChecked, lowConfidence), { topic: topics[2], reason: "not-practiced" });
+  assert.deepEqual(recommendNextStudyTopic(topics, signals, independentlyChecked, lowConfidence), { topic: topics[0], reason: "low-confidence-correct" });
   assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), [
     { ...signals[0]!, latestOutcome: "incorrect" }, signals[1]!,
   ], independence), { topic: topics[0], reason: "needs-review" });
-  assert.deepEqual(recommendNextStudyTopic(topics, signals, independence), { topic: topics[2], reason: "not-practiced" });
+  assert.deepEqual(recommendNextStudyTopic(topics, signals, independence), { topic: topics[0], reason: "needs-independent-check" });
+  const scoredMiss = recommendNextStudyTopic(topics, [
+    { title: "Bell states", attemptCount: 2, scoredAttemptCount: 1, latestOutcome: "incorrect", lastPracticedAt: "2026-10-09T10:00:00.000Z" },
+    { title: "Partial trace", attemptCount: 2, scoredAttemptCount: 1, latestOutcome: "not-graded", lastPracticedAt: "2026-10-08T10:00:00.000Z" },
+  ]);
+  assert.deepEqual(scoredMiss, { topic: topics[0], reason: "needs-review" });
+  const ungradedRecall = recommendNextStudyTopic(topics, [
+    { title: "Bell states", attemptCount: 2, scoredAttemptCount: 1, latestOutcome: "not-graded", lastPracticedAt: "2026-10-09T10:00:00.000Z" },
+    { title: "Partial trace", attemptCount: 1, scoredAttemptCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-08T10:00:00.000Z" },
+  ]);
+  assert.deepEqual(ungradedRecall, { topic: topics[0], reason: "needs-scored-check" });
 });
 
 test("cross-scope recommendations preserve review urgency and instructor priority", () => {
@@ -297,11 +307,11 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
   assert.deepEqual(prioritizeStudyRecommendations(candidates).map(({ title }) => title), [
     "High priority, older miss",
     "Low priority, newer miss",
+    "No independent check yet",
+    "Correct, low confidence",
     "Lesson opened, no check",
     "High priority, untouched",
     "Normal priority, untouched",
-    "No independent check yet",
-    "Correct, low confidence",
   ]);
   assert.equal(candidates[0]!.title, "Low priority, newer miss", "ranking should not reorder the caller's array");
 });
