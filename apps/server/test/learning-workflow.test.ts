@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -306,6 +306,16 @@ test("course sources flow through cached classification, map review, and accepta
   assert.match(staleTopicProgress, /stale accepted course map[\s\S]*current replacement draft is ready for review/);
   assert.match(staleTopicProgress, /\[\[.*topics\/course-foundations\|Course foundations\]\].*Not started/);
   assert.match(draftCourseNote, /## Topic progress[\s\S]*\[\[.*Topic Progress\]\]/);
+  const topicProgressPath = join(vaultPath, draftExport.json().courseFolder, "Topic Progress.md");
+  await writeFile(topicProgressPath, staleTopicProgress
+    .replace(/^id: .*$/m, `id: "topic-progress:${course.id}"`)
+    .replace("## My notes\n", "## My notes\nProfessor reminder: use the notation from lecture.\n"));
+  const refreshedExport = await app.inject({ method: "POST", url: `/api/courses/${course.id}/obsidian/export` });
+  assert.equal(refreshedExport.statusCode, 200, refreshedExport.body);
+  const refreshedTopicProgress = await readFile(topicProgressPath, "utf8");
+  assert.ok(refreshedTopicProgress.startsWith(`---\nid: "topic-progress-${course.id}"\n---`));
+  assert.match(refreshedTopicProgress, /Professor reminder: use the notation from lecture\./);
+  assert.match(refreshedTopicProgress, /current replacement draft is ready for review/);
 
   const instructorScopeResponse = await app.inject({
     method: "POST",

@@ -211,14 +211,17 @@ async function replaceManagedSection(path: string, id: string, title: string, ge
   } else {
     next = `---\nid: ${yaml(id)}\n---\n\n# ${title}\n\n${block}\n\n## My notes\n\n`;
   }
-  if (Object.keys(properties).length) {
+  // The note ID is managed metadata too. Refresh it on every export so old
+  // identity formats are migrated without replacing learner-owned sections.
+  const managedProperties = { ...properties, id };
+  if (Object.keys(managedProperties).length) {
     // Some older repeated exports joined the closing YAML fence to the
     // heading (`---# Topic`). Accept that legacy shape and normalize the
     // frontmatter/body boundary each time properties are rewritten.
     const match = next.match(/^---\n([\s\S]*?)\n---(?=\n|#|$)/);
     if (!match) throw new Error(`Cannot add Obsidian properties because YAML frontmatter is missing in ${path}.`);
     const lines = match[1]!.split("\n");
-    for (const [key, value] of Object.entries(properties)) {
+    for (const [key, value] of Object.entries(managedProperties)) {
       const line = Array.isArray(value)
         ? `${key}:\n${value.map((item) => `  - ${yaml(item)}`).join("\n")}`
         : `${key}: ${typeof value === "number" ? value : yaml(value)}`;

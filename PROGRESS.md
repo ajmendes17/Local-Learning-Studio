@@ -2232,3 +2232,5 @@ dist/assets/index-DfgPefKF.js                         195.42 kB │ gzip:  61.61
 dist/assets/study-progress-HYFWFq93.js                397.27 kB │ gzip: 120.25 kB
 
 ✓ built in 409ms passed. |
+
+| 2026-10-10 | Obsidian managed-note identity repair | Export refreshes managed frontmatter IDs to migrate old formats while preserving learner text. Regression covers stale Topic Progress IDs. Browser draft restore passed. Live vault export updated 39 notes; validation found zero issues across 39 notes and 393 links; Obsidian reports zero unresolved links. Full project checks passed. |
