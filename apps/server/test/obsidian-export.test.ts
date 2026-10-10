@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
+import { openDatabase } from "../src/storage/database.js";
 import { ObsidianVault } from "../src/storage/obsidian-vault.js";
 
 function markdownUpload(filename: string, content: string) {
@@ -25,9 +26,10 @@ function markdownUpload(filename: string, content: string) {
 test("Obsidian export creates linked class notes and preserves learner-owned text on refresh", async () => {
   const root = await mkdtemp(join(tmpdir(), "learning-studio-obsidian-"));
   const vaultPath = join(root, "vault");
+  const databasePath = join(root, "data", "studio.sqlite");
   await mkdir(vaultPath);
   const app = buildApp({
-    databasePath: join(root, "data", "studio.sqlite"),
+    databasePath,
     courseRoot: join(root, "courses"),
     obsidianConfigPath: join(root, "data", "obsidian.json"),
     codex: { run: async () => { throw new Error("The Obsidian export must not call Codex."); } } as any,
@@ -44,6 +46,13 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     });
     assert.equal(uploaded.statusCode, 201, uploaded.body);
     assert.equal(uploaded.json().status, "ready");
+    const uploadedPassages = await app.inject({ method: "GET", url: `/api/courses/${courseId}/materials/${uploaded.json().id}/passages` });
+    const firstPassageId = uploadedPassages.json().passages[0].id as string;
+    const annotationResponse = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/materials/${uploaded.json().id}/annotations`,
+      payload: { passageId: firstPassageId, body: "Professor emphasis: know how Bell states are constructed. See [[Other Class/Exam]]." },
+    });
+    assert.equal(annotationResponse.statusCode, 201, annotationResponse.body);
     const conceptResponse = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/concepts`, payload: { stableKey: "bell-states", title: "Bell states", description: "A topic used to verify exported practice evidence." } });
     assert.equal(conceptResponse.statusCode, 201, conceptResponse.body);
     const assessmentResponse = await app.inject({
@@ -104,6 +113,8 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(sourceNote, /&#91;&#91;Other Class\/Exam#Coverage\|coverage&#93;&#93;/);
     assert.match(sourceNote, /!&#91;&#91;private-class-note&#93;&#93;/);
     assert.doesNotMatch(sourceNote, /(?<!!)\[\[Other Class\/Exam|!\[\[private-class-note/);
+    assert.match(sourceNote, /Passage 1[\s\S]*Professor emphasis: know how Bell states are constructed[\s\S]*&#91;&#91;Other Class\/Exam&#93;&#93;/);
+    assert.doesNotMatch(sourceNote, /\[\[Other Class\/Exam\]\]/);
     assert.match(sourceNote, /\*\*Practice activity:\*\* 0\/1 scored checks correct; 1 unscored/);
     assert.match(sourceNote, /\*\*Lesson sessions opened:\*\* 0/);
     assert.match(sourceNote, /## Practice by topic[\s\S]*Bell states:\*\* 0\/1 scored checks correct; 1 unscored; latest not-graded/);
@@ -128,6 +139,10 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(assessmentNote, /Practice counts are evidence of activity, not mastery/);
 
     await appendFile(courseNotePath, "\n## My reflection\nKeep my instructor's phrasing here.\n");
+    const changedExtraction = openDatabase(databasePath);
+    changedExtraction.prepare("UPDATE source_passages SET content_hash=? WHERE course_id=? AND material_id=? AND id=?")
+      .run("e".repeat(64), courseId, uploaded.json().id, firstPassageId);
+    changedExtraction.close();
     await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/assessments`,
       payload: { title: "Final exam scope", kind: "exam", topics: [{ title: "No-signaling", importance: "normal", provenance: "learner" }] },
@@ -137,6 +152,8 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     const refreshedCourseNote = await readFile(courseNotePath, "utf8");
     assert.match(refreshedCourseNote, /Keep my instructor's phrasing here\./);
     assert.match(refreshedCourseNote, /Final exam scope/);
+    const refreshedSourceNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "utf8");
+    assert.match(refreshedSourceNote, /## Comments from older source versions[\s\S]*OBSIDIAN_SOURCE_SENTINEL[\s\S]*Professor emphasis: know how Bell states are constructed/);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });

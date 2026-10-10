@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
   CourseMaterial,
+  SourceAnnotation,
   SourcePassage,
 } from "@local-learning-studio/contracts";
 import { SourceLocationSchema } from "@local-learning-studio/contracts";
@@ -112,6 +113,54 @@ export class SourceLibrary {
       `)
       .all(courseId, materialId, limit, offset) as unknown as PassageRow[];
     return rows.map(mapPassage);
+  }
+
+  getAnnotations(courseId: string, materialId: string): SourceAnnotation[] {
+    const rows = this.database.prepare(`SELECT a.id,a.course_id AS courseId,a.material_id AS materialId,
+      COALESCE((SELECT current.id FROM source_passages current WHERE current.course_id=a.course_id
+        AND current.material_id=a.material_id AND current.ordinal=a.passage_ordinal
+        AND current.content_hash=a.content_hash AND current.location_json=a.location_json LIMIT 1),a.passage_id) AS passageId,
+      a.passage_ordinal AS ordinal,a.content_hash AS contentHash,a.location_json AS locationJson,
+      a.excerpt,a.body,a.created_at AS createdAt,a.updated_at AS updatedAt,
+      EXISTS(SELECT 1 FROM source_passages current WHERE current.course_id=a.course_id
+        AND current.material_id=a.material_id AND current.ordinal=a.passage_ordinal
+        AND current.content_hash=a.content_hash AND current.location_json=a.location_json) AS isCurrent
+      FROM source_annotations a WHERE a.course_id=? AND a.material_id=? ORDER BY a.passage_ordinal,a.created_at,a.id`)
+      .all(courseId, materialId) as Array<Record<string, unknown> & { locationJson: string; isCurrent: number }>;
+    return rows.map((row) => ({
+      ...row,
+      location: SourceLocationSchema.parse(JSON.parse(row.locationJson)),
+      isCurrent: Boolean(row.isCurrent),
+    } as unknown as SourceAnnotation));
+  }
+
+  createAnnotation(courseId: string, materialId: string, passageId: string, body: string) {
+    const passageRow = this.database.prepare(`${passageSelect} WHERE course_id=? AND material_id=? AND id=?`)
+      .get(courseId, materialId, passageId) as unknown as PassageRow | undefined;
+    if (!passageRow) return null;
+    const passage = mapPassage(passageRow);
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.database.prepare(`INSERT INTO source_annotations
+      (id,course_id,material_id,passage_id,passage_ordinal,content_hash,location_json,excerpt,body,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id, courseId, materialId, passage.id, passage.ordinal, passage.contentHash,
+      JSON.stringify(passage.location), passage.content.slice(0, 800), body, now, now,
+    );
+    return this.getAnnotations(courseId, materialId).find((annotation) => annotation.id === id) ?? null;
+  }
+
+  updateAnnotation(courseId: string, materialId: string, annotationId: string, body: string) {
+    const result = this.database.prepare(`UPDATE source_annotations SET body=?,updated_at=?
+      WHERE course_id=? AND material_id=? AND id=?`).run(body, new Date().toISOString(), courseId, materialId, annotationId);
+    if (Number(result.changes) === 0) return null;
+    return this.getAnnotations(courseId, materialId).find((annotation) => annotation.id === annotationId) ?? null;
+  }
+
+  deleteAnnotation(courseId: string, materialId: string, annotationId: string) {
+    const result = this.database.prepare(`DELETE FROM source_annotations
+      WHERE course_id=? AND material_id=? AND id=?`).run(courseId, materialId, annotationId);
+    return Number(result.changes) > 0;
   }
 
   getCoursePassageHashes(courseId: string): PassageHashRow[] {

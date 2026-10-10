@@ -12,6 +12,7 @@ import {
   CourseMaterialSchema,
   CourseSummarySchema,
   MaterialPassagesResponseSchema,
+  SourceAnnotationsResponseSchema,
 } from "@local-learning-studio/contracts";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { strToU8, zipSync } from "fflate";
@@ -134,6 +135,39 @@ test("course library persists a course and its uploaded material", async () => {
     heading: "Applied Statistics",
   });
 
+  const passageId = passages.passages[1]!.id;
+  const annotationUrl = `/api/courses/${course.id}/materials/${material.id}/annotations`;
+  const savedComment = await app.inject({
+    method: "POST", url: annotationUrl,
+    payload: { passageId, body: "Instructor emphasized this section. See [[exam review]]." },
+  });
+  assert.equal(savedComment.statusCode, 201, savedComment.body);
+  assert.equal(savedComment.json().passageId, passageId);
+  assert.equal(savedComment.json().ordinal, 1);
+  assert.equal(savedComment.json().isCurrent, true);
+  const comments = SourceAnnotationsResponseSchema.parse((await app.inject({ method: "GET", url: annotationUrl })).json());
+  assert.equal(comments.length, 1);
+  assert.equal(comments[0]?.body, "Instructor emphasized this section. See [[exam review]].");
+
+  const updateComment = await app.inject({
+    method: "PATCH", url: `${annotationUrl}/${savedComment.json().id}`,
+    payload: { body: "Updated professor note." },
+  });
+  assert.equal(updateComment.statusCode, 200);
+  assert.equal(updateComment.json().body, "Updated professor note.");
+  const extractionRefresh = openDatabase(databasePath);
+  extractionRefresh.prepare("UPDATE source_passages SET content_hash=? WHERE course_id=? AND material_id=? AND id=?")
+    .run("f".repeat(64), course.id, material.id, passageId);
+  extractionRefresh.close();
+  const staleComment = await app.inject({ method: "GET", url: annotationUrl });
+  assert.equal(staleComment.json()[0].isCurrent, false, "comments should not silently attach to changed source text");
+  assert.equal(staleComment.json()[0].excerpt, "Exam coverage.");
+  const wrongPassageComment = await app.inject({
+    method: "POST", url: annotationUrl,
+    payload: { passageId: passages.passages[0]!.id, body: "   " },
+  });
+  assert.equal(wrongPassageComment.statusCode, 400);
+
   const otherCourseResponse = await app.inject({
     method: "POST",
     url: "/api/courses",
@@ -145,6 +179,8 @@ test("course library persists a course and its uploaded material", async () => {
     url: `/api/courses/${otherCourse.id}/materials/${material.id}/passages`,
   });
   assert.equal(crossCourseResponse.statusCode, 404);
+  const crossCourseComments = await app.inject({ method: "GET", url: `/api/courses/${otherCourse.id}/materials/${material.id}/annotations` });
+  assert.equal(crossCourseComments.statusCode, 404);
 
   const pagedResponse = await app.inject({
     method: "GET",
@@ -178,6 +214,10 @@ test("course library persists a course and its uploaded material", async () => {
   });
   const detail = CourseDetailSchema.parse(detailResponse.json());
   assert.equal(detail.materials[0]?.originalName, "syllabus.md");
+
+  const removedComment = await app.inject({ method: "DELETE", url: `${annotationUrl}/${savedComment.json().id}` });
+  assert.equal(removedComment.statusCode, 204);
+  assert.equal((await app.inject({ method: "GET", url: annotationUrl })).json().length, 0);
 
   const files = await readFile(
     join(

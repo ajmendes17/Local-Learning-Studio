@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, scheduleAssessmentStudyDays, type SourcePassage } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, scheduleAssessmentStudyDays, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
 
 const START = "<!-- LLS:GENERATED:START -->";
 const END = "<!-- LLS:GENERATED:END -->";
@@ -12,7 +12,7 @@ export interface ObsidianConfig {
 }
 
 export interface ObsidianCourseExport {
-  course: { id: string; title: string; code: string; term: string; materials: Array<{ id: string; originalName: string; kind: string; status: string; mediaType: string; sizeBytes: number; passageCount: number; errorMessage: string | null; createdAt: string; passages: SourcePassage[] }> };
+  course: { id: string; title: string; code: string; term: string; materials: Array<{ id: string; originalName: string; kind: string; status: string; mediaType: string; sizeBytes: number; passageCount: number; errorMessage: string | null; createdAt: string; passages: SourcePassage[]; annotations?: SourceAnnotation[] }> };
   map: { modules: Array<{ key: string; title: string; description: string; position: number; conceptKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; concepts: Array<{ key: string; title: string; description: string; learningObjectives: string[]; prerequisiteKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; assessments: Array<{ title: string; kind: string; moduleKey: string | null; dueAt: string | null; weightPercent: number | null; sourceReferences: Array<{ materialId: string; passageId: string }> }> } | null;
   profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; instructorText?: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
   methodProgress?: Array<{ method: string; attemptCount: number; scoredAttemptCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: Array<{ conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }>; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }>;
@@ -248,11 +248,26 @@ export class ObsidianVault {
       const unlinkedSourceSessions = Math.max(0, (sourceProgress?.sessionCount ?? 0) - mappedTopicSessions);
       if (unlinkedSourceSessions) practiceTopicLines.push(`- **Homework-level sessions:** ${unlinkedSourceSessions} lesson session${unlinkedSourceSessions === 1 ? "" : "s"} started without a mapped topic; open a mapped topic to track topic-level progress.`);
       const practiceTopics = practiceTopicLines.join("\n") || "- No accepted course-map topics or saved practice attempts cite this source yet.";
-      const extracted = material.passages.map((passage) => [
-        `### Passage ${passage.ordinal + 1}`,
-        `_${passageLocation(passage.location)}_`,
-        escapeImportedWikilinks(passage.content).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;"),
-      ].join("\n\n")).join("\n\n---\n\n") || (material.status === "ready" ? "No extracted passages were stored." : `No extracted text is available because this material is ${material.status}.${material.errorMessage ? `\n\n${material.errorMessage}` : ""}`);
+      const extracted = material.passages.map((passage) => {
+        const comments = (material.annotations ?? []).filter((annotation) => annotation.isCurrent && annotation.passageId === passage.id);
+        return [
+          `### Passage ${passage.ordinal + 1}`,
+          `_${passageLocation(passage.location)}_`,
+          escapeImportedWikilinks(passage.content).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;"),
+          ...comments.flatMap((annotation) => [
+            "",
+            `> **Learner comment · ${annotation.updatedAt}**`,
+            ...escapeImportedWikilinks(annotation.body).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;").split("\n").map((line) => `> ${line}`),
+          ]),
+        ].join("\n\n");
+      }).join("\n\n---\n\n") || (material.status === "ready" ? "No extracted passages were stored." : `No extracted text is available because this material is ${material.status}.${material.errorMessage ? `\n\n${material.errorMessage}` : ""}`);
+      const olderComments = (material.annotations ?? []).filter((annotation) => !annotation.isCurrent).map((annotation) => [
+        `### Saved from passage ${annotation.ordinal + 1} · ${passageLocation(annotation.location)}`,
+        "**Excerpt from the older extraction**",
+        fencedVerbatim(annotation.excerpt),
+        `**Comment · updated ${annotation.updatedAt}**`,
+        fencedVerbatim(annotation.body),
+      ].join("\n\n")).join("\n\n");
       const generated = [
           `**Course:** ${wikilink("Course.md", data.course.title)}`,
         `**Original file:** ${material.originalName}`,
@@ -267,6 +282,7 @@ export class ObsidianVault {
         "", "## Related course topics", relatedTopics,
         "", "## Related assessments", relatedAssessments,
         "", "## Practice by topic", practiceTopics,
+        ...(olderComments ? ["", "## Comments from older source versions", olderComments] : []),
         "", "## Extracted source text", extracted,
         "", "_Practice activity is evidence of study, not mastery. This note mirrors locally extracted text; the original upload remains stored in Local Learning Studio. Passage numbers and locators preserve source provenance._",
       ].join("\n");

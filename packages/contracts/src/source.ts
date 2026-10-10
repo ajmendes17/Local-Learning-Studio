@@ -57,6 +57,30 @@ export type MaterialPassagesResponse = z.infer<
   typeof MaterialPassagesResponseSchema
 >;
 
+export const SourceAnnotationCreateSchema = z.object({
+  passageId: z.string().uuid(),
+  body: z.string().trim().min(1).max(8000),
+});
+export const SourceAnnotationUpdateSchema = z.object({
+  body: z.string().trim().min(1).max(8000),
+});
+export const SourceAnnotationSchema = z.object({
+  id: z.string().uuid(),
+  courseId: z.string().uuid(),
+  materialId: z.string().uuid(),
+  passageId: z.string().uuid(),
+  ordinal: z.number().int().nonnegative(),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  location: SourceLocationSchema,
+  excerpt: z.string().min(1),
+  body: z.string().min(1),
+  isCurrent: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type SourceAnnotation = z.infer<typeof SourceAnnotationSchema>;
+export const SourceAnnotationsResponseSchema = z.array(SourceAnnotationSchema);
+
 export const SourceReferenceSchema = z.object({
   materialId: z.string().uuid(),
   passageId: z.string().uuid(),

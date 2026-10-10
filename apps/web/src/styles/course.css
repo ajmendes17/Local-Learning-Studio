@@ -141,6 +141,41 @@
   border-bottom: 1px solid var(--line);
 }
 
+.material-row__review {
+  grid-column: 2 / -1;
+  justify-self: start;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--course-color);
+  background: var(--white);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.material-row__review:disabled { opacity: 0.5; cursor: not-allowed; }
+.material-review-row { padding: 0 0 1rem; border-bottom: 1px solid var(--line); list-style: none; }
+.material-review { padding: 1.1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
+.material-review__heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.material-review__heading h3 { margin: 0.2rem 0; }
+.material-review__heading p:last-child { max-width: 45rem; margin: 0; color: var(--muted); font-size: 0.82rem; }
+.material-review__passage { padding: 1rem 0; border-top: 1px solid var(--line); }
+.material-review__passage h4 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.7rem; margin: 0 0 0.7rem; }
+.material-review__passage h4 span { color: var(--muted); font-size: 0.75rem; font-weight: 500; }
+.material-review__passage details summary { color: var(--course-color); cursor: pointer; font-size: 0.8rem; font-weight: 650; }
+.material-review__passage blockquote { max-height: 22rem; overflow: auto; margin: 0.7rem 0; padding: 0.8rem 1rem; border-left: 3px solid var(--course-color); background: #f8f8f5; white-space: pre-wrap; line-height: 1.5; }
+.material-review__add { display: grid; gap: 0.45rem; margin: 1rem 0 0.6rem; font-size: 0.82rem; font-weight: 650; }
+.material-review__add textarea, .material-comment textarea { width: 100%; min-height: 5rem; padding: 0.7rem; border: 1px solid var(--line); border-radius: 8px; resize: vertical; font: inherit; font-size: 0.82rem; }
+.material-comment { margin: 0.8rem 0; padding: 0.8rem; border-radius: 9px; background: #eff5f0; }
+.material-comment p { margin: 0 0 0.45rem; white-space: pre-wrap; }
+.material-comment small { color: var(--muted); font-size: 0.72rem; }
+.material-comment__actions { display: flex; gap: 0.45rem; margin-top: 0.6rem; }
+.material-review__stale { margin-top: 1rem; padding: 0.85rem; border: 1px solid #d7b87b; border-radius: 9px; background: #fff9ea; }
+.material-review__stale h4 { margin: 0; }
+.material-review__stale > p { color: var(--muted); font-size: 0.8rem; }
+.material-review__stale article { padding-top: 0.5rem; border-top: 1px solid #e7d8b9; }
+
 .file-mark {
   display: grid;
   width: 40px;

@@ -34,6 +34,24 @@ function createSourcePassagesTable(database: DatabaseSync) {
   `);
 }
 
+function createSourceAnnotationsTable(database: DatabaseSync) {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS source_annotations (
+      id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+      passage_id TEXT NOT NULL,
+      passage_ordinal INTEGER NOT NULL,
+      content_hash TEXT NOT NULL,
+      location_json TEXT NOT NULL CHECK(json_valid(location_json)),
+      excerpt TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+}
+
 function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string) {
   const columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (!columns.some((item) => item.name === column)) {
@@ -346,6 +364,7 @@ export function openDatabase(databasePath: string) {
 
   createSourcePassagesTable(database);
   migrateLegacySourcePassages(database);
+  createSourceAnnotationsTable(database);
   for (const table of ["learner_assessments", "learner_topics", "learner_concepts", "study_attempts", "mastery_evidence"]) {
     ensureColumn(database, table, "course_id", "TEXT REFERENCES courses(id) ON DELETE CASCADE");
   }
@@ -355,6 +374,8 @@ export function openDatabase(databasePath: string) {
   database.exec(`
     CREATE INDEX IF NOT EXISTS source_passages_course_material
       ON source_passages(course_id, material_id, ordinal);
+    CREATE INDEX IF NOT EXISTS source_annotations_course_material
+      ON source_annotations(course_id, material_id, passage_ordinal, created_at);
     CREATE INDEX IF NOT EXISTS learner_assessments_course_time
       ON learner_assessments(course_id, scheduled_at);
     CREATE INDEX IF NOT EXISTS learner_concepts_course

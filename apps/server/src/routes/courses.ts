@@ -6,6 +6,9 @@ import {
   CreateCourseRequestSchema,
   MaterialPassagesResponseSchema,
   MaterialKindSchema,
+  SourceAnnotationCreateSchema,
+  SourceAnnotationUpdateSchema,
+  SourceAnnotationsResponseSchema,
 } from "@local-learning-studio/contracts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -114,6 +117,59 @@ export async function registerCourseRoutes(
         ),
         ...parsedQuery.data,
       });
+    },
+  );
+
+  app.get<{ Params: { courseId: string; materialId: string } }>(
+    "/api/courses/:courseId/materials/:materialId/annotations",
+    async (request, reply) => {
+      const params = z.object({ courseId: courseIdSchema, materialId: courseIdSchema }).safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ error: "Source ID is invalid." });
+      if (!sourceLibrary.getMaterial(params.data.courseId, params.data.materialId)) {
+        return reply.code(404).send({ error: "Course material not found." });
+      }
+      return SourceAnnotationsResponseSchema.parse(sourceLibrary.getAnnotations(params.data.courseId, params.data.materialId));
+    },
+  );
+
+  app.post<{ Params: { courseId: string; materialId: string } }>(
+    "/api/courses/:courseId/materials/:materialId/annotations",
+    async (request, reply) => {
+      const params = z.object({ courseId: courseIdSchema, materialId: courseIdSchema }).safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ error: "Source ID is invalid." });
+      const parsed = SourceAnnotationCreateSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: "Comment details are invalid.", issues: parsed.error.issues });
+      if (!sourceLibrary.getMaterial(params.data.courseId, params.data.materialId)) {
+        return reply.code(404).send({ error: "Course material not found." });
+      }
+      const annotation = sourceLibrary.createAnnotation(params.data.courseId, params.data.materialId, parsed.data.passageId, parsed.data.body);
+      if (!annotation) return reply.code(404).send({ error: "Source passage not found in this material." });
+      return reply.code(201).send(SourceAnnotationsResponseSchema.element.parse(annotation));
+    },
+  );
+
+  app.patch<{ Params: { courseId: string; materialId: string; annotationId: string } }>(
+    "/api/courses/:courseId/materials/:materialId/annotations/:annotationId",
+    async (request, reply) => {
+      const params = z.object({ courseId: courseIdSchema, materialId: courseIdSchema, annotationId: courseIdSchema }).safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ error: "Source comment ID is invalid." });
+      const parsed = SourceAnnotationUpdateSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: "Comment details are invalid.", issues: parsed.error.issues });
+      const annotation = sourceLibrary.updateAnnotation(params.data.courseId, params.data.materialId, params.data.annotationId, parsed.data.body);
+      if (!annotation) return reply.code(404).send({ error: "Source comment not found." });
+      return SourceAnnotationsResponseSchema.element.parse(annotation);
+    },
+  );
+
+  app.delete<{ Params: { courseId: string; materialId: string; annotationId: string } }>(
+    "/api/courses/:courseId/materials/:materialId/annotations/:annotationId",
+    async (request, reply) => {
+      const params = z.object({ courseId: courseIdSchema, materialId: courseIdSchema, annotationId: courseIdSchema }).safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ error: "Source comment ID is invalid." });
+      if (!sourceLibrary.deleteAnnotation(params.data.courseId, params.data.materialId, params.data.annotationId)) {
+        return reply.code(404).send({ error: "Source comment not found." });
+      }
+      return reply.code(204).send();
     },
   );
 

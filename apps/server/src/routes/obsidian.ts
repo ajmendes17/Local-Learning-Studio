@@ -57,7 +57,7 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
                 offset += batch.length;
               }
             }
-            return { ...material, passages };
+            return { ...material, passages, annotations: options.sources.getAnnotations(course.id, material.id) };
           }),
         },
         map: acceptedMap?.payload ?? null,

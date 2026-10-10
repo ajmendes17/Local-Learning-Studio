@@ -5,7 +5,10 @@ import type {
   CourseMaterial,
   LearnerProfileResponse,
   MaterialKind,
+  SourceAnnotation,
+  SourcePassage,
 } from "@local-learning-studio/contracts";
+import { useEffect, useState } from "react";
 import {
   CourseMapPanel,
   type LearningAction,
@@ -51,7 +54,8 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function MaterialRow({ material }: { material: CourseMaterial }) {
+function MaterialRow({ courseId, material }: { courseId: string; material: CourseMaterial }) {
+  const [open, setOpen] = useState(false);
   const extension =
     material.originalName.split(".").pop()?.toUpperCase() ?? "FILE";
   const processingSummary =
@@ -72,6 +76,7 @@ function MaterialRow({ material }: { material: CourseMaterial }) {
   }[material.status];
 
   return (
+    <>
     <li className="material-row">
       <span className="file-mark" aria-hidden="true">
         {extension.slice(0, 4)}
@@ -94,8 +99,117 @@ function MaterialRow({ material }: { material: CourseMaterial }) {
       <span className={`status-pill status-pill--${material.status}`}>
         {statusLabel}
       </span>
+      <button type="button" className="material-row__review" disabled={material.status !== "ready"} aria-expanded={open} onClick={() => setOpen((current) => !current)}>{open ? "Close review" : "Review & comment"}</button>
     </li>
+    {open ? <li className="material-review-row"><MaterialReview courseId={courseId} material={material} /></li> : null}
+    </>
   );
+}
+
+function sourceLocationLabel(location: SourcePassage["location"]) {
+  switch (location.kind) {
+    case "page": return location.pageStart === location.pageEnd ? `Page ${location.pageStart}` : `Pages ${location.pageStart}–${location.pageEnd}`;
+    case "slides": return `Slides ${location.slideStart}–${location.slideEnd}${location.title ? ` · ${location.title}` : ""}`;
+    case "lines": return `Lines ${location.lineStart}–${location.lineEnd}${location.heading ? ` · ${location.heading}` : ""}`;
+    case "paragraphs": return `Paragraphs ${location.paragraphStart}–${location.paragraphEnd}${location.heading ? ` · ${location.heading}` : ""}`;
+  }
+}
+
+function MaterialReview({ courseId, material }: { courseId: string; material: CourseMaterial }) {
+  const [passages, setPassages] = useState<SourcePassage[]>([]);
+  const [annotations, setAnnotations] = useState<SourceAnnotation[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const base = `/api/courses/${courseId}/materials/${material.id}`;
+
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      const [passageResponse, annotationResponse] = await Promise.all([fetch(`${base}/passages?limit=200&offset=0`), fetch(`${base}/annotations`)]);
+      const passageData = await passageResponse.json();
+      const annotationData = await annotationResponse.json();
+      if (!passageResponse.ok || !annotationResponse.ok) throw new Error(passageData.error ?? annotationData.error ?? "Could not load this material’s passages.");
+      const allPassages = [...passageData.passages as SourcePassage[]];
+      while (allPassages.length < passageData.total) {
+        const nextResponse = await fetch(`${base}/passages?limit=200&offset=${allPassages.length}`);
+        const nextPage = await nextResponse.json();
+        if (!nextResponse.ok) throw new Error(nextPage.error ?? "Could not load the rest of this material’s passages.");
+        if (!nextPage.passages.length) break;
+        allPassages.push(...nextPage.passages as SourcePassage[]);
+      }
+      setPassages(allPassages);
+      setAnnotations(annotationData as SourceAnnotation[]);
+      setLoaded(true);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load material review."); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function send(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) {
+    const response = await fetch(path, { method, ...(body !== undefined ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}) });
+    const result = response.status === 204 ? null : await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error ?? `The local service returned ${response.status}.`);
+    return result;
+  }
+
+  async function addComment(passageId: string) {
+    const body = drafts[passageId]?.trim();
+    if (!body || busy) return;
+    setBusy(true); setError("");
+    try {
+      const created = await send(`${base}/annotations`, "POST", { passageId, body }) as SourceAnnotation;
+      setAnnotations((current) => [...current, created]);
+      setDrafts((current) => ({ ...current, [passageId]: "" }));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save comment."); }
+    finally { setBusy(false); }
+  }
+
+  async function saveEdit(annotation: SourceAnnotation) {
+    if (!editBody.trim() || busy) return;
+    setBusy(true); setError("");
+    try {
+      const updated = await send(`${base}/annotations/${annotation.id}`, "PATCH", { body: editBody }) as SourceAnnotation;
+      setAnnotations((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setEditingId(null); setEditBody("");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update comment."); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(annotation: SourceAnnotation) {
+    if (busy || !window.confirm("Delete this comment from the source passage?")) return;
+    setBusy(true); setError("");
+    try {
+      await send(`${base}/annotations/${annotation.id}`, "DELETE");
+      setAnnotations((current) => current.filter((item) => item.id !== annotation.id));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not delete comment."); }
+    finally { setBusy(false); }
+  }
+
+  return <section className="material-review" aria-label={`Review ${material.originalName}`}>
+    <div className="material-review__heading"><div><p className="section-kicker">Source review</p><h3>{material.originalName}</h3><p>Comments stay attached to the extracted passage and its page, slide, or line location.</p></div>{loaded ? <button type="button" className="button-secondary" disabled={loading} onClick={() => void load()}>Refresh passages</button> : null}</div>
+    {loading ? <p>Loading extracted passages…</p> : null}
+    {error ? <p className="error-banner" role="alert">{error}</p> : null}
+    {!loading && passages.map((passage) => {
+      const passageComments = annotations.filter((annotation) => annotation.isCurrent && annotation.passageId === passage.id);
+      return <article className="material-review__passage" key={passage.id}>
+        <h4>Passage {passage.ordinal + 1} <span>{sourceLocationLabel(passage.location)}</span></h4>
+        <details><summary>Read extracted text</summary><blockquote>{passage.content}</blockquote></details>
+        {passageComments.map((annotation) => <div className="material-comment" key={annotation.id}>
+          {editingId === annotation.id ? <><textarea aria-label="Edit source comment" maxLength={8000} value={editBody} onChange={(event) => setEditBody(event.target.value)} /><div className="material-comment__actions"><button type="button" className="button-primary" disabled={busy || !editBody.trim()} onClick={() => void saveEdit(annotation)}>Save edit</button><button type="button" className="button-secondary" onClick={() => setEditingId(null)}>Cancel</button></div></> : <><p>{annotation.body}</p><small>Commented {new Date(annotation.updatedAt).toLocaleString()}</small><div className="material-comment__actions"><button type="button" className="button-secondary" onClick={() => { setEditingId(annotation.id); setEditBody(annotation.body); }}>Edit</button><button type="button" className="button-secondary" disabled={busy} onClick={() => void remove(annotation)}>Delete</button></div></>}
+        </div>)}
+        <label className="material-review__add">Add a comment<textarea maxLength={8000} value={drafts[passage.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [passage.id]: event.target.value }))} placeholder="Add a question, clarification, exam emphasis, or personal note for this passage." /></label>
+        <button type="button" className="button-primary" disabled={busy || !drafts[passage.id]?.trim()} onClick={() => void addComment(passage.id)}>Save comment</button>
+      </article>;
+    })}
+    {!loading && annotations.some((annotation) => !annotation.isCurrent) ? <section className="material-review__stale"><h4>Comments from an older extraction</h4><p>The source text changed, so these comments remain saved with their old excerpt and location. Review them before copying into Obsidian.</p>{annotations.filter((annotation) => !annotation.isCurrent).map((annotation) => <article key={annotation.id}><strong>{sourceLocationLabel(annotation.location)} · saved excerpt</strong><blockquote>{annotation.excerpt}</blockquote><p>{annotation.body}</p><button type="button" className="button-secondary" disabled={busy} onClick={() => void remove(annotation)}>Delete old comment</button></article>)}</section> : null}
+    {!loading && !passages.length ? <p>No extracted passages are available for comments.</p> : null}
+  </section>;
 }
 
 export function CoursePage({
@@ -182,7 +296,7 @@ export function CoursePage({
           {course.materials.length > 0 ? (
             <ul className="material-list">
               {course.materials.map((material) => (
-                <MaterialRow key={material.id} material={material} />
+                <MaterialRow key={material.id} courseId={course.id} material={material} />
               ))}
             </ul>
           ) : (
