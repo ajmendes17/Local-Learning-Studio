@@ -508,6 +508,7 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     const mixedOutcomeTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
     assert.match(mixedOutcomeTopic, /independent_scored_attempt_count: 3\nindependent_correct_count: 1\nevidence_level: "low-scored-accuracy"/);
     assert.match(mixedOutcomeTopic, /\*\*Evidence level:\*\* Low scored accuracy/);
+    assert.match(mixedOutcomeTopic, /\*\*Suggested next step:\*\* Take another quiz in Local Learning Studio to see whether accuracy improves\./);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

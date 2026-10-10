@@ -670,6 +670,7 @@ export class ObsidianVault {
           `**Modules:** ${moduleTitles.join(", ") || "Not assigned"}`,
           `**Practice evidence:** ${progress ? `${scoredProgress(progress.attemptCount, progress.scoredAttemptCount, progress.correctCount)}; latest: ${progress.latestOutcome ?? "not checked"}` : "No checks recorded yet."}`,
           `**Evidence level:** ${evidence.label}`,
+          ...(evidence.level === "low-scored-accuracy" ? ["**Suggested next step:** Take another quiz in Local Learning Studio to see whether accuracy improves."] : []),
           `**Independent checks:** ${independentCorrectCount}/${independentScoredAttemptCount} correct`,
           `**Last practiced:** ${progress?.lastPracticedAt ?? "Never"}`,
           `**Lesson sessions opened:** ${progress?.sessionCount ?? 0}${progress?.lastSessionAt ? ` · last ${progress.lastSessionAt}` : ""}`,
