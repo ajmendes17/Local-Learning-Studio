@@ -88,7 +88,7 @@ function pathIsInside(parent: string, candidate: string) {
   return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
 }
 
-async function replaceManagedSection(path: string, id: string, title: string, generated: string) {
+async function replaceManagedSection(path: string, id: string, title: string, generated: string, properties: Record<string, string | number | string[]> = {}) {
   let previous = "";
   try { previous = await readFile(path, "utf8"); } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -109,6 +109,23 @@ async function replaceManagedSection(path: string, id: string, title: string, ge
     next = `${previous.trimEnd()}\n\n${block}\n`;
   } else {
     next = `---\nid: ${yaml(id)}\n---\n\n# ${title}\n\n${block}\n\n## My notes\n\n`;
+  }
+  if (Object.keys(properties).length) {
+    const match = next.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+    if (!match) throw new Error(`Cannot add Obsidian properties because YAML frontmatter is missing in ${path}.`);
+    const lines = match[1]!.split("\n");
+    for (const [key, value] of Object.entries(properties)) {
+      const line = Array.isArray(value)
+        ? `${key}:\n${value.map((item) => `  - ${yaml(item)}`).join("\n")}`
+        : `${key}: ${typeof value === "number" ? value : yaml(value)}`;
+      const index = lines.findIndex((entry) => entry.startsWith(`${key}:`));
+      if (index >= 0) {
+        let removeCount = 1;
+        while (lines[index + removeCount]?.startsWith("  - ")) removeCount += 1;
+        lines.splice(index, removeCount, ...line.split("\n"));
+      } else lines.push(...line.split("\n"));
+    }
+    next = `---\n${lines.join("\n")}\n---${next.slice(match[0].length)}`;
   }
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -197,7 +214,7 @@ export class ObsidianVault {
     const sourcePaths = new Map(data.course.materials.map((item) => [item.id, `sources/${slug(item.originalName.replace(/\.[^.]+$/, ""))}--${item.id.slice(0, 8)}.md`]));
     const passageById = new Map(data.course.materials.flatMap((material) => material.passages.map((passage) => [passage.id, { materialId: material.id, ordinal: passage.ordinal }] as const)));
     const mapAssessmentPaths = (data.map?.assessments ?? []).map((item, index) => `assessments/${slug(item.title)}--course-${index + 1}.md`);
-    const managed: Array<{ path: string; id: string; title: string; body: string }> = [];
+    const managed: Array<{ path: string; id: string; title: string; body: string; properties?: Record<string, string | number | string[]> }> = [];
     const sourceCitation = (reference: { materialId: string; passageId: string }) => {
       const material = data.course.materials.find(({ id }) => id === reference.materialId);
       const passage = passageById.get(reference.passageId);
@@ -298,6 +315,9 @@ export class ObsidianVault {
       for (const concept of data.map.concepts) {
         const progress = profileByTitle.get(concept.title.trim().toLocaleLowerCase());
         const moduleTitles = data.map.modules.filter((module) => module.conceptKeys.includes(concept.key)).map((module) => wikilink(modulePaths.get(module.key)!, module.title));
+        const practiceStatus = !progress || progress.attemptCount === 0
+          ? (progress?.sessionCount ? "lesson-started" : "not-started")
+          : needsReview(progress.latestOutcome) ? "review-needed" : "checked";
         const prerequisites = concept.prerequisiteKeys.map((key) => topicPaths.get(key) ? wikilink(topicPaths.get(key)!, data.map!.concepts.find((item) => item.key === key)?.title ?? key) : key);
         const objectives = concept.learningObjectives.map((objective) => `- ${objective}`).join("\n") || "- No learning objectives listed yet.";
         const evidenceLinks = concept.sourceReferences.map(sourceCitation).filter((link): link is string => Boolean(link));
@@ -312,7 +332,20 @@ export class ObsidianVault {
           "", "## Prerequisites", prerequisites.join(", ") || "None listed.",
           "", "## Source evidence", evidenceLinks.map((link) => `- ${link}`).join("\n") || "- No imported-source links available.",
         ].join("\n");
-        managed.push({ path: join(courseFolder, topicPaths.get(concept.key)!), id: `topic:${concept.key}`, title: concept.title, body: generated });
+        managed.push({
+          path: join(courseFolder, topicPaths.get(concept.key)!), id: `topic:${concept.key}`, title: concept.title, body: generated,
+          properties: {
+            course_id: data.course.id,
+            course_code: data.course.code,
+            topic_key: concept.key,
+            practice_status: practiceStatus,
+            attempt_count: progress?.attemptCount ?? 0,
+            scored_attempt_count: progress?.scoredAttemptCount ?? 0,
+            correct_count: progress?.correctCount ?? 0,
+            modules: moduleTitles.length ? moduleTitles : ["Not assigned"],
+            source_count: evidenceLinks.length,
+          },
+        });
       }
       for (const module of data.map.modules) {
         const moduleConcepts = module.conceptKeys.map((key) => data.map!.concepts.find((item) => item.key === key)).filter((concept): concept is NonNullable<typeof concept> => Boolean(concept));
@@ -473,7 +506,7 @@ export class ObsidianVault {
     });
 
     for (const note of managed) await ensureSafeManagedPath(courseFolderRealPath, note.path);
-    for (const note of managed) await replaceManagedSection(note.path, note.id, note.title, note.body);
+    for (const note of managed) await replaceManagedSection(note.path, note.id, note.title, note.body, note.properties);
     return { courseFolder: vaultRelativeCoursePath, notesWritten: managed.length, exportedAt };
   }
 }

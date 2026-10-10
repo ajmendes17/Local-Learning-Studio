@@ -294,6 +294,15 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     assert.match(unpracticedModuleNote, /Scored checks:\*\* 0\/0 correct/);
     assert.equal(moduleFiles.filter((name) => name.startsWith("composite-systems")).length, 2);
     const topicFiles = await readdir(join(folder, "topics"));
+    const tensorTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
+    assert.match(tensorTopic, /^---\nid: "topic:tensor-products"\ncourse_id: "course-id"\ncourse_code: "PHGN 519"\ntopic_key: "tensor-products"\npractice_status: "review-needed"\nattempt_count: 2\nscored_attempt_count: 1\ncorrect_count: 1\nmodules:[\s\S]*source_count: 1\n---/);
+    const withLearnerProperty = tensorTopic.replace("course_id: \"course-id\"", "course_id: \"course-id\"\nlearner_tag: \"exam-focus\"");
+    await writeFile(join(folder, "topics", "tensor-products.md"), withLearnerProperty);
+    const syllabusTopic = await readFile(join(folder, "topics", "syllabus-only.md"), "utf8");
+    assert.match(syllabusTopic, /practice_status: "not-started"/);
+    assert.match(syllabusTopic, /attempt_count: 0/);
+    const moduleOnlyTopic = await readFile(join(folder, "topics", "module-context-only.md"), "utf8");
+    assert.match(moduleOnlyTopic, /practice_status: "review-needed"/);
     const noSignalingFiles = topicFiles.filter((name) => name.startsWith("no-signaling"));
     assert.equal(noSignalingFiles.length, 2);
     const noSignalingNotes = await Promise.all(noSignalingFiles.map((name) => readFile(join(folder, "topics", name), "utf8")));
@@ -314,6 +323,21 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     assert.match(assessmentNote, /## Connected topics and practice[\s\S]*\[\[.*topics\/tensor-products\|Tensor Products\]\] — Lesson opened \(no checks saved\)/);
     assert.doesNotMatch(assessmentNote, /syllabus-only|module-context-only|Module-only topic|Quantum Foundations/);
     assert.match(assessmentNote, /## Connected modules[\s\S]*\[\[.*modules\/composite-systems[^|]*\|Composite Systems\]\]/);
+    await vault.exportCourse({
+      course: { id: "course-id", title: "Quantum Information", code: "PHGN 519", term: "Fall 2026", materials: [] },
+      map: {
+        modules: [{ key: "composite-systems", title: "Composite Systems", description: "Composite states", position: 1, conceptKeys: ["tensor-products"], sourceReferences: [] }],
+        concepts: [{ key: "tensor-products", title: "Tensor Products", description: "Combine systems", learningObjectives: [], prerequisiteKeys: [], sourceReferences: [] }],
+        assessments: [],
+      },
+      profile: {
+        concepts: [{ title: "Tensor Products", attemptCount: 2, scoredAttemptCount: 1, correctCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-10T00:00:00.000Z", sessionCount: 1, lastSessionAt: "2026-10-10T00:00:00.000Z" }],
+        assessments: [],
+      },
+    } as any);
+    const refreshedTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
+    assert.match(refreshedTopic, /learner_tag: "exam-focus"/);
+    assert.match(refreshedTopic, /practice_status: "checked"/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
