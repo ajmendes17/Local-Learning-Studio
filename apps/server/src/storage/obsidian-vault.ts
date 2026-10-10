@@ -289,11 +289,11 @@ export class ObsidianVault {
         return [
           `<a id="passage-${passage.ordinal + 1}"></a>\n\n### Passage ${passage.ordinal + 1}`,
           `_${passageLocation(passage.location)}_`,
-          escapeImportedWikilinks(passage.content).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;"),
+          escapeImportedWikilinks(normalizeMathText(passage.content)).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;"),
           ...comments.flatMap((annotation) => [
             "",
             `> **Learner comment · ${annotation.updatedAt}**`,
-            ...escapeImportedWikilinks(annotation.body).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;").split("\n").map((line) => `> ${line}`),
+            ...escapeImportedWikilinks(normalizeMathText(annotation.body)).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;").split("\n").map((line) => `> ${line}`),
           ]),
         ].join("\n\n");
       }).join("\n\n---\n\n") || (material.status === "ready" ? "No extracted passages were stored." : `No extracted text is available because this material is ${material.status}.${material.errorMessage ? `\n\n${material.errorMessage}` : ""}`);
@@ -306,7 +306,7 @@ export class ObsidianVault {
       ].join("\n\n")).join("\n\n");
       const currentComments = (material.annotations ?? []).filter((annotation) => annotation.isCurrent);
       const reviewNotes = currentComments.length
-        ? `**Passages with comments:** ${new Set(currentComments.map((annotation) => annotation.passageId)).size}/${material.passages.length}\n\n${currentComments.map((annotation) => `- [Passage ${annotation.ordinal + 1} · ${passageLocation(annotation.location)}](#passage-${annotation.ordinal + 1}) — ${escapeImportedWikilinks(annotation.body.split(/\r?\n/)[0] ?? "Comment").replaceAll("[", "&#91;").replaceAll("]", "&#93;")}`).join("\n")}`
+        ? `**Passages with comments:** ${new Set(currentComments.map((annotation) => annotation.passageId)).size}/${material.passages.length}\n\n${currentComments.map((annotation) => `- [Passage ${annotation.ordinal + 1} · ${passageLocation(annotation.location)}](#passage-${annotation.ordinal + 1}) — ${escapeImportedWikilinks(normalizeMathText(annotation.body.split(/\r?\n/)[0] ?? "Comment")).replaceAll("[", "&#91;").replaceAll("]", "&#93;")}`).join("\n")}`
         : "No passage comments yet. Add exam emphasis, questions, or personal notes from Review & comment in the course.";
       const generated = [
           `**Course:** ${wikilink("Course.md", data.course.title)}`,

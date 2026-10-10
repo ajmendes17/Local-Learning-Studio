@@ -71,7 +71,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     const courseId = courseResponse.json().id as string;
     const configResponse = await app.inject({ method: "POST", url: "/api/obsidian/config", payload: { vaultPath } });
     assert.equal(configResponse.statusCode, 200, configResponse.body);
-    const sourceUpload = markdownUpload("Bell-states-reading.md", "# Bell states\n\nOBSIDIAN_SOURCE_SENTINEL: local-state vectors can be entangled.\n\nRelated note: [[Other Class/Exam#Coverage|coverage]].\n\nEmbedded note: ![[private-class-note]].\n\n## Extraction boundary\n\n<!-- LLS:GENERATED:START -->\nThis marker came from source text and must remain inert.\n<!-- LLS:GENERATED:END -->");
+    const sourceUpload = markdownUpload("Bell-states-reading.md", "# Bell states\n\nOBSIDIAN_SOURCE_SENTINEL: local-state vectors can be entangled; |0〉 and |1〉 combine as (|0〉 + |1〉)/√2.\n\nRelated note: [[Other Class/Exam#Coverage|coverage]].\n\nEmbedded note: ![[private-class-note]].\n\n## Extraction boundary\n\n<!-- LLS:GENERATED:START -->\nThis marker came from source text and must remain inert.\n<!-- LLS:GENERATED:END -->");
     const uploaded = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/materials?kind=reading`,
       headers: { "content-type": sourceUpload.contentType }, payload: sourceUpload.payload,
@@ -82,7 +82,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     const firstPassageId = uploadedPassages.json().passages[0].id as string;
     const annotationResponse = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/materials/${uploaded.json().id}/annotations`,
-      payload: { passageId: firstPassageId, body: "Professor emphasis: know how Bell states are constructed.\nSee [[Other Class/Exam]]." },
+      payload: { passageId: firstPassageId, body: "Professor emphasis: compare |0〉 and |1〉 in (|0〉 + |1〉)/√2.\nSee [[Other Class/Exam]]." },
     });
     assert.equal(annotationResponse.statusCode, 201, annotationResponse.body);
     const conceptResponse = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/concepts`, payload: { stableKey: "bell-states", title: "Bell states", description: "A topic used to verify exported practice evidence." } });
@@ -150,6 +150,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(sourceFiles.length, 1);
     const sourceNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "utf8");
     assert.match(sourceNote, /OBSIDIAN_SOURCE_SENTINEL/);
+    assert.match(sourceNote, /OBSIDIAN_SOURCE_SENTINEL:[\s\S]*\$\\ket\{0\}\$ and \$\\ket\{1\}\$ combine as \(\$\\ket\{0\}\$ \+ \$\\ket\{1\}\$\)\/\$\\sqrt\{2\}\$\./);
     assert.match(sourceNote, /Source text|Extracted source text/);
     assert.match(sourceNote, /Lines \d+–\d+/);
     assert.match(sourceNote, /&lt;!-- LLS:GENERATED:START --&gt;/);
@@ -157,8 +158,8 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(sourceNote, /&#91;&#91;Other Class\/Exam#Coverage\|coverage&#93;&#93;/);
     assert.match(sourceNote, /!&#91;&#91;private-class-note&#93;&#93;/);
     assert.doesNotMatch(sourceNote, /(?<!!)\[\[Other Class\/Exam|!\[\[private-class-note/);
-    assert.match(sourceNote, /Passage 1[\s\S]*Professor emphasis: know how Bell states are constructed[\s\S]*&#91;&#91;Other Class\/Exam&#93;&#93;/);
-    assert.match(sourceNote, /## Review notes[\s\S]*Passages with comments:\*\* 1\/\d+[\s\S]*\[Passage 1 · Lines \d+–\d+[^\]]*\]\(#passage-1\) — Professor emphasis: know how Bell states are constructed\.\n\n## Extracted source text/);
+    assert.match(sourceNote, /Passage 1[\s\S]*Professor emphasis: compare \$\\ket\{0\}\$ and \$\\ket\{1\}\$ in \(\$\\ket\{0\}\$ \+ \$\\ket\{1\}\$\)\/\$\\sqrt\{2\}\$\.[\s\S]*&#91;&#91;Other Class\/Exam&#93;&#93;/);
+    assert.match(sourceNote, /## Review notes[\s\S]*Passages with comments:\*\* 1\/\d+[\s\S]*\[Passage 1 · Lines \d+–\d+[^\]]*\]\(#passage-1\) — Professor emphasis: compare \$\\ket\{0\}\$ and \$\\ket\{1\}\$ in \(\$\\ket\{0\}\$ \+ \$\\ket\{1\}\$\)\/\$\\sqrt\{2\}\$\.\n\n## Extracted source text/);
     assert.match(sourceNote, /<a id="passage-1"><\/a>[\s\S]*### Passage 1/);
     assert.doesNotMatch(sourceNote, /\[\[Other Class\/Exam\]\]/);
     assert.match(sourceNote, /\*\*Practice activity:\*\* 0\/1 scored checks correct; 1 unscored/);
@@ -203,7 +204,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(refreshedJournal, /Review eigenstate notation next week\./);
     assert.match(refreshedJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$ and \$\\ket\{0\}\$\?/);
     const refreshedSourceNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "utf8");
-    assert.match(refreshedSourceNote, /## Comments from older source versions[\s\S]*OBSIDIAN_SOURCE_SENTINEL[\s\S]*Professor emphasis: know how Bell states are constructed/);
+    assert.match(refreshedSourceNote, /## Comments from older source versions[\s\S]*OBSIDIAN_SOURCE_SENTINEL[\s\S]*Professor emphasis: compare \|0〉 and \|1〉 in \(\|0〉 \+ \|1〉\)\/√2/);
     const finalJournal = await readFile(studyJournalPath, "utf8");
     assert.match(finalJournal, /Review eigenstate notation next week\./);
     assert.equal(finalJournal.includes("\u007f"), false);
