@@ -93,8 +93,8 @@ test("knowledge dashboard keeps mapped, learner-created, and instructor-scope to
   assert.match(html, /Midterm 1/);
   assert.match(html, /Partial trace/);
   assert.match(html, /1 topic with saved attempts/);
-  assert.match(html, /1<\/span><span>topics to revisit/);
-  assert.match(html, /Revisit a topic after a difficult check\./);
+  assert.match(html, /0<\/span><span>scored topics to revisit/);
+  assert.match(html, /Check a saved recall response\./);
   assert.match(html, /next-step-topic">A learner-created topic<\/div>/);
   assert.match(html, /Study suggested topic/);
   assert.match(html, /No independent checks yet/);
@@ -115,8 +115,30 @@ test("knowledge dashboard recommends revisiting incomplete and unsupported check
     onStudyTopic: () => undefined,
   }));
 
-  assert.match(html, /1<\/span><span>topics to revisit/);
+  assert.match(html, /1<\/span><span>scored topics to revisit/);
   assert.match(html, /Needs another pass/);
+  assert.match(html, /Revisit a topic after a difficult check\./);
+});
+
+test("knowledge dashboard prioritizes a difficult check and explains its suggestion", () => {
+  const secondCourse = { ...course, id: "b4ad088d-a83f-407c-b9f6-7ec0a5d7c062", title: "Algorithms", code: "CSCI 400" } as CourseSummary;
+  const secondProfile = {
+    ...profile,
+    concepts: [{ ...profile.concepts[0]!, id: "f38f1a3b-50da-443a-81b7-e0a8fa2712c0", title: "A lesson-only topic", attemptCount: 0, scoredAttemptCount: 0, latestOutcome: null, sessionCount: 1, lastPracticedAt: null, lastSessionAt: "2026-01-03T00:00:00.000Z" }],
+    assessments: [],
+  } as LearnerProfileResponse;
+  const html = renderToStaticMarkup(createElement(KnowledgePage, {
+    profiles: [
+      { course, profile: secondProfile, methods: [], courseMap: null },
+      { course: secondCourse, profile: { ...profile, assessments: [], concepts: [{ ...profile.concepts[0]!, id: "b38f1a3b-50da-443a-81b7-e0a8fa2712c0", title: "A difficult scored topic", attemptCount: 2, scoredAttemptCount: 2, correctCount: 0, independentScoredAttemptCount: 0, independentCorrectCount: 0, latestOutcome: "incorrect", lastPracticedAt: "2026-01-04T00:00:00.000Z", sessionCount: 0, lastSessionAt: null }] }, methods: [], courseMap: null },
+    ],
+    loading: false,
+    error: null,
+    onOpenCourse: () => undefined,
+    onStudyTopic: () => undefined,
+  }));
+
+  assert.match(html, /next-step-topic">A difficult scored topic<\/div><div class="next-step-context"><span>CSCI 400<\/span><span>A scored check needs another pass<\/span>/);
   assert.match(html, /Revisit a topic after a difficult check\./);
 });
 
