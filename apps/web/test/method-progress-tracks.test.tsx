@@ -18,8 +18,8 @@ function renderTracks(overrides: Partial<Parameters<typeof MethodProgressTracks>
 test("ungraded methods show unmeasured states instead of zero-percent score bars", () => {
   const html = renderTracks();
 
-  assert.match(html, /No scored checks yet/);
-  assert.match(html, /No independent checks yet/);
+  assert.match(html, /Ungraded recall and teach-back are tracked separately\./);
+  assert.match(html, /No solo scored checks yet\./);
   assert.doesNotMatch(html, /role="progressbar"/);
 });
 
@@ -30,8 +30,8 @@ test("scored but supported attempts do not imply independent accuracy is zero", 
     scoredAttemptCount: 3,
   });
 
-  assert.match(html, /role="progressbar" aria-label="Quiz first all scored check results"[^>]*aria-valuenow="67"/);
-  assert.match(html, /No independent checks yet/);
+  assert.match(html, /role="progressbar" aria-label="Quiz first scored check accuracy"[^>]*aria-valuenow="67"/);
+  assert.match(html, /No solo scored checks yet\./);
   assert.equal((html.match(/role="progressbar"/g) ?? []).length, 1);
 });
 
@@ -44,7 +44,22 @@ test("observed scored and independent results render separate measured bars", ()
     independentScoredAttemptCount: 2,
   });
 
-  assert.match(html, /aria-label="Error analysis all scored check results"[^>]*aria-valuenow="50"/);
-  assert.match(html, /aria-label="Error analysis independent check results"[^>]*aria-valuenow="50"/);
-  assert.doesNotMatch(html, /No (?:scored|independent) checks yet/);
+  assert.match(html, /aria-label="Error analysis scored check accuracy"[^>]*aria-valuenow="50"/);
+  assert.match(html, /aria-label="Error analysis independent check accuracy"[^>]*aria-valuenow="50"/);
+  assert.doesNotMatch(html, /No solo scored checks yet|Ungraded recall/);
+});
+
+test("inconsistent counts cannot render accuracy above 100 percent", () => {
+  const html = renderTracks({
+    correctCount: 5,
+    scoredAttemptCount: 2,
+    independentCorrectCount: 4,
+    independentScoredAttemptCount: 1,
+  });
+
+  assert.match(html, /<strong>100%<\/strong>/);
+  assert.match(html, /<strong>2\/2<\/strong>/);
+  assert.match(html, /<strong>1\/1<\/strong>/);
+  assert.equal((html.match(/aria-valuenow="100"/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /aria-valuenow="101"|aria-valuenow="200"/);
 });
