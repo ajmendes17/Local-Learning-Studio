@@ -310,18 +310,23 @@ export class ObsidianVault {
       const reviewNotes = currentComments.length
         ? `**Passages with comments:** ${new Set(currentComments.map((annotation) => annotation.passageId)).size}/${material.passages.length}\n\n${currentComments.map((annotation) => `- [Passage ${annotation.ordinal + 1} · ${passageLocation(annotation.location)}](#passage-${annotation.ordinal + 1}) — ${escapeImportedWikilinks(normalizeMathText(annotation.body.split(/\r?\n/)[0] ?? "Comment")).replaceAll("[", "&#91;").replaceAll("]", "&#93;")}`).join("\n")}`
         : "No passage comments yet. Add exam emphasis, questions, or personal notes from Review & comment in the course.";
+      const mapStatus = data.map ? data.mapStatus === "stale" ? "Accepted structure · stale" : "Accepted structure · current" : "No accepted map";
+      const relatedTopicsHeading = data.map && data.mapStatus === "stale"
+        ? "## Related course topics · stale accepted structure"
+        : "## Related course topics";
       const generated = [
           `**Course:** ${wikilink("Course.md", data.course.title)}`,
         `**Original file:** ${material.originalName}`,
         `**Kind:** ${material.kind}`,
         `**Extraction:** ${material.status}`,
+        `**Course map status:** ${mapStatus}`,
         `**Extracted passages:** ${material.passages.length}`,
         `**Practice activity:** ${scoredProgress(sourceProgress?.attemptCount ?? 0, sourceProgress?.scoredAttemptCount, sourceProgress?.correctCount ?? 0)}`,
         `**Mapped topics practiced:** ${relatedConcepts.length ? `${practicedMappedTopicCount}/${relatedConcepts.length}` : "No accepted topic links"}`,
         `**Mapped topics with lessons started:** ${relatedConcepts.length ? `${startedMappedTopicCount}/${relatedConcepts.length}` : "No accepted topic links"}`,
         `**Lesson sessions opened:** ${sourceProgress?.sessionCount ?? 0}${sourceProgress?.lastSessionAt ? ` · last ${sourceProgress.lastSessionAt}` : ""}`,
         `**Imported:** ${material.createdAt}`,
-        "", "## Related course topics", relatedTopics,
+        "", relatedTopicsHeading, ...(data.map && data.mapStatus === "stale" ? ["> These topic links reflect an older accepted course map. Review the current draft in Local Learning Studio before relying on these relationships."] : []), relatedTopics,
         "", "## Related assessments", relatedAssessments,
         "", "## Practice by topic", practiceTopics,
         "", "## Review notes", reviewNotes,

@@ -565,6 +565,68 @@ test("study attempts from a learner exam scope update assessment and topic progr
   await rm(root, { recursive: true });
 });
 
+test("exam topic study selects a matching class source and marks unmatched topics as general knowledge", async () => {
+  const { app, root, prompts } = await createAppWithStudyModel();
+  try {
+    const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Quantum Information" } });
+    const courseId = course.json().id as string;
+    const syllabus = uploadPayload("Syllabus.md", "# Bell states\n\nBell states are a course topic. SYLLABUS_MATCH_SENTINEL");
+    const syllabusUpload = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/materials?kind=syllabus`,
+      headers: { "content-type": syllabus.contentType }, payload: syllabus.payload,
+    });
+    const reading = uploadPayload("Bell states reading.md", "# Bell states\n\nBell states are entangled two-qubit states. READING_MATCH_SENTINEL");
+    const readingUpload = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/materials?kind=reading`,
+      headers: { "content-type": reading.contentType }, payload: reading.payload,
+    });
+    const assessment = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/assessments`,
+      payload: { title: "Professor’s exam list", kind: "exam", topics: [
+        { title: "Bell states", importance: "normal", provenance: "learner" },
+        { title: "Unlisted topic", importance: "normal", provenance: "learner" },
+      ] },
+    });
+    const sourceGrounded = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-session`,
+      payload: { topic: "Bell states", method: "explanation", assessmentId: assessment.json().id },
+    });
+    assert.equal(sourceGrounded.statusCode, 200, sourceGrounded.body);
+    assert.equal(sourceGrounded.json().sourceMaterialId, readingUpload.json().id, "a focused reading should win a tie with the syllabus");
+    assert.equal(sourceGrounded.json().sourceBasis, "course-materials");
+    const groundedInput = JSON.parse(prompts.at(-1)!.split("INPUT_JSON\n\n")[1]!);
+    assert.equal(groundedInput.sourceMaterial.id, readingUpload.json().id);
+    assert.ok(groundedInput.sourceMaterial.passages.some((passage: { content: string }) => passage.content.includes("READING_MATCH_SENTINEL")));
+    assert.equal(groundedInput.sourceMaterial.passages.some((passage: { content: string }) => passage.content.includes("SYLLABUS_MATCH_SENTINEL")), false);
+    const adaptive = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${sourceGrounded.json().sessionId}/next-question`, payload: {},
+    });
+    assert.equal(adaptive.statusCode, 200, adaptive.body);
+    assert.equal(adaptive.json().sourceMaterialId, readingUpload.json().id);
+    assert.equal(adaptive.json().assessmentId, assessment.json().id);
+    assert.match(prompts.at(-1) ?? "", /READING_MATCH_SENTINEL/);
+    const reopenedGrounded = await app.inject({
+      method: "GET", url: `/api/courses/${courseId}/learner/study-sessions/${sourceGrounded.json().sessionId}`,
+    });
+    assert.equal(reopenedGrounded.json().sourceMaterialId, readingUpload.json().id);
+
+    const unmatched = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-session`,
+      payload: { topic: "Unlisted topic", method: "explanation", assessmentId: assessment.json().id },
+    });
+    assert.equal(unmatched.statusCode, 200, unmatched.body);
+    assert.equal(unmatched.json().sourceMaterialId, null);
+    assert.equal(unmatched.json().sourceBasis, "general-knowledge");
+    const unmatchedInput = JSON.parse(prompts.at(-1)!.split("INPUT_JSON\n\n")[1]!);
+    assert.equal(unmatchedInput.sourceMaterial, null);
+    assert.match(prompts.at(-1) ?? "", /Clearly mark that content as not verified against the learner's course/);
+    assert.equal(syllabusUpload.statusCode, 201);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("study methods send distinct learning directions", async () => {
   const { app, root, prompts } = await createAppWithStudyModel();
   const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Quantum Information" } });

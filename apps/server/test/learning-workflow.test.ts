@@ -257,12 +257,13 @@ test("course sources flow through cached classification, map review, and accepta
     "lecture.md",
     "# Feedback\n\nUse retrieval evidence to revise the plan.",
   );
-  await app.inject({
+  const secondUploadResponse = await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/materials?kind=lecture-notes`,
     headers: { "content-type": secondUpload.contentType },
     payload: secondUpload.payload,
   });
+  const secondMaterialId = secondUploadResponse.json().id as string;
   const staleAcceptResponse = await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/course-map/${courseMap.id}/accept`,
@@ -297,6 +298,9 @@ test("course sources flow through cached classification, map review, and accepta
   assert.match(draftCourseNote, /Course map:\*\* Accepted structure · stale/);
   assert.match(draftCourseNote, /Current map draft:\*\* Ready for review/);
   assert.match(draftCourseNote, /current replacement draft is ready for review/);
+  const staleLinkedSourceNote = await readFile(join(vaultPath, draftExport.json().courseFolder, "sources", `lecture--${secondMaterialId.slice(0, 8)}.md`), "utf8");
+  assert.match(staleLinkedSourceNote, /Course map status:\*\* Accepted structure · stale/);
+  assert.match(staleLinkedSourceNote, /Related course topics · stale accepted structure[\s\S]*older accepted course map/);
 
   const instructorScopeResponse = await app.inject({
     method: "POST",

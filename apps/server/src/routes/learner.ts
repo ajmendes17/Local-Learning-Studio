@@ -58,6 +58,55 @@ function acceptedContrastTopics(map: CourseMapProposal | null, rawTopic: string)
   return [...candidates.values()].slice(0, 6);
 }
 
+function topicTerms(value: string) {
+  return value.normalize("NFKC").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function findMatchingStudySource(courseId: string, topic: string, options: {
+  courses: CourseLibrary;
+  sources: SourceLibrary;
+}) {
+  const terms = topicTerms(topic);
+  const usefulTerms = terms.filter((term) => term.length > 2 && !["and", "for", "from", "into", "the", "with"].includes(term));
+  if (terms.length < 2 || usefulTerms.length < 2) return null;
+  const phrase = terms.join(" ");
+
+  const kindPriority: Record<string, number> = {
+    reading: 4,
+    "lecture-notes": 4,
+    "study-guide": 4,
+    reference: 3,
+    assignment: 2,
+    syllabus: 1,
+    other: 0,
+  };
+  let best: { material: NonNullable<ReturnType<SourceLibrary["getMaterial"]>>; matchScore: number; kindPriority: number } | null = null;
+  const materials = options.courses.getCourseDetail(courseId)?.materials ?? [];
+  for (const material of materials) {
+    if (material.status !== "ready" || !material.passageCount) continue;
+    let offset = 0;
+    while (offset < material.passageCount) {
+      const passages = options.sources.getPassages(courseId, material.id, 200, offset);
+      if (!passages.length) break;
+      for (const passage of passages) {
+        const passageTerms = topicTerms(passage.content);
+        const passageTermSet = new Set(passageTerms);
+        const exactPhrase = passageTerms.join(" ").includes(phrase);
+        const allUsefulTerms = usefulTerms.every((term) => passageTermSet.has(term));
+        if (!exactPhrase && !allUsefulTerms) continue;
+        const matchScore = exactPhrase ? 2 : 1;
+        const priority = kindPriority[material.kind] ?? 0;
+        if (!best || matchScore > best.matchScore || (matchScore === best.matchScore && priority > best.kindPriority)) {
+          best = { material, matchScore, kindPriority: priority };
+        }
+      }
+      offset += passages.length;
+      if (passages.length < 200) break;
+    }
+  }
+  return best?.material ?? null;
+}
+
 export async function registerLearnerRoutes(app: FastifyInstance, options: {
   learner: LearnerLibrary;
   courses: CourseLibrary;
@@ -239,11 +288,11 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
     if (!courseId) return reply.code(404).send({ error: "Class not found." });
     const parsed = StudySessionRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Study request is invalid." });
-    const sourceMaterial = parsed.data.sourceMaterialId
-      ? options.sources.getMaterial(courseId, parsed.data.sourceMaterialId)
+    const reviewSession = parsed.data.reviewSessionId
+      ? options.learner.getStudySession(courseId, parsed.data.reviewSessionId)
       : null;
-    if (parsed.data.sourceMaterialId && (!sourceMaterial || sourceMaterial.status !== "ready")) {
-      return reply.code(422).send({ error: "That assignment is unavailable for source-grounded study." });
+    if (parsed.data.reviewSessionId && !reviewSession) {
+      return reply.code(422).send({ error: "The study session selected for remediation is unavailable in this class." });
     }
     const assessment = parsed.data.assessmentId
       ? options.learner.getProfile(courseId).assessments.find(({ id }) => id === parsed.data.assessmentId)
@@ -253,11 +302,15 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       ? options.learner.findAssessmentTopic(courseId, assessment.id, parsed.data.topic)
       : undefined;
     if (assessment && !assessmentTopic) return reply.code(422).send({ error: "Choose a topic from the selected exam topic list." });
-    const reviewSession = parsed.data.reviewSessionId
-      ? options.learner.getStudySession(courseId, parsed.data.reviewSessionId)
+    const requestedSourceMaterialId = parsed.data.sourceMaterialId ?? reviewSession?.sourceMaterialId ?? undefined;
+    let sourceMaterial = requestedSourceMaterialId
+      ? options.sources.getMaterial(courseId, requestedSourceMaterialId)
       : null;
-    if (parsed.data.reviewSessionId && !reviewSession) {
-      return reply.code(422).send({ error: "The study session selected for remediation is unavailable in this class." });
+    if (requestedSourceMaterialId && (!sourceMaterial || sourceMaterial.status !== "ready")) {
+      return reply.code(422).send({ error: "That assignment is unavailable for source-grounded study." });
+    }
+    if (!sourceMaterial && assessment && assessmentTopic && !reviewSession) {
+      sourceMaterial = findMatchingStudySource(courseId, assessmentTopic.title, options);
     }
     if (reviewSession && (reviewSession.topic !== parsed.data.topic
       || (reviewSession.assessmentId ?? null) !== (assessment?.id ?? null)
@@ -300,7 +353,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       const result = await options.codex.run("compose-study-lesson", [
         "Use $compose-study-lesson for a direct study session.",
         sourceMaterial
-          ? "Ground the lesson and knowledge check in the supplied assignment passages. Keep problem statements and course-specific notation faithful to the source; explain the underlying ideas without inventing assignment details. Mark sourceBasis as course-materials."
+          ? "Ground the lesson and knowledge check in the supplied course-material passages. Keep source-specific claims and notation faithful to the material; explain underlying ideas without inventing details. Mark sourceBasis as course-materials."
           : "Teach from reliable general knowledge when no course passages are supplied. Clearly mark that content as not verified against the learner's course.",
         assessment ? "Focus this session on the selected learner-provided assessment topic. Preserve the instructor's wording and do not expand into unrelated topics." : "",
         reviewSession ? "This is a focused remediation follow-up. Use the saved attempt evidence to address the learner's specific uncertainty. For a miss or unscored response, explain the likely gap briefly before a different example; for a low-confidence correct response, test transfer. Do not repeat the old question or reveal the new answer in advance." : "",
@@ -316,7 +369,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         "Never say the learner has mastered the topic based on this generated lesson.",
         "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, ...(parsed.data.method === "compare-contrast" ? { acceptedMapRelatedConcepts: contrastTopics } : {}), sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
       ].join("\n\n"), StudySessionGenerationContentSchema);
-      const content = StudySessionContentSchema.parse({ ...result.output, ...(sourceMaterial ? { sourceBasis: "course-materials" } : {}), conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(openResponse ? { options: [], answerIndex: null } : {}) });
+      const content = StudySessionContentSchema.parse({ ...result.output, sourceBasis: sourceMaterial ? "course-materials" : "general-knowledge", conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(openResponse ? { options: [], answerIndex: null } : {}) });
       return StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, concept.id, content));
     } catch (error) {
       if (error instanceof Error && error.name === "CodexRunError") {
