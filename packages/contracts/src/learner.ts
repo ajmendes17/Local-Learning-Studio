@@ -351,14 +351,16 @@ export const StudySessionContentSchema = z.object({
   lesson: z.string().min(1),
   example: z.string().default(""),
   question: z.string().min(1),
-  options: z.array(z.string().min(1)).min(2).max(6),
-  answerIndex: z.number().int().nonnegative(),
+  options: z.array(z.string().min(1)).max(6).default([]),
+  answerIndex: z.number().int().nonnegative().nullable().optional(),
   feedback: z.string().min(1),
   clarification: z.string().min(1),
   hints: z.array(z.string().min(1).max(1200)).max(3).default([]),
-}).refine((value) => value.answerIndex < value.options.length, {
-  message: "Answer index must name one of the options.",
-  path: ["answerIndex"],
+}).refine((value) => value.method === "free-recall"
+  ? value.options.length === 0 && value.answerIndex == null
+  : value.options.length >= 2 && value.answerIndex != null && value.answerIndex < value.options.length, {
+  message: "Free recall has no choices or answer key; other methods need an indexed set of answer choices.",
+  path: ["options"],
 });
 export const StudyQuestionSchema = z.object({
   question: z.string().min(1).max(8000),
@@ -369,6 +371,11 @@ export const StudyQuestionSchema = z.object({
 }).refine((value) => value.answerIndex < value.options.length, {
   message: "Answer index must name one of the options.",
   path: ["answerIndex"],
+});
+export const StudyFreeRecallQuestionSchema = z.object({
+  question: z.string().min(1).max(8000),
+  feedback: z.string().min(1).max(4000),
+  hints: z.array(z.string().min(1).max(1200)).min(1).max(3),
 });
 export const StudySessionGenerationContentSchema = StudySessionContentSchema.safeExtend({
   hints: z.array(z.string().min(1).max(1200)).min(1).max(3),

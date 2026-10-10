@@ -182,6 +182,12 @@ export class LearnerLibrary {
       | { id: string; contentJson: string; createdAt: string; inferredSourceMaterialId: string | null } | undefined;
     if (!row) return null;
     const content = JSON.parse(row.contentJson);
+    // Older free-recall sessions stored unused multiple-choice placeholders. Hide them
+    // when reopening so every free-recall view follows the open-response contract.
+    if (content.method === "free-recall") {
+      content.options = [];
+      content.answerIndex = null;
+    }
     return { sessionId: row.id, createdAt: row.createdAt, ...content,
       sourceMaterialId: content.sourceMaterialId ?? row.inferredSourceMaterialId ?? null };
   }

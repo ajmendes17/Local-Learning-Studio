@@ -13,6 +13,7 @@ import {
   StudySessionRecordSchema,
   StudySessionRequestSchema,
   StudyQuestionSchema,
+  StudyFreeRecallQuestionSchema,
   StudyAttemptCreateSchema,
   LearnerPatternReviewResultSchema,
   LearnerPatternReviewTriggerSchema,
@@ -253,7 +254,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       "worked-example": "Lead with a complete worked example, show why each step is valid, then identify the reusable pattern. Keep the learner's practice check separate.",
       quiz: "Use retrieval first: make the knowledge check test the central idea before revealing the lesson. Keep the lesson as a concise debrief that the learner can open after attempting the check.",
       analogy: "Choose a concrete analogy that maps the important parts of the concept, state where the analogy breaks, then connect it back to precise terms.",
-      "free-recall": "Use closed-book free recall: ask one open-ended question that requires the learner to explain the core concept in their own words. Do not make the question multiple choice. Keep the answer explanation hidden until the learner submits a short response; after submission, show a concise reference explanation they can compare against. Do not claim the response was graded.",
+      "free-recall": "Start with unaided free recall: ask one open-ended question that requires the learner to explain the core concept in their own words. Progressive in-app hints may be requested and are tracked separately. Do not make the question multiple choice. Keep the answer explanation hidden until the learner submits a short response; after submission, show a concise reference explanation they can compare against. Do not claim the response was graded.",
     } satisfies Record<typeof parsed.data.method, string>;
     try {
       const result = await options.codex.run("compose-study-lesson", [
@@ -264,14 +265,14 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         assessment ? "Focus this session on the selected learner-provided assessment topic. Preserve the instructor's wording and do not expand into unrelated topics." : "",
         reviewSession ? "This is a focused remediation follow-up. Use the saved attempt evidence to address the learner's specific uncertainty. For a miss or unscored response, explain the likely gap briefly before a different example; for a low-confidence correct response, test transfer. Do not repeat the old question or reveal the new answer in advance." : "",
         parsed.data.method === "free-recall"
-          ? "Return one concise lesson, an optional worked example, one open-ended free-recall question, a concise reference explanation in feedback, a clarification answer, and one or two progressive hints that do not reveal the answer. The contract also requires options and an answer index; provide neutral placeholders for those fields because the free-recall interface will not display or score them."
+          ? "Return one concise lesson, an optional worked example, one open-ended free-recall question, a concise reference explanation in feedback, a clarification answer, and one or two progressive hints that do not reveal the answer. Do not include answer choices or an answer index."
           : "Return one concise lesson, an optional worked example, one four-option knowledge check, the correct option index, concise immediate feedback, a clarification answer, and one or two progressive hints that do not reveal the answer.",
         "Write mathematical notation with Markdown math delimiters: use $...$ inline; for display equations put $$ on its own line, the equation on following line(s), and the closing $$ on its own line. For quantum notation use supported LaTeX such as \\ket{\\psi}, \\bra{\\phi}, and \\braket{\\phi|\\psi}; do not leave raw TeX commands outside math delimiters.",
         methodDirections[parsed.data.method],
         "Never say the learner has mastered the topic based on this generated lesson.",
         "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
       ].join("\n\n"), StudySessionGenerationContentSchema);
-      const content = StudySessionContentSchema.parse({ ...result.output, ...(sourceMaterial ? { sourceBasis: "course-materials" } : {}), conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method });
+      const content = StudySessionContentSchema.parse({ ...result.output, ...(sourceMaterial ? { sourceBasis: "course-materials" } : {}), conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(parsed.data.method === "free-recall" ? { options: [], answerIndex: null } : {}) });
       return StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, concept.id, content));
     } catch (error) {
       if (error instanceof Error && error.name === "CodexRunError") {
@@ -308,14 +309,19 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           .map(({ id, ordinal, content, location }) => ({ id, ordinal, content: content.slice(0, 1800), location }))
           .slice(0, 24)
         : [];
+      const questionSchema = session.method === "free-recall" ? StudyFreeRecallQuestionSchema : StudyQuestionSchema;
       const result = await options.codex.run("generate-adaptive-practice", [
         session.method === "free-recall"
           ? "Use $generate-adaptive-practice to create one new open-ended free-recall prompt for this same concept. Ask the learner to explain or retrieve the idea in their own words; the learner will submit text and compare it with a reference explanation, so do not make the prompt multiple choice."
           : "Use $generate-adaptive-practice to create exactly one new multiple-choice question for this same concept.",
         "Use the attempt history to target likely uncertainty. Change the surface form or reasoning path; do not repeat any prior question or simply paraphrase its choices.",
-        "Return a compact question, 2 to 6 plausible options, a validated correct option index, concise corrective feedback, and up to two progressive hints that do not reveal the answer.",
+        session.method === "free-recall"
+          ? "Return the open-ended prompt, its concise reference explanation as feedback, and up to two progressive hints. Do not return choices or an answer key."
+          : "Return a compact question, 2 to 6 plausible options, a validated correct option index, concise corrective feedback, and up to two progressive hints that do not reveal the answer.",
         sourceMaterial
-          ? "Ground the new question, options, answer, feedback, and hints in the supplied source passages. Preserve the source's course-specific notation and facts; do not introduce unsupported details."
+          ? session.method === "free-recall"
+            ? "Ground the open-ended prompt, reference explanation, and hints in the supplied source passages. Preserve the source's course-specific notation and facts; do not introduce unsupported details or add choices."
+            : "Ground the new question, options, answer, feedback, and hints in the supplied source passages. Preserve the source's course-specific notation and facts; do not introduce unsupported details."
           : "No course source passages are attached. Use general knowledge and keep the question marked as not course-verified.",
         "Format inline equations as $...$ and put display equations in standalone $$ blocks with the opening and closing $$ on their own lines. Keep raw TeX commands inside math delimiters.",
         assessment ? "Keep the question within the selected learner-provided assessment topic and preserve the instructor's wording." : "",
@@ -330,8 +336,8 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           recentAttempts,
           previousQuestion: session.question,
         }),
-      ].join("\n\n"), StudyQuestionSchema);
-      const question = StudyQuestionSchema.parse(result.output);
+      ].join("\n\n"), questionSchema);
+      const question = questionSchema.parse(result.output);
       const { sessionId: _oldSessionId, createdAt: _oldCreatedAt, ...sessionContent } = session;
       const nextSession = StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, session.conceptId, {
         ...sessionContent,

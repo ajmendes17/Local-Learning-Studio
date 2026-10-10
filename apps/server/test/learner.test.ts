@@ -33,13 +33,15 @@ async function createAppWithStudyModel() {
       const output = outputSchema.parse({
         conceptId: randomUUID(),
         topic: "model topic",
-        method: "explanation",
+        method: prompt.includes("Start with unaided free recall") ? "free-recall" : "explanation",
         sourceBasis: "course-materials",
         lesson: "## Source-grounded idea\n\nThe key operation is $H\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.",
         example: "Apply the stated operation to the source problem.",
         question: "Which state does the source operation produce?",
-        options: ["$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
-        answerIndex: 2,
+        ...(prompt.includes("Start with unaided free recall") ? {} : {
+          options: ["$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
+          answerIndex: 2,
+        }),
         feedback: "The source identifies the equal superposition.",
         clarification: "The operation creates both basis components.",
         hints: ["Check the coefficients in the source."],
@@ -537,7 +539,7 @@ test("study methods send distinct learning directions", async () => {
     ["worked-example", /complete worked example/],
     ["quiz", /Use retrieval first/],
     ["analogy", /concrete analogy/],
-    ["free-recall", /closed-book free recall/],
+    ["free-recall", /Start with unaided free recall/],
   ] as const;
   for (const [method, direction] of methods) {
     const response = await app.inject({
@@ -569,6 +571,7 @@ test("free recall saves the learner response as ungraded and keeps the method in
     });
     assert.equal(study.statusCode, 200, study.body);
     assert.equal(study.json().method, "free-recall");
+    assert.deepEqual([study.json().options, study.json().answerIndex], [[], null]);
     assert.match(prompts.at(-1) ?? "", /open-ended free-recall question/);
     const saved = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
@@ -581,13 +584,27 @@ test("free recall saves the learner response as ungraded and keeps the method in
       },
     });
     assert.equal(saved.statusCode, 201, saved.body);
+    const database = new DatabaseSync(join(root, "data", "studio.sqlite"));
+    database.prepare("UPDATE study_sessions SET content_json=? WHERE id=?").run(
+      JSON.stringify({ ...study.json(), options: ["legacy distractor A", "legacy distractor B"], answerIndex: 0 }),
+      study.json().sessionId,
+    );
+    database.close();
     const reopened = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions/${study.json().sessionId}` });
     assert.equal(reopened.statusCode, 200, reopened.body);
     assert.equal(reopened.json().method, "free-recall");
+    assert.deepEqual([reopened.json().options, reopened.json().answerIndex], [[], null]);
     assert.equal(reopened.json().attempts[0].response, "I recall that Bell states are entangled two-qubit states.");
     assert.equal(reopened.json().attempts[0].outcome, "not-graded");
+    const nextRecall = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${study.json().sessionId}/next-question`, payload: {},
+    });
+    assert.equal(nextRecall.statusCode, 200, nextRecall.body);
+    assert.equal(nextRecall.json().method, "free-recall");
+    assert.deepEqual([nextRecall.json().options, nextRecall.json().answerIndex], [[], null]);
+    assert.match(prompts.at(-1) ?? "", /Do not return choices or an answer key/);
     const history = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions` });
-    assert.equal(history.json()[0].method, "free-recall");
+    assert.equal(history.json().find((item: { sessionId: string }) => item.sessionId === study.json().sessionId).method, "free-recall");
     const progress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
     const recall = progress.json().find((item: { method: string }) => item.method === "free-recall");
     assert.deepEqual([recall.attemptCount, recall.scoredAttemptCount, recall.correctCount], [1, 0, 0]);
