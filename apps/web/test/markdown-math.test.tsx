@@ -46,6 +46,16 @@ test("PDF-style reconstructed Dirac fractions render as math", () => {
   assert.doesNotMatch(html, /katex-error|\|0〉|\|1〉/);
 });
 
+test("Unicode subscript and superscript ket labels render through KaTeX", () => {
+  const html = renderToStaticMarkup(createElement(MarkdownMath, {
+    inline: true,
+    content: "|ψ₁⟩, |Φ⁺⟩, and |n²⟩",
+  }));
+
+  assert.equal((html.match(/class="katex"/g) ?? []).length, 3);
+  assert.doesNotMatch(html, /katex-error|ParseError|ψ₁|Φ⁺|n²/);
+});
+
 test("imported Markdown keeps links and images inert while rendering text", () => {
   const html = renderToStaticMarkup(createElement(MarkdownMath, {
     content: "![diagram](https://example.invalid/image.png)\n\n[external reference](https://example.invalid/page)",

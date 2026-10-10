@@ -351,6 +351,7 @@ test("math text renders recognizable PDF Dirac notation without changing code or
   assert.equal(normalizeMathText("Dirac math: $| 0 〉 + | 1 〉$"), String.raw`Dirac math: $\ket{0} + \ket{1}$`);
   assert.equal(normalizeMathText("Projector: |+⟩⟨+|", { inline: true }), String.raw`Projector: $\ket{+}\bra{+}$`);
   assert.equal(normalizeMathText("For qubits, | a 〉 A ⊗ | b 〉 B."), String.raw`For qubits, $\ket{a}_A$ $\otimes$ $\ket{b}_B$.`);
+  assert.equal(normalizeMathText("State |ψ₁⟩, Bell pair |Φ⁺⟩ and excited level |n²⟩."), String.raw`State $\ket{\psi_{1}}$, Bell pair $\ket{\Phi^{+}}$ and excited level $\ket{n^{2}}$.`);
 });
 
 test("instructor topic lists persist as class-scoped learner assessment topics", async () => {

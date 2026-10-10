@@ -22,7 +22,11 @@ const diracSymbols: Record<string, string> = {
 
 function diracLabel(label: string) {
   const compact = label.trim().replace(/\s+/g, "").replace(/[−–]/g, "-");
+  const subscripts: Record<string, string> = { "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4", "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9", "₊": "+", "₋": "-", "₌": "=", "₍": "(", "₎": ")" };
+  const superscripts: Record<string, string> = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9", "⁺": "+", "⁻": "-", "⁼": "=", "⁽": "(", "⁾": ")" };
   return compact
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]+/gu, (run) => `^{${[...run].map((symbol) => superscripts[symbol] ?? symbol).join("")}}`)
+    .replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+/gu, (run) => `_{${[...run].map((symbol) => subscripts[symbol] ?? symbol).join("")}}`)
     .replace(/([α-ωΑ-Ω])([+-])/gu, "$1^{$2}")
     .replace(/[α-ωΑ-Ω]/gu, (symbol) => diracSymbols[symbol] ?? symbol);
 }
