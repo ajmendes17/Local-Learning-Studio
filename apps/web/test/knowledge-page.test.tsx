@@ -94,6 +94,7 @@ test("knowledge dashboard keeps mapped, learner-created, and instructor-scope to
   assert.match(html, /Partial trace/);
   assert.match(html, /1 topic with saved attempts/);
   assert.match(html, /No independent checks yet/);
+  assert.doesNotMatch(html, /role="progressbar" aria-label="Mapped but not practiced independent check accuracy"/);
   assert.doesNotMatch(html, /Bayesian inference|Recursive definitions|Quantum measurement/);
 });
 
@@ -119,5 +120,5 @@ test("knowledge topic profile shows independent check evidence separately from o
 
   assert.match(html, /2\/3 scored correct/);
   assert.match(html, /1\/2 independent checks correct/);
-  assert.match(html, /A learner-created topic independent check accuracy/);
+  assert.match(html, /role="progressbar" aria-label="A learner-created topic independent check accuracy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"/);
 });

@@ -28,6 +28,18 @@ function methodLabel(method: string) {
   return method.split("-").map((part) => part ? `${part[0]!.toUpperCase()}${part.slice(1)}` : part).join(" ");
 }
 
+function AccuracyMeter({ label, value, hasEvidence, independent = false }: { label: string; value: number; hasEvidence: boolean; independent?: boolean }) {
+  return <span
+    className={`progress-track${independent ? " progress-track--independent" : ""}`}
+    role={hasEvidence ? "progressbar" : undefined}
+    aria-label={hasEvidence ? label : undefined}
+    aria-valuemin={hasEvidence ? 0 : undefined}
+    aria-valuemax={hasEvidence ? 100 : undefined}
+    aria-valuenow={hasEvidence ? value : undefined}
+    aria-hidden={hasEvidence ? undefined : true}
+  ><span style={{ width: `${value}%` }} /></span>;
+}
+
 export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyTopic }: KnowledgePageProps) {
   const concepts = profiles.flatMap(({ course, profile, courseMap }) => {
     const evidenceByTitle = new Map(profile.concepts.map((concept) => [concept.title.trim().normalize("NFKC").toLocaleLowerCase(), concept]));
@@ -105,8 +117,8 @@ export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyT
                   return <article className="knowledge-topic" key={concept.id}>
                     <div className="knowledge-topic__heading"><div><span className="knowledge-topic__state">{topicState(concept)}</span><h3>{concept.title}</h3></div><span className="knowledge-topic__activity">{activityLabel(concept.attemptCount, concept.sessionCount)}</span></div>
                     <p>{concept.description || "This topic is in your course map. Study it to build evidence about what you can recall."}</p>
-                    <div className="knowledge-topic__meter"><div><span>{evidence}</span><span>{concept.scoredAttemptCount ? `${percent}%` : "—"}</span></div><span className="progress-track" role="progressbar" aria-label={`${concept.title} scored check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></span></div>
-                    <div className="knowledge-topic__meter knowledge-topic__meter--independent"><div><span>{independentAttempts ? `${independentCorrect}/${independentAttempts} independent checks correct` : "No independent checks yet"}</span><span>{independentAttempts ? `${independentPercent}%` : "—"}</span></div><span className="progress-track" role="progressbar" aria-label={`${concept.title} independent check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={independentPercent}><span style={{ width: `${independentPercent}%` }} /></span></div>
+                    <div className="knowledge-topic__meter"><div><span>{evidence}</span><span>{concept.scoredAttemptCount ? `${percent}%` : "—"}</span></div><AccuracyMeter label={`${concept.title} scored check accuracy`} value={percent} hasEvidence={concept.scoredAttemptCount > 0} /></div>
+                    <div className="knowledge-topic__meter knowledge-topic__meter--independent"><div><span>{independentAttempts ? `${independentCorrect}/${independentAttempts} independent checks correct` : "No independent checks yet"}</span><span>{independentAttempts ? `${independentPercent}%` : "—"}</span></div><AccuracyMeter label={`${concept.title} independent check accuracy`} value={independentPercent} hasEvidence={independentAttempts > 0} independent /></div>
                     <div className="knowledge-topic__actions"><button type="button" className="button-primary" onClick={() => onStudyTopic(course.id, concept.title)}>Study topic →</button><button type="button" className="button-secondary" onClick={() => onOpenCourse(course.id)}>Open class</button>{concept.lastPracticedAt ? <small>Last check {new Date(concept.lastPracticedAt).toLocaleDateString()}</small> : concept.lastSessionAt ? <small>Last lesson {new Date(concept.lastSessionAt).toLocaleDateString()}</small> : null}</div>
                   </article>;
                 })}</div> : <p className="knowledge-empty knowledge-empty--compact">No course-map topics yet. <button type="button" onClick={() => onOpenCourse(course.id)}>Open class to build its map →</button></p>}
