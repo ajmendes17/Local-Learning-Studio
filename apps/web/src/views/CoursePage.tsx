@@ -38,6 +38,7 @@ interface CoursePageProps {
   onStudy: () => void;
   onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string) => void;
   onStudyMaterial: (topic: string, materialId: string) => void;
+  onRefreshCourse: () => Promise<void>;
 }
 
 const materialKindLabels: Record<MaterialKind, string> = {
@@ -55,8 +56,21 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function MaterialRow({ courseId, material }: { courseId: string; material: CourseMaterial }) {
+function MaterialRow({ courseId, material, onRefresh }: { courseId: string; material: CourseMaterial; onRefresh: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
+  const [reprocessMessage, setReprocessMessage] = useState("");
+  async function reprocessSource() {
+    setReprocessing(true); setReprocessMessage("");
+    try {
+      const response = await fetch(`/api/courses/${courseId}/materials/${material.id}/reprocess`, { method: "POST" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not refresh extracted source text.");
+      setReprocessMessage("Extraction refreshed. Comments tied to changed passages may need review.");
+      await onRefresh();
+    } catch (error) { setReprocessMessage((error as Error).message); }
+    finally { setReprocessing(false); }
+  }
   const extension =
     material.originalName.split(".").pop()?.toUpperCase() ?? "FILE";
   const processingSummary =
@@ -101,7 +115,9 @@ function MaterialRow({ courseId, material }: { courseId: string; material: Cours
         {statusLabel}
       </span>
       <button type="button" className="material-row__review" disabled={material.status !== "ready"} aria-expanded={open} onClick={() => setOpen((current) => !current)}>{open ? "Close review" : "Review & comment"}</button>
+      <button type="button" className="material-row__review" disabled={reprocessing || !["ready", "failed"].includes(material.status)} onClick={() => void reprocessSource()}>{reprocessing ? "Refreshing…" : material.status === "failed" ? "Retry extraction" : "Refresh extraction"}</button>
     </li>
+    {reprocessMessage ? <li className="material-review-row" role="status">{reprocessMessage}</li> : null}
     {open ? <li className="material-review-row"><MaterialReview courseId={courseId} material={material} /></li> : null}
     </>
   );
@@ -235,6 +251,7 @@ export function CoursePage({
   onStudy,
   onStudyTopic,
   onStudyMaterial,
+  onRefreshCourse,
 }: CoursePageProps) {
   if (loading && !course) {
     return <main className="course-loading">Opening class…</main>;
@@ -300,7 +317,7 @@ export function CoursePage({
           {course.materials.length > 0 ? (
             <ul className="material-list">
               {course.materials.map((material) => (
-                <MaterialRow key={material.id} courseId={course.id} material={material} />
+                <MaterialRow key={material.id} courseId={course.id} material={material} onRefresh={onRefreshCourse} />
               ))}
             </ul>
           ) : (

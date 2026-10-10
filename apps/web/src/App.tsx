@@ -284,6 +284,7 @@ export function App() {
           onStudy={() => navigate(`/courses/${route.courseId}/study`)}
           onStudyTopic={(topic, sourceMaterialId, assessmentId) => navigate(`/courses/${route.courseId}/study?topic=${encodeURIComponent(topic)}${sourceMaterialId ? `&sourceMaterialId=${encodeURIComponent(sourceMaterialId)}` : ""}${assessmentId ? `&assessmentId=${encodeURIComponent(assessmentId)}` : ""}`)}
           onStudyMaterial={(topic, materialId) => navigate(`/courses/${route.courseId}/study?topic=${encodeURIComponent(topic)}&sourceMaterialId=${encodeURIComponent(materialId)}`)}
+          onRefreshCourse={() => loadCourse(route.courseId)}
         />
       ) : route.kind === "hand-tracking" ? (
         <HandTrackingPage />

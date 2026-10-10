@@ -5,6 +5,7 @@ import { extname } from "node:path";
 import {
   CourseDetailSchema,
   CourseListResponseSchema,
+  CourseMaterialSchema,
   CreateCourseRequestSchema,
   MaterialPassagesResponseSchema,
   MaterialKindSchema,
@@ -102,6 +103,26 @@ export async function registerCourseRoutes(
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return reply.code(404).send({ error: "Course material file not found." });
         throw error;
+      }
+    },
+  );
+
+  app.post<{ Params: { courseId: string; materialId: string } }>(
+    "/api/courses/:courseId/materials/:materialId/reprocess",
+    async (request, reply) => {
+      const params = z.object({ courseId: courseIdSchema, materialId: courseIdSchema }).safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ error: "Source ID is invalid." });
+      const material = library.getStoredMaterialFile(params.data.courseId, params.data.materialId);
+      if (!material) return reply.code(404).send({ error: "Course material not found." });
+      const current = sourceLibrary.getMaterial(params.data.courseId, params.data.materialId);
+      if (!current) return reply.code(404).send({ error: "Course material not found." });
+      if (!materialProcessor.canExtract(current.originalName)) return reply.code(415).send({ error: "This source type cannot be reprocessed." });
+      try {
+        const updated = await materialProcessor.reprocess(current, materialStorage.pathFor(params.data.courseId, material.storedName));
+        return CourseMaterialSchema.parse(updated);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Unknown extraction error.";
+        return reply.code(422).send({ error: `Source reprocessing failed; the existing extraction was kept. ${detail}` });
       }
     },
   );

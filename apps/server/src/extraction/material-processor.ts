@@ -43,4 +43,13 @@ export class MaterialProcessor {
 
     return this.sources.getMaterial(material.courseId, material.id)!;
   }
+
+  async reprocess(material: CourseMaterial, filePath: string) {
+    const extractor = extractors.get(extname(material.originalName).toLowerCase());
+    if (!extractor) throw new Error("This source type cannot be reprocessed.");
+    const passages = await extractor.extract(filePath);
+    if (!passages.length) throw new Error("No readable text was found; the existing extraction was kept.");
+    this.sources.completeExtraction(material.courseId, material.id, passages);
+    return this.sources.getMaterial(material.courseId, material.id)!;
+  }
 }
