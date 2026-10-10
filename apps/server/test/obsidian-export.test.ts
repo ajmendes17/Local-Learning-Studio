@@ -67,7 +67,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
       method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
       payload: {
         conceptId: conceptResponse.json().id, assessmentId: assessmentResponse.json().id,
-        activityType: "recognition", prompt: "Which state is entangled?", response: "Not sure", reasoning: "",
+        activityType: "recognition", prompt: "Which state is $\\lvert\\Phi^+\\rangle$?", response: "Not sure, maybe [[other class]] ![image](https://example.invalid/pixel.png)", reasoning: "",
         confidence: 0.5, hintCount: 1, method: "retrieval-practice", outcome: "incorrect", sourceRefs: [{ materialId: uploaded.json().id }],
         independence: "hinted", rationale: "Incorrect demo attempt to validate the export.",
       },
@@ -86,7 +86,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
 
     const firstExport = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
     assert.equal(firstExport.statusCode, 200, firstExport.body);
-    assert.equal(firstExport.json().notesWritten, 3);
+    assert.equal(firstExport.json().notesWritten, 4);
     assert.match(firstExport.json().courseFolder, /^Codex\/Local Learning Studio\//);
     assert.doesNotMatch(firstExport.json().courseFolder, /(^|\/)\.\.(\/|$)/);
     const courseNotePath = join(vaultPath, firstExport.json().courseFolder, "Course.md");
@@ -98,6 +98,15 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 0\/1 scored checks correct; No independent scored checks; 0\/1 correct with hints; confidence gap 50% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
     assert.match(courseNote, /Clear explanation:\*\* No scored checks; No independent scored checks; confidence alignment not available; 1 total attempt; across 1 topic; topics: Bell states; 1 unscored/);
     assert.match(courseNote, /Different topics and small samples make method comparisons uncertain/);
+    assert.match(courseNote, /## Study journal[\s\S]*\[\[.*Study Journal\]\] · 2 saved attempts/);
+    const studyJournalPath = join(vaultPath, firstExport.json().courseFolder, "Study Journal.md");
+    const studyJournal = await readFile(studyJournalPath, "utf8");
+    assert.match(studyJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$\?/);
+    assert.match(studyJournal, /Not sure, maybe &#91;&#91;other class&#93;&#93;/);
+    assert.match(studyJournal, /!&#91;image\]\(https:\/\/example\.invalid\/pixel\.png\)/);
+    assert.doesNotMatch(studyJournal, /!\[image\]\(https:\/\//);
+    assert.match(studyJournal, /\[\[.*sources\/bell-states-reading--/);
+    assert.match(studyJournal, /not-graded · unknown/);
     const professorAssessmentNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "assessments", `midterm-2-professor-scope--${assessmentResponse.json().id.slice(0, 8)}.md`), "utf8");
     assert.match(professorAssessmentNote, /## Professor’s original wording[\s\S]*Exam topics:\n1\. Bell states\n2\. Partial trace\nNote: do not use/);
     assert.match(professorAssessmentNote, /&#91;&#91;another class&#93;&#93;/);
@@ -141,6 +150,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(assessmentNote, /Practice counts are evidence of activity, not mastery/);
 
     await appendFile(courseNotePath, "\n## My reflection\nKeep my instructor's phrasing here.\n");
+    await appendFile(studyJournalPath, "\n## My journal note\nReview eigenstate notation next week.\n");
     const changedExtraction = openDatabase(databasePath);
     changedExtraction.prepare("UPDATE source_passages SET content_hash=? WHERE course_id=? AND material_id=? AND id=?")
       .run("e".repeat(64), courseId, uploaded.json().id, firstPassageId);
@@ -154,6 +164,9 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     const refreshedCourseNote = await readFile(courseNotePath, "utf8");
     assert.match(refreshedCourseNote, /Keep my instructor's phrasing here\./);
     assert.match(refreshedCourseNote, /Final exam scope/);
+    const refreshedJournal = await readFile(studyJournalPath, "utf8");
+    assert.match(refreshedJournal, /Review eigenstate notation next week\./);
+    assert.match(refreshedJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$\?/);
     const refreshedSourceNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "utf8");
     assert.match(refreshedSourceNote, /## Comments from older source versions[\s\S]*OBSIDIAN_SOURCE_SENTINEL[\s\S]*Professor emphasis: know how Bell states are constructed/);
   } finally {

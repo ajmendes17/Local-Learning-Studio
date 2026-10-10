@@ -63,6 +63,7 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
         map: acceptedMap?.payload ?? null,
         profile: options.learner.getProfile(course.id),
         methodProgress: options.learner.getMethodProgress(course.id),
+        studyAttempts: options.learner.getAttemptsForObsidianExport(course.id),
       });
       return result;
     } catch (error) {

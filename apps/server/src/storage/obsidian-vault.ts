@@ -16,6 +16,7 @@ export interface ObsidianCourseExport {
   map: { modules: Array<{ key: string; title: string; description: string; position: number; conceptKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; concepts: Array<{ key: string; title: string; description: string; learningObjectives: string[]; prerequisiteKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; assessments: Array<{ title: string; kind: string; moduleKey: string | null; dueAt: string | null; weightPercent: number | null; sourceReferences: Array<{ materialId: string; passageId: string }> }> } | null;
   profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; instructorText?: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
   methodProgress?: Array<{ method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: Array<{ conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }>; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }>;
+  studyAttempts?: Array<{ id: string; conceptId: string; topic: string; assessmentId: string | null; assessmentTitle: string | null; activityType: string; prompt: string; response: string; reasoning: string; confidence: number | null; hintCount: number; method: string; outcome: string; independence: string; createdAt: string; sourceMaterialIds: string[] }>;
 }
 
 function scoredProgress(attemptCount: number, scoredAttemptCount: number | undefined, correctCount: number) {
@@ -61,6 +62,16 @@ function fencedVerbatim(content: string) {
   const longestRun = Math.max(0, ...[...content.matchAll(/`+/g)].map(([run]) => run.length));
   const fence = "`".repeat(Math.max(3, longestRun + 1));
   return `${fence}text\n${escapeImportedWikilinks(content)}${content.endsWith("\n") ? "" : "\n"}${fence}`;
+}
+
+function quotedLearnerText(content: string) {
+  const safe = escapeImportedWikilinks(content)
+    .replace(/(!?)\[([^\]\n]+)\]\(([^)\n]+)\)/g, (_match, embed: string, label: string, target: string) =>
+      `${embed}&#91;${label}](${target})`,
+    )
+    .replace(/<!--\s*LLS:GENERATED:/gi, "&lt;!-- LLS:GENERATED:")
+    .replace(/<\/?[a-z][^>]*>/gi, (tag) => tag.replaceAll("<", "&lt;").replaceAll(">", "&gt;"));
+  return safe.split("\n").map((line) => `> ${line}`).join("\n");
 }
 
 function studyMethodLabel(method: string) {
@@ -501,9 +512,37 @@ export class ObsidianVault {
       ];
       return `- **${studyMethodLabel(item.method)}:** ${signals.join("; ")}`;
     }).join("\n") || "- No saved knowledge checks yet.";
+    const journalPath = "Study Journal.md";
+    const journalEntries = (data.studyAttempts ?? []).map((attempt) => {
+      const concept = (data.map?.concepts ?? []).find((item) => item.title.trim().normalize("NFKC").toLocaleLowerCase() === attempt.topic.trim().normalize("NFKC").toLocaleLowerCase());
+      const topicLink = concept ? wikilink(topicPaths.get(concept.key)!, concept.title) : attempt.topic;
+      const assessmentLink = attempt.assessmentId && assessmentPaths.has(attempt.assessmentId)
+        ? wikilink(assessmentPaths.get(attempt.assessmentId)!, attempt.assessmentTitle ?? "Assessment")
+        : attempt.assessmentTitle;
+      const sourceLinks = attempt.sourceMaterialIds.map((materialId) => {
+        const material = data.course.materials.find(({ id }) => id === materialId);
+        const path = sourcePaths.get(materialId);
+        return material && path ? wikilink(path, material.originalName) : null;
+      }).filter((link): link is string => Boolean(link));
+      return [
+        `### ${topicLink} · ${new Date(attempt.createdAt).toISOString()} · ${studyMethodLabel(attempt.method)}`,
+        `**Outcome:** ${attempt.outcome} · ${attempt.independence} · ${attempt.confidence == null ? "confidence not recorded" : `${Math.round(attempt.confidence * 100)}% confidence`} · ${attempt.hintCount} hint(s)`,
+        assessmentLink ? `**Assessment:** ${assessmentLink}` : "",
+        sourceLinks.length ? `**Course evidence:** ${sourceLinks.join(", ")}` : "",
+        `**Prompt**\n${quotedLearnerText(attempt.prompt || "No prompt recorded.")}`,
+        `**My response**\n${quotedLearnerText(attempt.response || "No written response.")}`,
+        attempt.reasoning ? `**Reasoning notes**\n${quotedLearnerText(attempt.reasoning)}` : "",
+      ].filter(Boolean).join("\n\n");
+    }).join("\n\n---\n\n") || "No saved practice attempts yet.";
+    const studyJournalId = `study-journal:${data.course.id}`;
+    managed.push({
+      path: join(courseFolder, journalPath), id: studyJournalId, title: `${data.course.title} Study Journal`,
+      body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Saved attempts:** ${(data.studyAttempts ?? []).length}\n\n_Responses are learner-authored evidence. Ungraded responses are retained without counting as correct or incorrect._\n\n## Practice history\n\n${journalEntries}`,
+    });
+    const studyJournalLink = wikilink(journalPath, "Study Journal");
     managed.push({
       path: join(courseFolder, "Course.md"), id: `course:${data.course.id}`, title: data.course.title,
-      body: `**Course code:** ${data.course.code || "Not set"}\n**Term:** ${data.course.term || "Not set"}\n**Notes last exported:** ${exportedAt}\n\n## Modules\n${moduleLinks}\n\n## Syllabus assessments\n${courseAssessmentLinks}\n\n## My exam topic lists\n${learnerAssessmentLinks}\n\n## Practice by study approach\n${methodProgress}\n\n_These are descriptive study signals. Different topics and small samples make method comparisons uncertain._\n\n## Course materials\n${materialList}\n\n_Progress counts show practice activity; they are not mastery estimates._`,
+      body: `**Course code:** ${data.course.code || "Not set"}\n**Term:** ${data.course.term || "Not set"}\n**Notes last exported:** ${exportedAt}\n\n## Modules\n${moduleLinks}\n\n## Syllabus assessments\n${courseAssessmentLinks}\n\n## My exam topic lists\n${learnerAssessmentLinks}\n\n## Practice by study approach\n${methodProgress}\n\n_These are descriptive study signals. Different topics and small samples make method comparisons uncertain._\n\n## Study journal\n${studyJournalLink} · ${(data.studyAttempts ?? []).length} saved attempt${(data.studyAttempts ?? []).length === 1 ? "" : "s"}\n\n## Course materials\n${materialList}\n\n_Progress counts show practice activity; they are not mastery estimates._`,
     });
 
     for (const note of managed) await ensureSafeManagedPath(courseFolderRealPath, note.path);

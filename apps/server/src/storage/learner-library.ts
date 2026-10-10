@@ -285,6 +285,30 @@ export class LearnerLibrary {
       .all(courseId, sessionId).map((row: any) => ({ ...row, confidence: row.confidence == null ? null : Number(row.confidence), hintCount: Number(row.hintCount) }));
   }
 
+  getAttemptsForObsidianExport(courseId: string) {
+    return this.database.prepare(`SELECT a.id,a.concept_id AS conceptId,c.title AS topic,a.assessment_id AS assessmentId,
+      la.title AS assessmentTitle,a.activity_type AS activityType,a.prompt,a.response,a.reasoning,a.confidence,
+      a.hint_count AS hintCount,a.method,a.outcome,COALESCE(e.independence,'unknown') AS independence,
+      a.source_refs_json AS sourceRefsJson,json_extract(s.content_json,'$.sourceMaterialId') AS sessionSourceMaterialId,
+      a.created_at AS createdAt
+      FROM study_attempts a JOIN learner_concepts c ON c.id=a.concept_id AND c.course_id=a.course_id
+      LEFT JOIN learner_assessments la ON la.id=a.assessment_id AND la.course_id=a.course_id
+      LEFT JOIN mastery_evidence e ON e.attempt_id=a.id AND e.course_id=a.course_id
+      LEFT JOIN study_sessions s ON s.id=a.session_id AND s.course_id=a.course_id
+      WHERE a.course_id=? ORDER BY a.created_at DESC,a.rowid DESC`).all(courseId).map((row: any) => {
+      const sourceRefs = JSON.parse(row.sourceRefsJson) as Array<{ materialId?: string }>;
+      return {
+        id: row.id as string, conceptId: row.conceptId as string, topic: row.topic as string,
+        assessmentId: row.assessmentId as string | null, assessmentTitle: row.assessmentTitle as string | null,
+        activityType: row.activityType as string, prompt: row.prompt as string, response: row.response as string,
+        reasoning: row.reasoning as string, confidence: row.confidence == null ? null : Number(row.confidence),
+        hintCount: Number(row.hintCount), method: row.method as string, outcome: row.outcome as string,
+        independence: row.independence as string, createdAt: row.createdAt as string,
+        sourceMaterialIds: [...new Set([...sourceRefs.map(({ materialId }) => materialId).filter((id): id is string => Boolean(id)), row.sessionSourceMaterialId as string | null].filter((id): id is string => Boolean(id)))],
+      };
+    });
+  }
+
   getPatternReviewAttempts(courseId: string, limit = 50) {
     return this.database.prepare(`SELECT a.id,a.session_id AS sessionId,a.concept_id AS conceptId,c.title AS conceptTitle,
       a.activity_type AS activityType,a.prompt,a.response,a.reasoning,a.confidence,a.hint_count AS hintCount,

@@ -681,7 +681,7 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
     assert.deepEqual([explanationProgress.scoredAttemptCount, explanationProgress.independentScoredAttemptCount, explanationProgress.assistedScoredAttemptCount, explanationProgress.assistedCorrectCount, explanationProgress.topicProgress[0].assistedScoredAttemptCount, explanationProgress.topicProgress[0].assistedCorrectCount], [1, 0, 1, 1, 1, 1]);
     const exported = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
     assert.equal(exported.statusCode, 200, exported.body);
-    assert.equal(exported.json().notesWritten, 3);
+    assert.equal(exported.json().notesWritten, 4);
     const courseNote = await readFile(join(vaultPath, exported.json().courseFolder, "Course.md"), "utf8");
     assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 1\/1 scored checks correct; 1\/1 correct independently; confidence gap 25% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
     assert.match(courseNote, /Clear explanation:\*\* 1\/1 scored checks correct; No independent scored checks; 1\/1 correct with outside help; confidence gap 50% across 1 rated check/);
