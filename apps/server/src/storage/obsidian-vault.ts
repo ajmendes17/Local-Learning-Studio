@@ -331,10 +331,14 @@ export class ObsidianVault {
     for (const path of markdownFiles) {
       const notePath = relative(courseFolderRealPath, path).split(sep).join("/");
       const body = await readFile(path, "utf8");
+      const isExpectedManagedNote = expectedNotePaths.includes(notePath);
       const hasExportId = /^id:\s*["'][^"']+["']\s*$/m.test(body);
       const starts = [...body.matchAll(/<!-- LLS:GENERATED:START -->/g)].length;
       const ends = [...body.matchAll(/<!-- LLS:GENERATED:END -->/g)].length;
-      if (hasExportId && (starts !== 1 || ends !== 1 || body.indexOf(START) > body.indexOf(END))) {
+      if (isExpectedManagedNote && !hasExportId) {
+        issues.push(`Managed note identity is missing: ${notePath}`);
+      }
+      if ((hasExportId || isExpectedManagedNote) && (starts !== 1 || ends !== 1 || body.indexOf(START) > body.indexOf(END))) {
         issues.push(`Generated section is missing or damaged: ${notePath}`);
       } else if (!hasExportId && starts !== ends) {
         issues.push(`Generated section markers are unbalanced: ${notePath}`);

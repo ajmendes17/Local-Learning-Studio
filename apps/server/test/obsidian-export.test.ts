@@ -135,6 +135,12 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(initialValidation.json().notesChecked, 4);
     assert.ok(initialValidation.json().linksChecked >= 6);
     const courseNotePath = join(vaultPath, firstExport.json().courseFolder, "Course.md");
+    const intactCourseNote = await readFile(courseNotePath, "utf8");
+    await writeFile(courseNotePath, intactCourseNote.replace(/^id: .*\r?\n/m, ""));
+    const missingIdentityValidation = await app.inject({ method: "GET", url: `/api/courses/${courseId}/obsidian/validate` });
+    assert.equal(missingIdentityValidation.json().healthy, false);
+    assert.ok(missingIdentityValidation.json().issues.some((issue: string) => issue.includes("Managed note identity is missing: Course.md")));
+    await writeFile(courseNotePath, intactCourseNote);
     const missingSourceNotePath = join(vaultPath, firstExport.json().courseFolder, "sources", `bell-states-reading--${uploaded.json().id.slice(0, 8)}.md`);
     const missingSourceNoteBody = await readFile(missingSourceNotePath, "utf8");
     await rm(missingSourceNotePath);
