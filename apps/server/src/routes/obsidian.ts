@@ -42,7 +42,13 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
     const course = options.courses.getCourseDetail(parsed.data.courseId);
     if (!course) return reply.code(404).send({ error: "Class not found." });
     const acceptedMap = options.learning.getAcceptedCourseMap(course.id);
-    const currentAcceptedMap = options.learning.getCurrentAcceptedCourseMap(course.id);
+    const currentArtifacts = options.learning.getArtifacts(course.id);
+    const currentAcceptedMap = currentArtifacts.classificationCurrent && currentArtifacts.courseMapCurrent && currentArtifacts.courseMap?.status === "accepted"
+      ? currentArtifacts.courseMap
+      : null;
+    const mapDraftStatus = currentArtifacts.classificationCurrent && currentArtifacts.courseMapCurrent && currentArtifacts.courseMap?.status === "draft"
+      ? "current"
+      : "none";
     try {
       const result = await options.vault.exportCourse({
         course: {
@@ -63,6 +69,7 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
         },
         map: acceptedMap?.payload ?? null,
         mapStatus: acceptedMap ? currentAcceptedMap?.id === acceptedMap.id ? "current" : "stale" : "none",
+        mapDraftStatus,
         profile: options.learner.getProfile(course.id),
         methodProgress: options.learner.getMethodProgress(course.id),
         studyAttempts: options.learner.getAttemptsForObsidianExport(course.id),

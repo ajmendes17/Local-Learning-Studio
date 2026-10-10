@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -232,6 +232,12 @@ test("course sources flow through cached classification, map review, and accepta
   });
   assert.equal(codex.calls.length, 3, "matching map should be cached");
 
+  const initiallyAcceptedMap = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.id}/course-map/${courseMap.id}/accept`,
+  });
+  assert.equal(initiallyAcceptedMap.statusCode, 200);
+
   codex.invalidNextMapSourceSet = true;
   const invalidMapResponse = await app.inject({
     method: "POST",
@@ -281,6 +287,17 @@ test("course sources flow through cached classification, map review, and accepta
   );
   assert.notEqual(refreshedMap.id, courseMap.id);
 
+  const vaultPath = join(root, "vault");
+  await mkdir(vaultPath, { recursive: true });
+  const vaultConfig = await app.inject({ method: "POST", url: "/api/obsidian/config", payload: { vaultPath } });
+  assert.equal(vaultConfig.statusCode, 200, vaultConfig.body);
+  const draftExport = await app.inject({ method: "POST", url: `/api/courses/${course.id}/obsidian/export` });
+  assert.equal(draftExport.statusCode, 200, draftExport.body);
+  const draftCourseNote = await readFile(join(vaultPath, draftExport.json().courseFolder, "Course.md"), "utf8");
+  assert.match(draftCourseNote, /Course map:\*\* Accepted structure · stale/);
+  assert.match(draftCourseNote, /Current map draft:\*\* Ready for review/);
+  assert.match(draftCourseNote, /current replacement draft is ready for review/);
+
   const instructorScopeResponse = await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/learner/assessments`,
@@ -298,7 +315,7 @@ test("course sources flow through cached classification, map review, and accepta
     url: `/api/courses/${course.id}/course-map/accepted`,
   });
   assert.equal(acceptedMapBeforeAcceptance.statusCode, 200, acceptedMapBeforeAcceptance.body);
-  assert.equal(acceptedMapBeforeAcceptance.json(), null);
+  assert.equal(CourseMapArtifactSchema.parse(acceptedMapBeforeAcceptance.json()).id, courseMap.id);
 
   const acceptResponse = await app.inject({
     method: "POST",
