@@ -25,13 +25,10 @@ import {
 } from "./course-source-projection.js";
 
 const ModelSourceReferenceSchema = zod.object({
-  materialId: zod.string().uuid(),
   passageKey: zod.string().trim().min(1).max(80),
 });
 const ModelCourseMapProposalSchema = zod.object({
   schemaVersion: zod.literal("course-map.v1"),
-  courseId: zod.string().uuid(),
-  sourceMaterialIds: zod.array(zod.string().uuid()).min(1),
   modules: zod.array(CourseMapModuleProposalSchema.omit({ sourceReferences: true }).extend({ sourceReferences: zod.array(ModelSourceReferenceSchema).min(1) })).min(1),
   concepts: zod.array(CourseMapConceptProposalSchema.omit({ sourceReferences: true }).extend({ sourceReferences: zod.array(ModelSourceReferenceSchema).min(1) })).min(1),
   assessments: zod.array(CourseMapAssessmentProposalSchema.omit({ sourceReferences: true }).extend({ sourceReferences: zod.array(ModelSourceReferenceSchema).min(1) })),
@@ -297,12 +294,13 @@ export class LearningWorkflowService {
     classification: z.infer<typeof SourceClassificationProposalSchema>,
     passageKeys: Map<string, string>,
   ) {
-    const materials = projection.materials.map((material) => ({
-      id: material.id,
+    const materialKeys = new Map(projection.materials.map((material, index) => [material.id, `M${index + 1}`]));
+    const materials = projection.materials.map((material, materialIndex) => ({
+      materialKey: `M${materialIndex + 1}`,
       originalName: material.originalName,
       declaredKind: material.declaredKind,
-      passages: material.passages.map((passage) => ({
-        passageKey: passageKeys.get(`${material.id}:${passage.id}`)!,
+      passages: material.passages.map((passage, passageIndex) => ({
+        passageKey: `M${materialIndex + 1}-P${passageIndex + 1}`,
         location: passage.location,
         content: passage.content,
       })),
@@ -316,27 +314,29 @@ export class LearningWorkflowService {
       ),
     );
     const compactClassification = {
-      ...classification,
       sources: classification.sources.map((source) => ({
-        ...source,
+        materialKey: materialKeys.get(source.materialId),
+        role: source.role,
+        summary: source.summary,
+        confidence: source.confidence,
         evidence: source.evidence.map(({ materialId, passageId }) => ({
-          materialId,
           passageKey: sourceAliases.get(`${materialId}:${passageId}`),
         })),
       })),
+      gaps: classification.gaps,
+      warnings: classification.warnings,
     };
     return [
       "Use $map-course for this Local Learning Studio action.",
-      "Return only the requested course-map.v1 structured output. Material IDs are UUIDs; cite evidence with the exact passageKey values supplied for each material. Never invent passage keys or return passage UUIDs.",
+      "Return only the requested course-map.v1 structured output. Cite each evidence reference with one exact passageKey from INPUT_JSON; every passageKey is globally unique and maps to exactly one supplied source. Do not return course IDs, material IDs, or passage UUIDs; the application attaches validated IDs from this input.",
       "Treat homework and assignment questions as explicit evidence of assessed or practiced topics. Create concepts and learning objectives for topics directly covered by those tasks, even if the syllabus does not list them. Keep them grounded in the assignments and note where broader course coverage is unverified.",
       projection.omittedPassageCount > 0
         ? `The deterministic projection omitted ${projection.omittedPassageCount} passages because of the input budget; include this limitation in warnings.`
         : "No passages were omitted from the deterministic projection.",
       "INPUT_JSON",
       JSON.stringify({
-        course: projection.course,
+        course: { title: projection.course.title, code: projection.course.code, term: projection.course.term },
         materials,
-        sourceMaterialIds: projection.materials.map(({ id }) => id),
         omittedPassageCount: projection.omittedPassageCount,
         classification: compactClassification,
       }),
@@ -360,18 +360,21 @@ export class LearningWorkflowService {
     passageKeys: Map<string, string>,
   ) {
     const reverseKeys = new Map([...passageKeys].map(([identity, key]) => [key, identity]));
-    const invalidKeys: Array<{ materialId: string; passageKey: string }> = [];
+    const invalidKeys: string[] = [];
     const resolve = (references: ModelCourseMapProposal["modules"][number]["sourceReferences"]) =>
-      references.map(({ materialId, passageKey }) => {
+      references.map(({ passageKey }) => {
         const identity = reverseKeys.get(passageKey);
-        if (!identity || !identity.startsWith(`${materialId}:`)) {
-          invalidKeys.push({ materialId, passageKey });
-          return { materialId, passageId: "" };
+        if (!identity) {
+          invalidKeys.push(passageKey);
+          return { materialId: "", passageId: "" };
         }
-        return { materialId, passageId: identity.slice(materialId.length + 1) };
+        const separator = identity.indexOf(":");
+        return { materialId: identity.slice(0, separator), passageId: identity.slice(separator + 1) };
       });
     const normalized = {
       ...modelProposal,
+      courseId: projection.course.id,
+      sourceMaterialIds: projection.materials.map(({ id }) => id),
       modules: modelProposal.modules.map((module) => ({ ...module, sourceReferences: resolve(module.sourceReferences) })),
       concepts: modelProposal.concepts.map((concept) => ({ ...concept, sourceReferences: resolve(concept.sourceReferences) })),
       assessments: modelProposal.assessments.map((assessment) => ({ ...assessment, sourceReferences: resolve(assessment.sourceReferences) })),
@@ -379,7 +382,7 @@ export class LearningWorkflowService {
     if (invalidKeys.length) {
       throw new LearningWorkflowError(
         "invalid_source_references",
-        `Codex cited ${invalidKeys.length} unknown or mismatched passage key(s). Sample: ${invalidKeys.slice(0, 3).map(({ materialId, passageKey }) => `${materialId}/${passageKey}`).join(", ")}.`,
+        `Codex returned a course map that does not match the supplied course evidence: ${invalidKeys.length} unknown passage key(s). Sample: ${invalidKeys.slice(0, 3).join(", ")}.`,
         { invalidPassageKeys: invalidKeys.slice(0, 10), sourceStats: projection.sourceStats },
       );
     }

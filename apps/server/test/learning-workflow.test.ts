@@ -39,7 +39,7 @@ function multipartFile(filename: string, content: string) {
 class FakeLearningCodex implements LearningCodexClient {
   readonly calls: CodexTask[] = [];
   readonly prompts: string[] = [];
-  invalidNextMapSourceSet = false;
+  invalidNextMapPassageKey = false;
   invalidNextClassificationOutput = false;
 
   async status() {
@@ -68,7 +68,7 @@ class FakeLearningCodex implements LearningCodexClient {
     const materialIds = projection.materials.map(({ id }: any) => id);
     const references = projection.materials.map(({ id, passages }: any) =>
       task === "map-course"
-        ? { materialId: id, passageKey: passages[0].passageKey }
+        ? { passageKey: passages[0].passageKey }
         : { materialId: id, passageId: passages[0].id },
     );
     const raw =
@@ -91,8 +91,6 @@ class FakeLearningCodex implements LearningCodexClient {
           }
         : {
             schemaVersion: "course-map.v1",
-            courseId: projection.course.id,
-            sourceMaterialIds: materialIds,
             concepts: [
               {
                 key: "course-foundations",
@@ -126,9 +124,9 @@ class FakeLearningCodex implements LearningCodexClient {
             warnings: [],
         };
 
-    if (task === "map-course" && this.invalidNextMapSourceSet) {
-      this.invalidNextMapSourceSet = false;
-      raw.sourceMaterialIds = [...materialIds, "00000000-0000-4000-8000-000000000000"];
+    if (task === "map-course" && this.invalidNextMapPassageKey) {
+      this.invalidNextMapPassageKey = false;
+      raw.concepts!.at(0)!.sourceReferences[0]!.passageKey = "M999-P999";
     }
 
     return {
@@ -223,6 +221,17 @@ test("course sources flow through cached classification, map review, and accepta
   assert.equal(mapResponse.statusCode, 200);
   const courseMap = CourseMapArtifactSchema.parse(mapResponse.json());
   assert.equal(courseMap.status, "draft");
+  assert.equal(courseMap.payload.courseId, course.id);
+  assert.deepEqual(courseMap.payload.sourceMaterialIds, [uploadResponse.json().id]);
+  const mapInput = JSON.parse(codex.prompts.at(-1)!.split("INPUT_JSON\n\n")[1]!) as any;
+  assert.deepEqual(Object.keys(mapInput.course), ["title", "code", "term"]);
+  assert.equal(JSON.stringify(mapInput).includes(course.id), false);
+  assert.equal(JSON.stringify(mapInput).includes(uploadResponse.json().id), false);
+  assert.equal("sourceMaterialIds" in mapInput, false);
+  assert.equal("id" in mapInput.materials[0], false);
+  assert.equal("materialId" in mapInput.classification.sources[0], false);
+  assert.equal(mapInput.materials[0].materialKey, "M1");
+  assert.equal(mapInput.materials[0].passages[0].passageKey, "M1-P1");
   assert.deepEqual(codex.calls, ["classify-course-sources", "classify-course-sources", "map-course"]);
 
   await app.inject({
@@ -238,7 +247,7 @@ test("course sources flow through cached classification, map review, and accepta
   });
   assert.equal(initiallyAcceptedMap.statusCode, 200);
 
-  codex.invalidNextMapSourceSet = true;
+  codex.invalidNextMapPassageKey = true;
   const invalidMapResponse = await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/course-map`,
@@ -247,11 +256,7 @@ test("course sources flow through cached classification, map review, and accepta
   assert.equal(invalidMapResponse.statusCode, 422, invalidMapResponse.body);
   const invalidMapError = ApiErrorSchema.parse(invalidMapResponse.json());
   assert.match(invalidMapError.error, /does not match the supplied course evidence/);
-  assert.equal(invalidMapError.diagnostics?.courseIdMatches, true);
-  assert.deepEqual(invalidMapError.diagnostics?.missingMaterialIds, []);
-  assert.deepEqual(invalidMapError.diagnostics?.unexpectedMaterialIds, ["00000000-0000-4000-8000-000000000000"]);
-  assert.equal(invalidMapError.diagnostics?.invalidReferenceCount, 0);
-  assert.equal(invalidMapError.diagnostics?.omittedPassageCount, 0);
+  assert.deepEqual(invalidMapError.diagnostics?.invalidPassageKeys, ["M999-P999", "M999-P999", "M999-P999"]);
 
   const secondUpload = multipartFile(
     "lecture.md",
