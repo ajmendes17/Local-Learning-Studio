@@ -119,5 +119,6 @@
 .scope-instructor-text { margin: 0.7rem 0 1rem; padding: 0.7rem 0.85rem; border: 1px solid var(--line, #d8dce3); border-radius: 0.7rem; background: var(--surface-subtle, #f7f8fa); }
 .scope-instructor-text summary { cursor: pointer; font-weight: 650; }
 .scope-instructor-text__copy { margin: 0.7rem 0; overflow-wrap: anywhere; font: inherit; line-height: 1.7; }
+.pattern-card__rationale .math-text p { margin: 0 0 0.6em; }.pattern-card__rationale .math-text p:last-child { margin-bottom: 0; }.pattern-evidence__response { margin: 0.25rem 0; padding: 0.45rem 0.6rem; border-left: 2px solid #d9dfd2; color: #627066; background: #fbfbf7; font-size: 0.92em; }
 .scope-instructor-text textarea { display: block; width: 100%; min-height: 8rem; margin: 0.75rem 0; resize: vertical; }
 .scope-instructor-text > div > div { display: flex; flex-wrap: wrap; gap: 0.5rem; }
