@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import test from "node:test";
-import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, getSpacedReviewSchedule, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, studyPlanReasonLabel, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, assessmentScheduleOverflowMinutes, getSpacedReviewSchedule, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, studyPlanReasonLabel, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
 import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
 import { CodexRunError } from "../src/codex/codex-runner.js";
@@ -190,8 +190,14 @@ test("assessment schedule spreads sessions before the deadline and flags over-ca
   assert.equal(overCapacity.status, "over-capacity");
   assert.equal(overCapacity.scheduledMinutes, 45);
   assert.equal(overCapacity.unscheduledMinutes, 75);
-  assert.equal(scheduleAssessmentStudyDays([{ title: "Topic", minutes: 30 }], null, 45, now).status, "missing-deadline");
-  assert.equal(scheduleAssessmentStudyDays([{ title: "Topic", minutes: 30 }], new Date(2026, 9, 9, 12).toISOString(), 45, now).status, "deadline-passed");
+  const missingDeadline = scheduleAssessmentStudyDays([{ title: "Topic", minutes: 90 }], null, 45, now);
+  assert.equal(missingDeadline.status, "missing-deadline");
+  assert.equal(missingDeadline.unscheduledMinutes, 90);
+  assert.equal(assessmentScheduleOverflowMinutes(missingDeadline), 0, "a missing date needs a date, not a capacity warning");
+  const pastDeadline = scheduleAssessmentStudyDays([{ title: "Topic", minutes: 30 }], new Date(2026, 9, 9, 12).toISOString(), 45, now);
+  assert.equal(pastDeadline.status, "deadline-passed");
+  assert.equal(assessmentScheduleOverflowMinutes(pastDeadline), 0, "a past date needs updating, not a capacity warning");
+  assert.equal(assessmentScheduleOverflowMinutes(overCapacity), 75);
 });
 
 test("category progress counts only the displayed topics and ignores duplicate titles", () => {

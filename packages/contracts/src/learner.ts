@@ -147,6 +147,10 @@ export function assessmentDeadlineLabel(scheduledAt: string | null | undefined, 
 export interface AssessmentStudyScheduleTopic { title: string; minutes: number }
 export interface AssessmentStudyDay { date: string; minutes: number; topics: AssessmentStudyScheduleTopic[] }
 
+export function assessmentScheduleOverflowMinutes(schedule: { status: "missing-deadline" | "deadline-passed" | "over-capacity" | "scheduled"; unscheduledMinutes: number }) {
+  return schedule.status === "over-capacity" ? Math.max(0, schedule.unscheduledMinutes) : 0;
+}
+
 export function scheduleAssessmentStudyDays(
   topicPlan: AssessmentStudyScheduleTopic[],
   scheduledAt: string | null | undefined,
