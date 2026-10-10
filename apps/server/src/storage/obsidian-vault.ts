@@ -884,10 +884,12 @@ export class ObsidianVault {
           const confidence = topic.meanConfidenceGap == null ? "confidence unavailable" : `${Math.round(topic.meanConfidenceGap * 100)}% confidence gap across ${topic.confidenceRatedAttemptCount} rated`;
           const independence = topic.independentScoredAttemptCount ? `${topic.independentCorrectCount}/${topic.independentScoredAttemptCount} independently correct` : "no independent scored checks";
           const support = [topic.hintedScoredAttemptCount ? `${topic.hintedCorrectCount}/${topic.hintedScoredAttemptCount} correct with hints` : "", topic.assistedScoredAttemptCount ? `${topic.assistedCorrectCount}/${topic.assistedScoredAttemptCount} correct with outside help` : "", topic.unknownIndependenceScoredAttemptCount ? `${topic.unknownIndependenceCorrectCount}/${topic.unknownIndependenceScoredAttemptCount} correct with unrecorded support` : ""].filter(Boolean).join(", ");
-          return `${topic.title} (${result}; ${independence}${support ? `; ${support}` : ""}${topicUnscored ? `; ${topicUnscored} unscored` : ""}; ${confidence}${topic.lastPracticedAt ? `; last practiced ${topic.lastPracticedAt}` : ""})`;
+          const sampleSignal = topic.scoredAttemptCount > 0 && topic.scoredAttemptCount < 3 ? "; early signal · at least 3 scored checks give a steadier topic-level signal" : "";
+          return `${topic.title} (${result}; ${independence}${support ? `; ${support}` : ""}${topicUnscored ? `; ${topicUnscored} unscored` : ""}; ${confidence}${sampleSignal}${topic.lastPracticedAt ? `; last practiced ${topic.lastPracticedAt}` : ""})`;
         }).join(" | ")}`] : []),
         `${item.highConfidenceMissCount} confident miss${item.highConfidenceMissCount === 1 ? "" : "es"}`,
         `${item.lowConfidenceCorrectCount} low-confidence correct`,
+        ...(scored > 0 && scored < 3 ? ["Early signal · at least 3 scored checks give a steadier topic-level signal"] : []),
         ...(item.lastPracticedAt ? [`last used ${item.lastPracticedAt}`] : []),
       ];
       return `- **${studyMethodLabel(item.method)}:** ${signals.join("; ")}`;

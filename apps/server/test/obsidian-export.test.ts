@@ -487,6 +487,7 @@ test("Obsidian source notes link assignments to their accepted topics and assess
         concepts: [{ title: "Tensor Products", attemptCount: 4, scoredAttemptCount: 4, correctCount: 4, independentScoredAttemptCount: 3, independentCorrectCount: 3, latestOutcome: "correct", lastPracticedAt: "2026-10-10T00:00:00.000Z", sessionCount: 3, lastSessionAt: "2026-10-10T00:00:00.000Z" }],
         assessments: [],
       },
+      methodProgress: [{ method: "retrieval-practice", attemptCount: 4, scoredAttemptCount: 3, independentScoredAttemptCount: 3, independentCorrectCount: 3, hintedScoredAttemptCount: 0, hintedCorrectCount: 0, assistedScoredAttemptCount: 0, assistedCorrectCount: 0, unknownIndependenceScoredAttemptCount: 0, unknownIndependenceCorrectCount: 0, confidenceRatedAttemptCount: 3, meanConfidenceGap: 0.1, correctCount: 3, topicCount: 1, topicTitles: ["Tensor Products"], topicProgress: [], highConfidenceMissCount: 0, lowConfidenceCorrectCount: 0, lastPracticedAt: "2026-10-10T00:00:00.000Z" }],
     } as any);
     const refreshedTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
     assert.match(refreshedTopic, /learner_tag: "exam-focus"/);
@@ -495,6 +496,9 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     assert.match(refreshedTopic, /\*\*Evidence level:\*\* Repeated independent success\n\*\*Independent checks:\*\* 3\/3 correct/);
     assert.doesNotMatch(refreshedTopic, /\*\*Sample size:\*\* Early signal/);
     assert.match(refreshedTopic, /^---\n[\s\S]*\n---\n\n# Tensor Products\n/);
+    const refreshedCourse = await readFile(join(folder, "Course.md"), "utf8");
+    assert.match(refreshedCourse, /Quiz first:[^\n]*3\/3 scored checks correct/);
+    assert.doesNotMatch(refreshedCourse, /Quiz first:[^\n]*Early signal/);
     await vault.exportCourse({
       course: { id: "course-id", title: "Quantum Information", code: "PHGN 519", term: "Fall 2026", materials: [] },
       map: {
