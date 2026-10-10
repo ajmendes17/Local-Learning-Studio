@@ -148,6 +148,14 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(missingNoteValidation.json().healthy, false);
     assert.ok(missingNoteValidation.json().issues.some((issue: string) => issue.includes(`Expected class note is missing: sources/bell-states-reading--${uploaded.json().id.slice(0, 8)}.md`)));
     await writeFile(missingSourceNotePath, missingSourceNoteBody);
+    const journalForAnchorTestPath = join(vaultPath, firstExport.json().courseFolder, "Study Journal.md");
+    const journalForAnchorTest = await readFile(journalForAnchorTestPath, "utf8");
+    const brokenPassageTarget = `${firstExport.json().courseFolder}/sources/bell-states-reading--${uploaded.json().id.slice(0, 8)}#Passage 999`;
+    await appendFile(journalForAnchorTestPath, `\n[[${brokenPassageTarget}]]\n`);
+    const brokenAnchorValidation = await app.inject({ method: "GET", url: `/api/courses/${courseId}/obsidian/validate` });
+    assert.equal(brokenAnchorValidation.json().healthy, false);
+    assert.ok(brokenAnchorValidation.json().issues.some((issue: string) => issue.includes(`Unresolved class link heading in Study Journal.md: ${brokenPassageTarget}`)));
+    await writeFile(journalForAnchorTestPath, journalForAnchorTest);
     const courseNote = await readFile(courseNotePath, "utf8");
     assert.match(courseNote, /\[\[Codex\/Local Learning Studio\/[^\]]+\/assessments\/midterm-2-professor-scope--/);
     assert.match(courseNote, /<!-- LLS:GENERATED:START -->/);

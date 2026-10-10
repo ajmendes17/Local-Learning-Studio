@@ -344,7 +344,10 @@ export class ObsidianVault {
         issues.push(`Generated section markers are unbalanced: ${notePath}`);
       }
       for (const match of body.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
-        const target = (match[1]!.split("|", 1)[0]!.split("#", 1)[0] ?? "").trim().replaceAll("\\", "/");
+        const fullTarget = (match[1]!.split("|", 1)[0] ?? "").trim().replaceAll("\\", "/");
+        const fragmentIndex = fullTarget.indexOf("#");
+        const fragment = fragmentIndex >= 0 ? fullTarget.slice(fragmentIndex + 1).trim() : "";
+        const target = (fragmentIndex >= 0 ? fullTarget.slice(0, fragmentIndex) : fullTarget).trim();
         if (!target.startsWith(classPrefix)) continue;
         linksChecked += 1;
         const targetPath = resolve(vaultRealPath, `${target}${extname(target) ? "" : ".md"}`);
@@ -356,6 +359,16 @@ export class ObsidianVault {
           const targetInfo = await lstat(targetPath);
           if (targetInfo.isSymbolicLink() || !targetInfo.isFile() || !pathIsInside(courseFolderRealPath, await realpath(targetPath))) {
             issues.push(`Class link does not point to a regular note: ${notePath}`);
+          } else if (fragment) {
+            let decodedFragment: string;
+            try { decodedFragment = decodeURIComponent(fragment).replace(/^#+/, "").trim(); }
+            catch { decodedFragment = ""; }
+            const targetBody = await readFile(targetPath, "utf8");
+            const headingExists = decodedFragment && [...targetBody.matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gm)]
+              .some((heading) => heading[1]!.trim().replace(/\s+/g, " ").toLocaleLowerCase() === decodedFragment.replace(/\s+/g, " ").toLocaleLowerCase());
+            const anchorExists = decodedFragment && [...targetBody.matchAll(/\bid\s*=\s*["']([^"']+)["']/g)]
+              .some((anchor) => anchor[1]!.toLocaleLowerCase() === decodedFragment.toLocaleLowerCase());
+            if (!headingExists && !anchorExists) issues.push(`Unresolved class link heading in ${notePath}: ${target}#${fragment}`);
           }
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "ENOENT") issues.push(`Unresolved class link in ${notePath}: ${target}`);
