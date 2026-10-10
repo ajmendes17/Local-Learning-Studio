@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import test from "node:test";
-import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
 import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/storage/database.js";
@@ -546,6 +546,7 @@ test("study methods send distinct learning directions", async () => {
     ["free-recall", /Start with unaided free recall/],
     ["teach-back", /Use a teach-back exercise/],
     ["compare-contrast", /Use contrastive learning/],
+    ["error-analysis", /Teach through error analysis/],
   ] as const;
   for (const [method, direction] of methods) {
     const response = await app.inject({
@@ -568,7 +569,29 @@ test("study methods send distinct learning directions", async () => {
   assert.equal(nextContrast.statusCode, 200, nextContrast.body);
   assert.equal(nextContrast.json().method, "compare-contrast");
   assert.match(prompts.at(-1) ?? "", /tests the distinction between this concept/);
-  assert.equal(prompts.length, methods.length + 2);
+  const errorSession = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-session`, payload: { topic: "Method check: error analysis", method: "error-analysis" } });
+  assert.equal(errorSession.statusCode, 200, errorSession.body);
+  assert.equal(errorSession.json().method, "error-analysis");
+  assert.equal(StudySessionContentSchema.safeParse({ ...errorSession.json(), example: "" }).success, false, "error-analysis sessions must keep a visible flawed solution");
+  assert.match(prompts.at(-1) ?? "", /four-step numbered example containing exactly one invalid reasoning step/);
+  const nextError = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${errorSession.json().sessionId}/next-question`, payload: {} });
+  assert.equal(nextError.statusCode, 200, nextError.body);
+  assert.equal(nextError.json().method, "error-analysis");
+  assert.match(prompts.at(-1) ?? "", /fresh four-step numbered worked solution with exactly one subtle invalid step/);
+  const errorAttempt = await app.inject({
+    method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
+    payload: {
+      sessionId: nextError.json().sessionId, conceptId: nextError.json().conceptId,
+      activityType: "recognition", prompt: nextError.json().question,
+      response: nextError.json().options[nextError.json().answerIndex], reasoning: "",
+      confidence: 0.7, hintCount: 0, method: "error-analysis", outcome: "correct",
+      sourceRefs: [], independence: "independent", rationale: "Identified the first invalid step.",
+    },
+  });
+  assert.equal(errorAttempt.statusCode, 201, errorAttempt.body);
+  const methodProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
+  assert.ok(methodProgress.json().some((item: { method: string; attemptCount: number }) => item.method === "error-analysis" && item.attemptCount === 1));
+  assert.equal(prompts.length, methods.length + 4);
   await app.close();
   await rm(root, { recursive: true });
 });

@@ -6,7 +6,7 @@ import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTop
 import { appendInstructorTopicWording, partitionInstructorTopics } from "../lib/instructor-topic-scope";
 import "../styles/study.css";
 
-type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall" | "teach-back" | "compare-contrast";
+type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall" | "teach-back" | "compare-contrast" | "error-analysis";
 const studyMethods: Array<{ value: Method; label: string; description: string }> = [
   { value: "explanation", label: "Clear explanation", description: "Build intuition first, then connect the idea to precise terms and a short example." },
   { value: "worked-example", label: "Worked example", description: "Follow a complete solution step by step, then identify the pattern you can reuse." },
@@ -15,6 +15,7 @@ const studyMethods: Array<{ value: Method; label: string; description: string }>
   { value: "free-recall", label: "Free recall", description: "Try one open question from memory, then compare your response with the reference. Optional hints are tracked; your response is saved but not graded." },
   { value: "teach-back", label: "Teach it back", description: "Explain the idea as if teaching a new student. Compare your explanation with the reference; your response is saved but not graded." },
   { value: "compare-contrast", label: "Compare & contrast", description: "Study two closely related ideas side by side, then check whether you can tell when each one applies." },
+  { value: "error-analysis", label: "Find the first mistake", description: "Inspect a plausible worked solution, identify the first invalid step, and learn why that misconception fails." },
 ];
 
 function isOpenResponseMethod(method: string | undefined) {
@@ -35,6 +36,7 @@ function studyMethodLabel(method: string) {
     case "free-recall": return "Free recall";
     case "teach-back": return "Teach it back";
     case "compare-contrast": return "Compare & contrast";
+    case "error-analysis": return "Find the first mistake";
     default: return method.trim() ? method.replaceAll("-", " ") : "Method not recorded";
   }
 }
@@ -825,7 +827,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           {method === "quiz" || isOpenResponseMethod(method) ? <p className="quiz-first-note">You started with retrieval. Review the explanation after trying the check.</p> : null}
         </section>
         <section className="check-card" role="tabpanel" id="study-panel-check" aria-labelledby="study-tab-check" hidden={studyTab !== "check"}>
-          <div><p className="section-kicker">{teachBack ? "Teach it back" : freeRecall ? "Open-response recall" : "Quick knowledge check"}</p><MathText className="check-question" content={content.question} />{openResponse && !saved && !reopenedAttempt ? <small>{teachBack ? "Explain the idea to a new student from memory. Save your response to reveal the reference; it will be recorded but not graded." : "Try from memory first. Save your response to reveal the reference explanation; any hints are recorded, and this response will not be graded."}</small> : null}</div>
+          <div><p className="section-kicker">{teachBack ? "Teach it back" : freeRecall ? "Open-response recall" : method === "error-analysis" ? "Find the first mistake" : "Quick knowledge check"}</p>{method === "error-analysis" && content.example ? <div className="worked-example error-analysis-example"><strong>Inspect this worked solution</strong><MathText content={content.example} /></div> : null}<MathText className="check-question" content={content.question} />{openResponse && !saved && !reopenedAttempt ? <small>{teachBack ? "Explain the idea to a new student from memory. Save your response to reveal the reference; it will be recorded but not graded." : "Try from memory first. Save your response to reveal the reference explanation; any hints are recorded, and this response will not be graded."}</small> : null}</div>
           {!saved && !reopenedAttempt && !pendingAttempt.current && content.hints.length ? <div className="study-hints"><div><strong>Need a hint?</strong><small>Hints are counted as part of this attempt.</small></div>{content.hints.slice(0,hintCount).map((hint,index) => <p key={`${index}-${hint}`}><span>Hint {index+1}</span><MathText inline content={hint} /></p>)}{hintCount < content.hints.length ? <button type="button" className="button-secondary" onClick={revealHint}>Show hint {hintCount + 1}</button> : null}</div> : null}
           {!saved && !reopenedAttempt ? <label className="outside-help-input"><input type="checkbox" checked={usedOutsideHelp} disabled={savingAttempt || busy || Boolean(pendingAttempt.current)} onChange={(event) => updateOutsideHelp(event.target.checked)} /><span><strong>I used help outside these hints</strong><small>For example, notes, a textbook, or another person.</small></span></label> : null}
           {reopenedAttempt ? <p className="reopened-attempt-note" role="status">Showing your saved {reopenedAttempt.outcome} response from {new Date(reopenedAttempt.createdAt).toLocaleString()}. Choose “Try this exact question again” below if you want to make another attempt.</p> : null}

@@ -164,7 +164,7 @@ export class LearnerLibrary {
     const createdAt = new Date().toISOString();
     // Keep compatibility with databases whose CHECK constraint predates newer study methods;
     // the canonical method is preserved in content_json and used by readers below.
-    const storedMethod = ["free-recall", "teach-back", "compare-contrast"].includes((content as any).method) ? "quiz" : (content as any).method;
+    const storedMethod = ["free-recall", "teach-back", "compare-contrast", "error-analysis"].includes((content as any).method) ? "quiz" : (content as any).method;
     this.database.prepare(`INSERT INTO study_sessions (id,course_id,concept_id,topic,method,content_json,created_at)
       VALUES (?,?,?,?,?,?,?)`).run(id, courseId, conceptId, (content as any).topic, storedMethod, JSON.stringify(content), createdAt);
     return { sessionId: id, createdAt, ...(content as object) };

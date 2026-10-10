@@ -335,7 +335,7 @@ export const StudyAttemptCreateSchema = z.object({
 
 export const StudySessionRequestSchema = z.object({
   topic: z.string().trim().min(1).max(200),
-  method: z.enum(["explanation", "worked-example", "quiz", "analogy", "free-recall", "teach-back", "compare-contrast"]).default("explanation"),
+  method: z.enum(["explanation", "worked-example", "quiz", "analogy", "free-recall", "teach-back", "compare-contrast", "error-analysis"]).default("explanation"),
   sourceMaterialId: z.string().uuid().optional(),
   assessmentId: z.string().uuid().optional(),
   reviewSessionId: z.string().uuid().optional(),
@@ -346,7 +346,7 @@ export const StudySessionContentSchema = z.object({
   assessmentId: z.string().uuid().nullable().optional(),
   sourceMaterialId: z.string().uuid().nullable().optional(),
   topic: z.string(),
-  method: z.enum(["explanation", "worked-example", "quiz", "analogy", "free-recall", "teach-back", "compare-contrast"]),
+  method: z.enum(["explanation", "worked-example", "quiz", "analogy", "free-recall", "teach-back", "compare-contrast", "error-analysis"]),
   sourceBasis: z.enum(["general-knowledge", "course-materials"]),
   lesson: z.string().min(1),
   example: z.string().default(""),
@@ -358,8 +358,9 @@ export const StudySessionContentSchema = z.object({
   hints: z.array(z.string().min(1).max(1200)).max(3).default([]),
 }).refine((value) => value.method === "free-recall" || value.method === "teach-back"
   ? value.options.length === 0 && value.answerIndex == null
-  : value.options.length >= 2 && value.answerIndex != null && value.answerIndex < value.options.length, {
-  message: "Open-response methods have no choices or answer key; other methods need an indexed set of answer choices.",
+  : value.options.length >= 2 && value.answerIndex != null && value.answerIndex < value.options.length
+    && (value.method !== "error-analysis" || value.example.trim().length > 0), {
+  message: "Open-response methods have no choices or answer key; other methods need indexed choices, and error analysis needs its worked solution.",
   path: ["options"],
 });
 export const StudyQuestionSchema = z.object({
@@ -392,7 +393,7 @@ export const StudySessionRecordSchema = StudySessionContentSchema.safeExtend({
 });
 export const StudySessionSummarySchema = z.object({
   sessionId: z.string().uuid(), conceptId: z.string().uuid(), topic: z.string(),
-  method: z.enum(["explanation", "worked-example", "quiz", "analogy", "free-recall", "teach-back", "compare-contrast"]),
+  method: z.enum(["explanation", "worked-example", "quiz", "analogy", "free-recall", "teach-back", "compare-contrast", "error-analysis"]),
   createdAt: z.string().datetime(), attemptCount: z.number().int().nonnegative(),
   correctCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(),
 });

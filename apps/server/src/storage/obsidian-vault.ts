@@ -84,6 +84,7 @@ function studyMethodLabel(method: string) {
     case "free-recall": return "Free recall";
     case "teach-back": return "Teach it back";
     case "compare-contrast": return "Compare & contrast";
+    case "error-analysis": return "Find the first mistake";
     default: return method.trim() ? method.replaceAll("-", " ") : "Method not recorded";
   }
 }
