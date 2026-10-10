@@ -194,6 +194,7 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
 
   return <section className="material-review" aria-label={`Review ${material.originalName}`}>
     <div className="material-review__heading"><div><p className="section-kicker">Source review</p><h3>{material.originalName}</h3><p>Comments stay attached to the extracted passage and its page, slide, or line location.</p></div>{loaded ? <button type="button" className="button-secondary" disabled={loading} onClick={() => void load()}>Refresh passages</button> : null}</div>
+    {material.mediaType === "application/pdf" ? <p className="material-review__math-note" role="note">PDF text extraction can flatten equation layout or separate symbols. Use the original page link below to verify math notation.</p> : null}
     {loading ? <p>Loading extracted passages…</p> : null}
     {error ? <p className="error-banner" role="alert">{error}</p> : null}
     {!loading && passages.map((passage) => {

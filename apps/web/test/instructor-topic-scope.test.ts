@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendInstructorTopicWording } from "../src/lib/instructor-topic-scope";
+import { appendInstructorTopicWording, partitionInstructorTopics } from "../src/lib/instructor-topic-scope";
+
+test("scope append preview separates already-listed topics without changing their order", () => {
+  assert.deepEqual(partitionInstructorTopics(
+    ["Partial trace", "Partial transpose", "Reduced density operators"],
+    ["partial TRACE"],
+  ), {
+    newTopics: ["Partial transpose", "Reduced density operators"],
+    alreadyListedTopics: ["Partial trace"],
+  });
+});
 
 test("appending duplicate topics can still preserve new professor wording", () => {
   const updated = appendInstructorTopicWording(
