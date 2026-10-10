@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { reconstructStackedSquareRootFractions } from "./pdf-math-layout.js";
 import { splitContent } from "./text-extractor.js";
 import type { ExtractedPassage, MaterialExtractor } from "./types.js";
 
@@ -17,13 +18,14 @@ export class PdfExtractor implements MaterialExtractor {
       for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
         const page = await document.getPage(pageNumber);
         const textContent = await page.getTextContent();
-        let pageText = "";
-
-        for (const item of textContent.items) {
-          if (!("str" in item)) continue;
-          pageText += item.str;
-          pageText += item.hasEOL ? "\n" : " ";
-        }
+        const positionedItems = textContent.items.flatMap((item) => "str" in item ? [{
+          str: item.str,
+          transform: item.transform,
+          width: item.width,
+          height: item.height,
+          hasEOL: item.hasEOL,
+        }] : []);
+        const pageText = reconstructStackedSquareRootFractions(positionedItems);
 
         for (const segment of splitContent(pageText)) {
           passages.push({

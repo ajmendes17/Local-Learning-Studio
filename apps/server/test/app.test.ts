@@ -17,6 +17,7 @@ import {
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { strToU8, zipSync } from "fflate";
 import { buildApp } from "../src/app.js";
+import { reconstructStackedSquareRootFractions } from "../src/extraction/pdf-math-layout.js";
 import { openDatabase } from "../src/storage/database.js";
 
 async function createTestApp() {
@@ -315,6 +316,23 @@ test("PDF extraction preserves page-level provenance", async () => {
 
   await app.close();
   await rm(root, { recursive: true });
+});
+
+test("PDF math layout reconstructs a stacked numerator over a square-root denominator", () => {
+  const item = (str: string, x: number, y: number, width: number, hasEOL = false) => ({
+    str, transform: [1, 0, 0, 11, x, y], width, height: 11, hasEOL,
+  });
+  const text = reconstructStackedSquareRootFractions([
+    item("|+〉", 0, 100, 16), item("=", 18, 100, 8),
+    item("|0〉", 24, 108, 16), item("+", 40, 108, 8), item("|1〉", 48, 108, 16, true),
+    item("√", 37, 101, 9), item("2", 46, 92, 6),
+  ]);
+  assert.ok(text.includes(String.raw`$\frac{|0〉+|1〉}{\sqrt{2}}$`), text);
+
+  const inlineRoot = reconstructStackedSquareRootFractions([
+    item("x", 0, 100, 8), item("√", 9, 100, 9), item("2", 18, 100, 6),
+  ]);
+  assert.doesNotMatch(inlineRoot, /\\frac/);
 });
 
 test("original source route refuses non-PDF materials", async () => {

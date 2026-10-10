@@ -15,9 +15,9 @@ function normalizeMathDelimiters(content: string, inline: boolean) {
 }
 
 const diracSymbols: Record<string, string> = {
-  "α": "\\alpha", "β": "\\beta", "δ": "\\delta", "ε": "\\epsilon", "θ": "\\theta",
-  "λ": "\\lambda", "μ": "\\mu", "ν": "\\nu", "ρ": "\\rho", "σ": "\\sigma", "φ": "\\phi", "ψ": "\\psi",
-  "Γ": "\\Gamma", "Δ": "\\Delta", "Θ": "\\Theta", "Λ": "\\Lambda", "Σ": "\\Sigma", "Φ": "\\Phi", "Ψ": "\\Psi", "Ω": "\\Omega",
+  "α": "\\alpha", "β": "\\beta", "γ": "\\gamma", "δ": "\\delta", "ε": "\\epsilon", "ζ": "\\zeta", "η": "\\eta", "θ": "\\theta",
+  "κ": "\\kappa", "λ": "\\lambda", "μ": "\\mu", "ν": "\\nu", "ξ": "\\xi", "π": "\\pi", "ρ": "\\rho", "σ": "\\sigma", "τ": "\\tau", "φ": "\\phi", "χ": "\\chi", "ψ": "\\psi", "ω": "\\omega",
+  "Γ": "\\Gamma", "Δ": "\\Delta", "Θ": "\\Theta", "Λ": "\\Lambda", "Ξ": "\\Xi", "Π": "\\Pi", "Σ": "\\Sigma", "Φ": "\\Phi", "Ψ": "\\Psi", "Ω": "\\Omega",
 };
 
 function diracLabel(label: string) {
@@ -25,6 +25,22 @@ function diracLabel(label: string) {
   return compact
     .replace(/([α-ωΑ-Ω])([+-])/gu, "$1^{$2}")
     .replace(/[α-ωΑ-Ω]/gu, (symbol) => diracSymbols[symbol] ?? symbol);
+}
+
+function normalizeDiracSegment(part: string, inMath: boolean) {
+  const math = (expression: string) => inMath ? expression : `$${expression}$`;
+  return part
+    .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|\s*([^〈⟨〉⟩]{1,32}?)\s*[〉⟩]/gu,
+      (_match, left: string, right: string) => math(`\\braket{${diracLabel(left)}|${diracLabel(right)}}`))
+    .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|/gu,
+      (_match, state: string) => math(`\\bra{${diracLabel(state)}}`))
+    .replace(/\|\s*([^|〈⟨〉⟩]{1,32}?)\s*[〉⟩](?:\s+([AB]))?/gu,
+      (_match, state: string, subsystem?: string) => math(`\\ket{${diracLabel(state)}}${subsystem ? `_${subsystem}` : ""}`))
+    .replace(/√\s*([A-Za-z0-9]+)/gu,
+      (_match, radicand: string) => math(`\\sqrt{${radicand}}`))
+    .replace(/\s*⊗\s*/gu, inMath ? " \\otimes " : " $\\otimes$ ")
+    .replace(/\s*⊕\s*/gu, inMath ? " \\oplus " : " $\\oplus$ ")
+    .replace(/\s*≡\s*/gu, inMath ? " \\equiv " : " $\\equiv$ ");
 }
 
 function normalizeRawDiracNotation(content: string) {
@@ -35,15 +51,8 @@ function normalizeRawDiracNotation(content: string) {
       inMath = !inMath;
       return part;
     }
-    if (inMath || part.startsWith("`") || !part) return part;
-    return part
-      .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|\s*([^〈⟨〉⟩]{1,32}?)\s*[〉⟩]/gu,
-        (_match, left: string, right: string) => `$\\braket{${diracLabel(left)}|${diracLabel(right)}}$`)
-      .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|/gu,
-        (_match, state: string) => `$\\bra{${diracLabel(state)}}$`)
-      .replace(/\|\s*([^|〈⟨〉⟩]{1,32}?)\s*[〉⟩]/gu,
-        (_match, state: string) => `$\\ket{${diracLabel(state)}}$`)
-      .replace(/√\s*([A-Za-z0-9]+)/gu, (_match, radicand: string) => `$\\sqrt{${radicand}}$`);
+    if (part.startsWith("`") || !part) return part;
+    return normalizeDiracSegment(part, inMath);
   }).join("");
 }
 
