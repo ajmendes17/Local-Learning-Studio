@@ -67,7 +67,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
       method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
       payload: {
         conceptId: conceptResponse.json().id, assessmentId: assessmentResponse.json().id,
-        activityType: "recognition", prompt: "Which state is $\\lvert\\Phi^+\\rangle$?", response: "Not sure, maybe [[other class]] ![image](https://example.invalid/pixel.png)", reasoning: "",
+        activityType: "recognition", prompt: "Which state is $\\lvert\\Phi^+\\rangle$ and $\u007f\\ket{0}$?", response: "Not sure, maybe [[other class]] ![image](https://example.invalid/pixel.png)", reasoning: "",
         confidence: 0.5, hintCount: 1, method: "retrieval-practice", outcome: "incorrect", sourceRefs: [{ materialId: uploaded.json().id }],
         independence: "hinted", rationale: "Incorrect demo attempt to validate the export.",
       },
@@ -101,7 +101,9 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(courseNote, /## Study journal[\s\S]*\[\[.*Study Journal\]\] · 2 saved attempts/);
     const studyJournalPath = join(vaultPath, firstExport.json().courseFolder, "Study Journal.md");
     const studyJournal = await readFile(studyJournalPath, "utf8");
-    assert.match(studyJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$\?/);
+    assert.match(studyJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$ and/);
+    assert.match(studyJournal, /and \$\\ket\{0\}\$\?/);
+    assert.equal(studyJournal.includes("\u007f"), false);
     assert.match(studyJournal, /Not sure, maybe &#91;&#91;other class&#93;&#93;/);
     assert.match(studyJournal, /!&#91;image\]\(https:\/\/example\.invalid\/pixel\.png\)/);
     assert.doesNotMatch(studyJournal, /!\[image\]\(https:\/\//);
@@ -166,9 +168,12 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(refreshedCourseNote, /Final exam scope/);
     const refreshedJournal = await readFile(studyJournalPath, "utf8");
     assert.match(refreshedJournal, /Review eigenstate notation next week\./);
-    assert.match(refreshedJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$\?/);
+    assert.match(refreshedJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$ and \$\\ket\{0\}\$\?/);
     const refreshedSourceNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "utf8");
     assert.match(refreshedSourceNote, /## Comments from older source versions[\s\S]*OBSIDIAN_SOURCE_SENTINEL[\s\S]*Professor emphasis: know how Bell states are constructed/);
+    const finalJournal = await readFile(studyJournalPath, "utf8");
+    assert.match(finalJournal, /Review eigenstate notation next week\./);
+    assert.equal(finalJournal.includes("\u007f"), false);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });
@@ -351,6 +356,7 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     const refreshedTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
     assert.match(refreshedTopic, /learner_tag: "exam-focus"/);
     assert.match(refreshedTopic, /practice_status: "checked"/);
+    assert.match(refreshedTopic, /^---\n[\s\S]*\n---\n\n# Tensor Products\n/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

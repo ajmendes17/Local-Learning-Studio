@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, scheduleAssessmentStudyDays, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, normalizeMathText, scheduleAssessmentStudyDays, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
 
 const START = "<!-- LLS:GENERATED:START -->";
 const END = "<!-- LLS:GENERATED:END -->";
@@ -65,7 +65,7 @@ function fencedVerbatim(content: string) {
 }
 
 function quotedLearnerText(content: string) {
-  const safe = escapeImportedWikilinks(content)
+  const safe = escapeImportedWikilinks(normalizeMathText(content))
     .replace(/(!?)\[([^\]\n]+)\]\(([^)\n]+)\)/g, (_match, embed: string, label: string, target: string) =>
       `${embed}&#91;${label}](${target})`,
     )
@@ -123,7 +123,10 @@ async function replaceManagedSection(path: string, id: string, title: string, ge
     next = `---\nid: ${yaml(id)}\n---\n\n# ${title}\n\n${block}\n\n## My notes\n\n`;
   }
   if (Object.keys(properties).length) {
-    const match = next.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+    // Some older repeated exports joined the closing YAML fence to the
+    // heading (`---# Topic`). Accept that legacy shape and normalize the
+    // frontmatter/body boundary each time properties are rewritten.
+    const match = next.match(/^---\n([\s\S]*?)\n---(?=\n|#|$)/);
     if (!match) throw new Error(`Cannot add Obsidian properties because YAML frontmatter is missing in ${path}.`);
     const lines = match[1]!.split("\n");
     for (const [key, value] of Object.entries(properties)) {
@@ -137,7 +140,8 @@ async function replaceManagedSection(path: string, id: string, title: string, ge
         lines.splice(index, removeCount, ...line.split("\n"));
       } else lines.push(...line.split("\n"));
     }
-    next = `---\n${lines.join("\n")}\n---${next.slice(match[0].length)}`;
+    const body = next.slice(match[0].length).replace(/^\n+/, "");
+    next = `---\n${lines.join("\n")}\n---\n\n${body}`;
   }
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
