@@ -19,7 +19,7 @@ function activityLabel(attemptCount: number, sessionCount: number) {
 function topicState(topic: LearnerProfileResponse["concepts"][number]) {
   if (!topic.attemptCount) return topic.sessionCount ? "Lesson studied" : "Not started";
   if (!topic.scoredAttemptCount) return "Recall recorded · not graded";
-  if (topic.latestOutcome === "incorrect") return "Needs another pass";
+  if (["incorrect", "incomplete", "unsupported", "not-graded"].includes(topic.latestOutcome ?? "")) return "Needs another pass";
   if (topic.latestOutcome === "correct" && topic.scoredAttemptCount >= 3 && topic.correctCount / topic.scoredAttemptCount >= 0.8) return "Consistent so far";
   return "Building evidence";
 }
@@ -68,7 +68,24 @@ export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyT
   const assessments = profiles.flatMap(({ course, profile }) => profile.assessments.map((assessment) => ({ course, assessment })));
   const practiced = concepts.filter(({ concept }) => concept.attemptCount || concept.sessionCount).length;
   const checked = concepts.filter(({ concept }) => concept.attemptCount > 0).length;
-  const needsReview = concepts.filter(({ concept }) => concept.latestOutcome === "incorrect").length;
+  const reviewTopics = concepts.filter(({ concept }) => ["incorrect", "incomplete", "unsupported", "not-graded"].includes(concept.latestOutcome ?? ""));
+  const lessonOnlyTopics = concepts.filter(({ concept }) => !concept.attemptCount && concept.sessionCount > 0);
+  const untouchedTopics = concepts.filter(({ concept }) => !concept.attemptCount && !concept.sessionCount);
+  const independentlyUnverifiedTopics = concepts.filter(({ concept }) => concept.scoredAttemptCount > 0 && (concept.independentScoredAttemptCount ?? 0) === 0);
+  const nextCandidate = reviewTopics[0]
+    ?? lessonOnlyTopics[0]
+    ?? independentlyUnverifiedTopics[0]
+    ?? untouchedTopics[0]
+    ?? concepts[0];
+  const nextStep = reviewTopics.length
+    ? { title: "Revisit a topic after a difficult check.", detail: "An incomplete, unsupported, ungraded, or incorrect result is a useful signal. Review the idea, then try another question." }
+    : lessonOnlyTopics.length
+      ? { title: "Add a check after a lesson.", detail: "You have studied this topic, but no response is saved yet. Try recalling it before reopening your notes." }
+      : independentlyUnverifiedTopics.length || checked
+        ? { title: "Try a delayed independent check.", detail: "A fresh closed-book attempt can show what comes back without hints or notes." }
+        : untouchedTopics.length
+          ? { title: "Start with one topic from a class.", detail: "A short first session gives you a place to begin and helps the study plan become more specific." }
+          : { title: "Start with one topic from a class.", detail: "Open a class to choose a topic and begin a study session." };
   const methods = profiles.flatMap(({ course, methods: rows }) => rows.map((row) => ({ course, row })))
     .filter(({ row }) => row.attemptCount > 0)
     .sort((a, b) => b.row.scoredAttemptCount - a.row.scoredAttemptCount || b.row.attemptCount - a.row.attemptCount);
@@ -86,7 +103,7 @@ export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyT
         <div className="knowledge-summary" aria-label="Knowledge profile overview">
           <div><span className="summary-number">{profiles.length}</span><span>classes</span></div>
           <div><span className="summary-number">{practiced}/{concepts.length}</span><span>topics practiced</span></div>
-          <div><span className="summary-number">{needsReview}</span><span>latest checks missed</span></div>
+          <div><span className="summary-number">{reviewTopics.length}</span><span>topics to revisit</span></div>
           <p>Counts describe recorded activity, not mastery or exam readiness.</p>
         </div>
       </section>
@@ -137,12 +154,7 @@ export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyT
         </div>
 
         <aside className="knowledge-side-column">
-          <section className="next-step-card"><p className="section-kicker">A useful next step</p><span className="next-step-number">{String(Math.max(1, needsReview + 1)).padStart(2, "0")}</span><h2>{needsReview ? "Revisit a topic after a missed check." : checked ? "Try a delayed independent check." : "Start with one topic from a class."}</h2><p>{needsReview ? "A missed answer is a useful signal. Work through the idea, then try another question when ready." : "A fresh closed-book attempt can show what comes back without hints or notes."}</p>{concepts.length ? <button className="button-primary" type="button" onClick={() => {
-            const candidate = concepts.find(({ concept }) => concept.latestOutcome === "incorrect")
-              ?? (checked ? concepts.find(({ concept }) => concept.scoredAttemptCount > 0) ?? concepts.find(({ concept }) => concept.attemptCount > 0) : concepts.find(({ concept }) => concept.attemptCount === 0))
-              ?? concepts[0]!;
-            onStudyTopic(candidate.course.id, candidate.concept.title);
-          }}>Study a suggested topic <span aria-hidden="true">→</span></button> : <button className="button-primary" type="button" onClick={() => onOpenCourse(profiles[0]?.course.id ?? "") } disabled={!profiles.length}>Open a class <span aria-hidden="true">→</span></button>}<small>Suggestions follow recent evidence; they are not predictions of exam performance.</small></section>
+          <section className="next-step-card"><p className="section-kicker">A useful next step</p><span className="next-step-number">{String(Math.max(1, reviewTopics.length + lessonOnlyTopics.length + 1)).padStart(2, "0")}</span><h2>{nextStep.title}</h2><p>{nextStep.detail}</p>{nextCandidate ? <button className="button-primary" type="button" onClick={() => onStudyTopic(nextCandidate.course.id, nextCandidate.concept.title)}>Study {nextCandidate.concept.title} <span aria-hidden="true">→</span></button> : <button className="button-primary" type="button" onClick={() => onOpenCourse(profiles[0]?.course.id ?? "")} disabled={!profiles.length}>Open a class <span aria-hidden="true">→</span></button>}<small>Suggestions follow saved activity and are not predictions of exam performance.</small></section>
 
           <section className="knowledge-panel knowledge-assessments"><div className="knowledge-panel__heading"><div><p className="section-kicker">Instructor scope</p><h2>Exam topic lists</h2></div></div>{assessments.length ? assessments.map(({ course, assessment }) => <article className="knowledge-assessment" key={assessment.id}><div><strong>{assessment.title}</strong><span>{course.code || course.title} · {assessment.topics.length} supplied {assessment.topics.length === 1 ? "topic" : "topics"}</span></div><p>{assessment.scoredAttemptCount ? `${assessment.correctCount}/${assessment.scoredAttemptCount} scored checks correct` : assessment.attemptCount ? `${assessment.attemptCount} saved, ungraded responses` : "No practice recorded yet"}</p><div className="knowledge-assessment__topics">{assessment.topics.slice(0, 5).map((topic) => <button type="button" key={topic.id} onClick={() => onStudyTopic(course.id, topic.title, assessment.id)}>{topic.importance === "high" ? "★ " : ""}{topic.title}<span>{topic.scoredAttemptCount ? `${topic.correctCount}/${topic.scoredAttemptCount}` : topic.attemptCount ? "Ungraded" : "Not started"}</span></button>)}{assessment.topics.length > 5 ? <small>+ {assessment.topics.length - 5} more topics</small> : null}</div><button className="button-secondary" type="button" onClick={() => onOpenCourse(course.id)}>Manage topic wording →</button></article>) : <p className="knowledge-empty">Paste the instructor’s exam or quiz topic list on a class Study page. Its original wording and topic-level progress will show here.</p>}</section>
 

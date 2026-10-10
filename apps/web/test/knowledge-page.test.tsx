@@ -93,9 +93,30 @@ test("knowledge dashboard keeps mapped, learner-created, and instructor-scope to
   assert.match(html, /Midterm 1/);
   assert.match(html, /Partial trace/);
   assert.match(html, /1 topic with saved attempts/);
+  assert.match(html, /1<\/span><span>topics to revisit/);
+  assert.match(html, /Revisit a topic after a difficult check\./);
+  assert.match(html, /Study A learner-created topic/);
   assert.match(html, /No independent checks yet/);
   assert.doesNotMatch(html, /role="progressbar" aria-label="Mapped but not practiced independent check accuracy"/);
   assert.doesNotMatch(html, /Bayesian inference|Recursive definitions|Quantum measurement/);
+});
+
+test("knowledge dashboard recommends revisiting incomplete and unsupported checks", () => {
+  const difficultCheckProfile = {
+    ...profile,
+    concepts: profile.concepts.map((concept) => ({ ...concept, scoredAttemptCount: 1, latestOutcome: "unsupported" })),
+  } as LearnerProfileResponse;
+  const html = renderToStaticMarkup(createElement(KnowledgePage, {
+    profiles: [{ course, profile: difficultCheckProfile, methods: [], courseMap: null }],
+    loading: false,
+    error: null,
+    onOpenCourse: () => undefined,
+    onStudyTopic: () => undefined,
+  }));
+
+  assert.match(html, /1<\/span><span>topics to revisit/);
+  assert.match(html, /Needs another pass/);
+  assert.match(html, /Revisit a topic after a difficult check\./);
 });
 
 test("knowledge topic profile shows independent check evidence separately from overall accuracy", () => {
