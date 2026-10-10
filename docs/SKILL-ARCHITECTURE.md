@@ -24,6 +24,7 @@ of being copied into every skill.
 | Submit answer | `evaluate-learner-response` | Score non-deterministic reasoning against a rubric and propose misconception evidence | Luna |
 | Take quiz | `generate-course-quiz` | Create a balanced assessment with validated keys, rubrics, source coverage, and difficulty distribution | Terra |
 | Review mistakes | `plan-remediation` | Convert recent errors and retention evidence into the smallest useful remediation session and plan revision | Terra |
+| Review learning patterns | `review-learning-patterns` | Propose provisional patterns from a bounded same-class attempt history and prior snapshot, only on explicit triggers | Terra |
 
 Study actions run inside a selected class workspace. Their inputs include only
 that class's concept profile, relevant evidence, and any selected passages;
@@ -104,6 +105,13 @@ proposals, persists attempts, and explains the suggested action. Later stages
 may add recurring-pattern analysis, method outcome comparisons, and
 learner-controlled adaptation strength without assigning fixed learning-style
 labels.
+
+The `review-learning-patterns` skill and `learner-pattern-review.v1` contract
+power explicit reviews at a completed-session boundary or when the learner
+requests one. The Study page invokes it only through those actions. It never
+runs per answer, continuously, on a timer, or in the background. The application
+owns same-class attempt selection, output validation, append-only review
+history, current pattern projection, and learner status corrections.
 
 The Study UI reveals progressive hints, records confidence and hint use, and
 offers both a new question and an exact-question retry. New-question generation

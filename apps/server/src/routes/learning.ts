@@ -28,7 +28,7 @@ function sendWorkflowError(error: unknown, reply: FastifyReply) {
       artifact_not_found: 404,
       invalid_source_references: 422,
     }[error.code];
-    return reply.code(status).send({ error: error.message });
+    return reply.code(status).send({ error: error.message, ...(error.diagnostics ? { diagnostics: error.diagnostics } : {}) });
   }
   if (error instanceof CodexRunError) {
     return reply.code(error.code === "unavailable" ? 503 : 502).send({

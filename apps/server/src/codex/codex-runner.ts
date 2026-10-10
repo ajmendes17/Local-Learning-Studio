@@ -30,7 +30,15 @@ export interface CodexRunResult<T> {
   model: string;
   startedAt: string;
   durationMs: number;
+  usage?: CodexTokenUsage | null;
   output: T;
+}
+
+export interface CodexTokenUsage {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
 }
 
 export interface CodexRunnerOptions {
@@ -45,6 +53,30 @@ interface ProcessResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+}
+
+function tokenUsageFromEvents(stdout: string): CodexTokenUsage | null {
+  let usage: CodexTokenUsage | null = null;
+  for (const line of stdout.split(/\r?\n/)) {
+    try {
+      const event: unknown = JSON.parse(line);
+      if (!event || typeof event !== "object") continue;
+      const record = event as Record<string, unknown>;
+      if (record.type !== "turn.completed" || !record.usage || typeof record.usage !== "object") continue;
+      const raw = record.usage as Record<string, unknown>;
+      const values = [raw.input_tokens, raw.cached_input_tokens, raw.output_tokens, raw.reasoning_output_tokens];
+      if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) continue;
+      usage = {
+        inputTokens: raw.input_tokens as number,
+        cachedInputTokens: raw.cached_input_tokens as number,
+        outputTokens: raw.output_tokens as number,
+        reasoningOutputTokens: raw.reasoning_output_tokens as number,
+      };
+    } catch {
+      // Codex can emit diagnostic lines alongside its JSONL event stream.
+    }
+  }
+  return usage;
 }
 
 function appendBounded(current: string, chunk: Buffer | string) {
@@ -146,6 +178,7 @@ export class CodexRunner {
           schemaPath,
           "--output-last-message",
           outputPath,
+          "--json",
           "-",
         ],
         prompt,
@@ -176,6 +209,7 @@ export class CodexRunner {
           model,
           startedAt,
           durationMs: Date.now() - started,
+          usage: tokenUsageFromEvents(result.stdout),
           output: outputSchema.parse(JSON.parse(rawOutput)),
         };
       } catch (error) {

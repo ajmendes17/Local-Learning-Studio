@@ -9,17 +9,25 @@ import {
   CourseSummarySchema,
   SourceClassificationArtifactSchema,
   type CreateCourseRequest,
+  type ApiError,
   type MaterialKind,
 } from "@local-learning-studio/contracts";
+
+export type ApiErrorInfo = Pick<ApiError, "error" | "detail" | "diagnostics">;
+
+export class ApiRequestError extends Error {
+  constructor(readonly info: ApiErrorInfo) {
+    super([info.error, info.detail].filter(Boolean).join(" "));
+    this.name = "ApiRequestError";
+  }
+}
 
 async function readResponse(response: Response) {
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const parsed = ApiErrorSchema.safeParse(body);
-    const message = parsed.success
-      ? [parsed.data.error, parsed.data.detail].filter(Boolean).join(" ")
-      : `The local service returned ${response.status}.`;
-    throw new Error(message);
+    if (parsed.success) throw new ApiRequestError(parsed.data);
+    throw new ApiRequestError({ error: `The local service returned ${response.status}.` });
   }
   return body;
 }

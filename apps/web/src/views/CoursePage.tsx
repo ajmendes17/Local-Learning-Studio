@@ -3,6 +3,7 @@ import type {
   CourseDetail,
   CourseLearningArtifactsResponse,
   CourseMaterial,
+  LearnerProfileResponse,
   MaterialKind,
 } from "@local-learning-studio/contracts";
 import {
@@ -10,21 +11,29 @@ import {
   type LearningAction,
 } from "../components/CourseMapPanel";
 import { MaterialUpload } from "../components/MaterialUpload";
+import { ObsidianExportPanel } from "../components/ObsidianExportPanel";
+import type { LearningRunInfo } from "../App";
+import type { ApiErrorInfo } from "../lib/api";
 
 interface CoursePageProps {
   course: CourseDetail | null;
   loading: boolean;
   error: string | null;
   artifacts: CourseLearningArtifactsResponse | null;
+  learnerProgress: LearnerProfileResponse["concepts"];
+  sourceProgress: LearnerProfileResponse["sources"];
   codex: CodexStatusResponse | null;
   learningAction: LearningAction;
-  learningError: string | null;
+  learningRun: LearningRunInfo | null;
+  learningError: ApiErrorInfo | null;
   onBack: () => void;
   onUpload: (file: File, kind: MaterialKind) => Promise<void>;
   onAnalyze: (regenerate: boolean) => Promise<void>;
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAcceptMap: () => Promise<void>;
   onStudy: () => void;
+  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string) => void;
+  onStudyMaterial: (topic: string, materialId: string) => void;
 }
 
 const materialKindLabels: Record<MaterialKind, string> = {
@@ -94,8 +103,11 @@ export function CoursePage({
   loading,
   error,
   artifacts,
+  learnerProgress,
+  sourceProgress,
   codex,
   learningAction,
+  learningRun,
   learningError,
   onBack,
   onUpload,
@@ -103,6 +115,8 @@ export function CoursePage({
   onBuildMap,
   onAcceptMap,
   onStudy,
+  onStudyTopic,
+  onStudyMaterial,
 }: CoursePageProps) {
   if (loading && !course) {
     return <main className="course-loading">Opening class…</main>;
@@ -234,16 +248,23 @@ export function CoursePage({
 
       <CourseMapPanel
         artifacts={artifacts}
+        learnerProgress={learnerProgress}
+        sourceProgress={sourceProgress}
         codex={codex}
         readySourceCount={
           course.materials.filter(({ status }) => status === "ready").length
         }
+        materials={course.materials}
         action={learningAction}
+        run={learningRun}
         error={learningError}
         onAnalyze={onAnalyze}
         onBuildMap={onBuildMap}
         onAccept={onAcceptMap}
+        onStudyTopic={onStudyTopic}
+        onStudyMaterial={onStudyMaterial}
       />
+      <ObsidianExportPanel courseId={course.id} courseTitle={course.title} />
     </main>
   );
 }

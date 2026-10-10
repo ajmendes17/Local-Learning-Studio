@@ -1,0 +1,6 @@
+interface:
+  display_name: "Review Learning Patterns"
+  short_description: "Review bounded class history on request"
+  default_prompt: "Use $review-learning-patterns to review the supplied class-scoped attempt history."
+policy:
+  allow_implicit_invocation: false

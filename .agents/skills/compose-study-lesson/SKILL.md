@@ -16,6 +16,7 @@ description: Compose the next bounded Local Learning Studio lesson from the acti
 4. Keep answers separate from prompts and use progressive hints rather than an
    immediate reveal.
 5. Return only the supplied structured-output contract.
+6. Format inline equations as `$...$` and longer derivations as standalone `$$` blocks. Keep TeX commands inside math delimiters, and preserve the supplied course notation.
 
 Do not expand the lesson beyond its time budget, claim completion or mastery,
 or write learner state directly.

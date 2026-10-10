@@ -1,19 +1,31 @@
 import type {
   CodexStatusResponse,
+  CourseMaterial,
   CourseLearningArtifactsResponse,
+  LearnerProfileResponse,
 } from "@local-learning-studio/contracts";
+import type { LearningRunInfo } from "../App";
+import { AcceptedStructureDiagram } from "./AcceptedStructureDiagram";
+import { MathText } from "./MathText";
+import type { ApiErrorInfo } from "../lib/api";
 
 export type LearningAction = "analyzing" | "mapping" | "accepting" | null;
 
 interface CourseMapPanelProps {
   artifacts: CourseLearningArtifactsResponse | null;
+  learnerProgress: LearnerProfileResponse["concepts"];
+  sourceProgress: LearnerProfileResponse["sources"];
   codex: CodexStatusResponse | null;
   readySourceCount: number;
+  materials: CourseMaterial[];
   action: LearningAction;
-  error: string | null;
+  run: LearningRunInfo | null;
+  error: ApiErrorInfo | null;
   onAnalyze: (regenerate: boolean) => Promise<void>;
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAccept: () => Promise<void>;
+  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string) => void;
+  onStudyMaterial: (topic: string, materialId: string) => void;
 }
 
 const roleLabels: Record<string, string> = {
@@ -26,6 +38,16 @@ const roleLabels: Record<string, string> = {
   reference: "Reference",
   other: "Other",
 };
+
+function diagnosticText(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.length ? value.map((item) => typeof item === "string" ? item : JSON.stringify(item)).join(" · ") : "none";
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).map(([key, item]) => `${key}: ${String(item)}`).join(" · ");
+  }
+  return String(value);
+}
 
 function PipelineStep({
   number,
@@ -51,13 +73,19 @@ function PipelineStep({
 
 export function CourseMapPanel({
   artifacts,
+  learnerProgress,
+  sourceProgress,
   codex,
   readySourceCount,
+  materials,
   action,
+  run,
   error,
   onAnalyze,
   onBuildMap,
   onAccept,
+  onStudyTopic,
+  onStudyMaterial,
 }: CourseMapPanelProps) {
   const classification = artifacts?.classification ?? null;
   const courseMap = artifacts?.courseMap ?? null;
@@ -135,7 +163,15 @@ export function CourseMapPanel({
         />
       </ol>
 
-      {error ? <div className="map-error">{error}</div> : null}
+      {run && run.status !== "failed" ? (
+        <div className="codex-run-status" role="status" aria-live="polite">
+          <div><strong>{run.status === "running" ? `Codex is ${run.phase === "classification" ? "analyzing sources" : "building the course map"}…` : run.model === "Cached result" ? "Reused saved result" : "Codex run complete"}</strong><span>{run.model} · {run.durationMs == null ? `${Math.max(1, Math.floor((Date.now() - run.startedAt) / 1000))}s elapsed` : `${(run.durationMs / 1000).toFixed(1)}s`}</span></div>
+          {run.usage ? <p>{run.usage.inputTokens.toLocaleString()} input tokens · {run.usage.outputTokens.toLocaleString()} output tokens · {run.usage.cachedInputTokens.toLocaleString()} cached input</p> : run.status === "running" ? <p>Token totals will appear when this model call finishes.</p> : <p>Token usage was not reported for this run.</p>}
+          {run.promptCharacters != null && run.sourceStats ? <p>Prompt: {run.promptCharacters.toLocaleString()} characters · {run.sourceStats.passageCount} passages / {run.sourceStats.materialCount} materials · {run.sourceStats.characterCount.toLocaleString()} source characters · {run.omittedPassageCount ?? 0} omitted</p> : null}
+        </div>
+      ) : null}
+
+      {error ? <div className="map-error" role="alert"><p>{error.error}</p>{error.diagnostics ? <details className="map-error__diagnostics" open><summary>Inspect course-map validation details</summary><p>These checks compare Codex’s course and evidence references with the exact sources supplied for this run.</p><dl>{Object.entries(error.diagnostics).map(([key, value]) => <div key={key}><dt>{key.replaceAll(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())}</dt><dd>{diagnosticText(value)}</dd></div>)}</dl></details> : null}</div> : null}
       {!codexReady && codex ? (
         <div className="map-notice">
           <strong>Connect Codex before running analysis.</strong>
@@ -188,16 +224,16 @@ export function CourseMapPanel({
             {classification?.payload.sources.map((source) => (
               <article key={source.materialId} className="source-role">
                 <div>
-                  <span>{roleLabels[source.role] ?? source.role}</span>
-                  <small>{source.confidence} confidence</small>
+                  <span>{materials.find(({ id }) => id === source.materialId)?.originalName ?? roleLabels[source.role] ?? source.role}</span>
+                  <small>{roleLabels[source.role] ?? source.role} · {source.confidence} confidence</small>
                 </div>
-                <p>{source.summary}</p>
+                <p><MathText inline content={source.summary} /></p>
               </article>
             ))}
           </div>
           {classification?.payload.gaps.length ? (
             <p className="map-inline-warning">
-              Missing coverage: {classification.payload.gaps.join(" · ")}
+              Missing coverage: {classification.payload.gaps.map((gap, index) => <span key={`${gap}-${index}`}>{index ? " · " : ""}<MathText inline content={gap} /></span>)}
             </p>
           ) : null}
         </div>
@@ -238,30 +274,30 @@ export function CourseMapPanel({
             </span>
           </div>
 
-          <div className="map-module-list">
+          {mapAccepted ? <AcceptedStructureDiagram proposal={courseMap.payload} materials={materials} learnerProgress={learnerProgress} sourceProgress={sourceProgress} onStudyTopic={onStudyTopic} /> : <div className="map-module-list">
             {[...courseMap.payload.modules]
               .sort((left, right) => left.position - right.position)
               .map((module, index) => (
                 <article key={module.key} className="map-module">
                   <span>{String(index + 1).padStart(2, "0")}</span>
                   <div>
-                    <h4>{module.title}</h4>
-                    <p>{module.description}</p>
+                    <h4><MathText inline content={module.title} /></h4>
+                    <p><MathText inline content={module.description} /></p>
                     <small>
                       {module.conceptKeys.length} {module.conceptKeys.length === 1 ? "concept" : "concepts"}
                     </small>
                   </div>
                 </article>
               ))}
-          </div>
+          </div>}
 
-          {courseMap.payload.assessments.length ? (
+          {!mapAccepted && courseMap.payload.assessments.length ? (
             <div className="map-assessments">
               <strong>Assessments found</strong>
               <div>
                 {courseMap.payload.assessments.map((assessment) => (
                   <span key={`${assessment.title}-${assessment.moduleKey ?? "course"}`}>
-                    {assessment.title}
+                    <MathText inline content={assessment.title} />
                   </span>
                 ))}
               </div>
@@ -270,7 +306,7 @@ export function CourseMapPanel({
 
           {courseMap.payload.warnings.length ? (
             <div className="map-inline-warning">
-              {courseMap.payload.warnings.join(" · ")}
+              {courseMap.payload.warnings.map((warning, index) => <span key={`${warning}-${index}`}>{index ? " · " : ""}<MathText inline content={warning} /></span>)}
             </div>
           ) : null}
 

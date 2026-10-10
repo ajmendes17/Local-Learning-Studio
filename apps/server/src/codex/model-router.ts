@@ -16,6 +16,7 @@ const taskTiers: Record<CodexTask, keyof CodexModels> = {
   "evaluate-learner-response": "luna",
   "generate-course-quiz": "terra",
   "plan-remediation": "terra",
+  "review-learning-patterns": "terra",
   "audit-learning-artifact": "sol",
 };
 

@@ -5,9 +5,10 @@ Codex. It is intended to turn course material into source-grounded plans,
 lessons, practice, assessments, and adaptive review without requiring a
 separate pay-as-you-go API integration by default.
 
-This repository currently contains the runnable project foundation. Product
-features are intentionally tracked as milestones in [PROGRESS.md](./PROGRESS.md)
-rather than represented as finished.
+The app runs locally and combines course materials, an interactive course map,
+study sessions, learner progress, and an optional Obsidian export. The
+implementation ledger in [PROGRESS.md](./PROGRESS.md) records completed work
+and its verification evidence.
 
 ## Product principles
 
@@ -92,45 +93,39 @@ npm run check
 The check runs TypeScript validation, server tests, and production builds for
 all workspaces.
 
-## Current scope
+## What the app does
 
-The foundation includes:
+- Stores course files and learner records locally, with source locations and
+  extraction status recorded for supported PDF, Markdown, text, DOCX, and PPTX
+  materials.
+- Builds a reviewable, source-grounded course map. Modules, topics, homework,
+  and exams appear in an interactive view; selecting a module or assessment
+  opens its details and provides a path into study.
+- Supports clear explanations, worked examples, quiz-first practice, and
+  analogy-based lessons. The lesson and knowledge check have separate tabs;
+  checks include hints, confidence ratings, saved attempts, and follow-up
+  practice suggestions.
+- Lets learners paste an instructor's exam topic list, review the cleaned
+  topics, set priorities, and keep the list connected to study and progress.
+- Tracks lesson activity separately from knowledge checks, and distinguishes
+  scored answers from unscored attempts across topics, modules, and assessments.
+  These are transparent activity signals, not calibrated mastery estimates.
+- Exports a class knowledge base to a configured Obsidian vault on request.
+  Notes link sources, modules, topics, assessments, and study-method progress;
+  refreshes preserve learner-owned note sections. Export is one-way: edits in
+  Obsidian do not update the app.
+- Renders supported mathematical notation as formatted math in study and course
+  map content.
 
-- A responsive course-library homepage
-- A “How it works” information page describing the planned learning loops
-- Clickable class cards and per-class workspaces
-- A class-creation workflow
-- Per-class PDF, Markdown, text, DOCX, and PPTX uploads
-- Markdown, plain-text, text-PDF, DOCX, and PPTX extraction into source passages
-- Page, line, paragraph, slide, and heading provenance with passage hashes
-- Explicit extraction states and visible failure reasons
-- SQLite-backed course and material records
-- Class-scoped learner assessments, topics, concepts, attempts, and append-only
-  mastery evidence, with class-local learner API routes
-- A direct study space inside each class with Codex-generated explanations,
-  worked examples, quiz-first practice, immediate feedback, clarification chat,
-  and optional time budgeting
-- Shared runtime contracts for courses, sources, concepts, course-map
-  proposals, modules, and assessments
-- Explicit local file separation under `courses/<course-id>/materials`
-- Nine explicitly invoked, project-local learning skills
-- A serialized Codex runner with configurable Luna, Terra, and Sol routing
-- A local Codex installation/authentication readiness endpoint
-- Cached source classification through the explicit Luna workflow
-- Cached, source-grounded course-map drafts through the explicit Terra workflow
-- Transactional acceptance into modules, concepts, objectives, and assessments
-- A responsive in-course review workflow showing source roles, map freshness,
-  warnings, modules, assessments, model provenance, and regeneration controls
-- Architecture, data-model, and progress documentation
-
-OCR, Obsidian vault synchronization, reusable generated lesson history,
-course-material retrieval inside the direct study session, and calibrated
-mastery thresholds are not implemented yet. See
-[SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for the current extraction
-boundary and [PROGRESS.md](./PROGRESS.md) for implementation order and
-acceptance criteria. Settled product and model-routing decisions live in
-[PRODUCT-PLAN.md](./docs/PRODUCT-PLAN.md), with the implemented narrow skill split
-in [SKILL-ARCHITECTURE.md](./docs/SKILL-ARCHITECTURE.md).
+Scanned-document OCR, image extraction, two-way Obsidian sync, and calibrated
+mastery estimates are not implemented. Study sessions do not require uploaded
+notes; when no course material is selected, the app labels the lesson as based
+on general knowledge rather than course-verified evidence. See
+[SOURCE-INGESTION.md](./docs/SOURCE-INGESTION.md) for extraction limits and
+[PROGRESS.md](./PROGRESS.md) for implementation and verification history.
+Architecture and workflow details live in [ARCHITECTURE.md](./docs/ARCHITECTURE.md),
+[COURSE-DATA-MODEL.md](./docs/COURSE-DATA-MODEL.md), and
+[LEARNING-FEEDBACK-LOOPS.md](./docs/LEARNING-FEEDBACK-LOOPS.md).
 
 ## Privacy and cost boundary
 

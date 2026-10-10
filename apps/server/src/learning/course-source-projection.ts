@@ -21,6 +21,12 @@ export interface CourseSourceProjection {
   materials: ProjectedMaterial[];
   sourceFingerprint: string;
   omittedPassageCount: number;
+  sourceStats: {
+    materialCount: number;
+    passageCount: number;
+    characterCount: number;
+    materials: Array<{ materialId: string; passageCount: number; characterCount: number }>;
+  };
 }
 
 export function buildCourseSourceProjection(
@@ -73,6 +79,16 @@ export function buildCourseSourceProjection(
     (total, material) => total + material.passageCount,
     0,
   );
+  const sourceStats = {
+    materialCount: materials.length,
+    passageCount,
+    characterCount,
+    materials: materials.map((material) => ({
+      materialId: material.id,
+      passageCount: material.passages.length,
+      characterCount: material.passages.reduce((sum, passage) => sum + passage.content.length, 0),
+    })),
+  };
   const fingerprintInput = sourceLibrary
     .getCoursePassageHashes(course.id)
     .map(({ materialId, contentHash }) => `${materialId}:${contentHash}`)
@@ -90,5 +106,6 @@ export function buildCourseSourceProjection(
       .update(`course-source.v1\n${course.id}\n${fingerprintInput}`)
       .digest("hex"),
     omittedPassageCount: Math.max(0, totalPassages - passageCount),
+    sourceStats,
   };
 }

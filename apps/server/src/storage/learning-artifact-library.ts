@@ -63,6 +63,15 @@ export class LearningArtifactLibrary {
     return row ? mapArtifact(row) : null;
   }
 
+  acceptedCourseMap(courseId: string) {
+    const row = this.database.prepare(`
+      ${artifactSelect}
+      WHERE course_id = ? AND kind = 'course-map' AND status = 'accepted'
+      ORDER BY accepted_at DESC LIMIT 1
+    `).get(courseId) as unknown as ArtifactRow | undefined;
+    return row ? CourseMapArtifactSchema.parse(mapArtifact(row)) : null;
+  }
+
   findByFingerprint(
     courseId: string,
     kind: ArtifactKind,

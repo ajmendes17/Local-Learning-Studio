@@ -226,6 +226,7 @@ export function openDatabase(databasePath: string) {
 
     CREATE TABLE IF NOT EXISTS learner_assessments (
       id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       kind TEXT NOT NULL CHECK(kind IN ('exam','quiz','other')),
       scheduled_at TEXT,
@@ -236,6 +237,7 @@ export function openDatabase(databasePath: string) {
 
     CREATE TABLE IF NOT EXISTS learner_concepts (
       id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       stable_key TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
@@ -245,6 +247,7 @@ export function openDatabase(databasePath: string) {
 
     CREATE TABLE IF NOT EXISTS learner_topics (
       id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       assessment_id TEXT NOT NULL REFERENCES learner_assessments(id) ON DELETE CASCADE,
       concept_id TEXT REFERENCES learner_concepts(id) ON DELETE SET NULL,
       title TEXT NOT NULL,
@@ -257,6 +260,8 @@ export function openDatabase(databasePath: string) {
 
     CREATE TABLE IF NOT EXISTS study_attempts (
       id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES study_sessions(id) ON DELETE SET NULL,
       concept_id TEXT NOT NULL REFERENCES learner_concepts(id) ON DELETE CASCADE,
       assessment_id TEXT REFERENCES learner_assessments(id) ON DELETE SET NULL,
       activity_type TEXT NOT NULL CHECK(activity_type IN ('recall','explanation','application','recognition','retention')),
@@ -283,6 +288,7 @@ export function openDatabase(databasePath: string) {
 
     CREATE TABLE IF NOT EXISTS mastery_evidence (
       id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       attempt_id TEXT NOT NULL UNIQUE REFERENCES study_attempts(id) ON DELETE CASCADE,
       concept_id TEXT NOT NULL REFERENCES learner_concepts(id) ON DELETE CASCADE,
       evidence_kind TEXT NOT NULL,
@@ -290,6 +296,26 @@ export function openDatabase(databasePath: string) {
       independence TEXT NOT NULL CHECK(independence IN ('independent','hinted','assisted','unknown')),
       rationale TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learner_pattern_reviews (
+      id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      trigger TEXT NOT NULL CHECK(trigger IN ('session-end','user-request')),
+      result_json TEXT NOT NULL CHECK(json_valid(result_json)),
+      model TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learner_patterns (
+      id TEXT PRIMARY KEY,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      pattern_key TEXT NOT NULL,
+      review_id TEXT NOT NULL REFERENCES learner_pattern_reviews(id) ON DELETE CASCADE,
+      payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
+      learner_status TEXT CHECK(learner_status IS NULL OR learner_status IN ('emerging','reinforced','mixed','weakened','dismissed')),
+      updated_at TEXT NOT NULL,
+      UNIQUE(course_id, pattern_key)
     );
 
     CREATE INDEX IF NOT EXISTS materials_course_id
@@ -321,6 +347,7 @@ export function openDatabase(databasePath: string) {
   for (const table of ["learner_assessments", "learner_topics", "learner_concepts", "study_attempts", "mastery_evidence"]) {
     ensureColumn(database, table, "course_id", "TEXT REFERENCES courses(id) ON DELETE CASCADE");
   }
+  ensureColumn(database, "study_attempts", "session_id", "TEXT REFERENCES study_sessions(id) ON DELETE SET NULL");
   database.exec(`
     CREATE INDEX IF NOT EXISTS source_passages_course_material
       ON source_passages(course_id, material_id, ordinal);
@@ -330,6 +357,8 @@ export function openDatabase(databasePath: string) {
       ON learner_concepts(course_id, title);
     CREATE INDEX IF NOT EXISTS learner_topics_course
       ON learner_topics(course_id, assessment_id, position);
+    CREATE INDEX IF NOT EXISTS learner_pattern_reviews_course_time
+      ON learner_pattern_reviews(course_id, created_at DESC);
   `);
 
   return database;

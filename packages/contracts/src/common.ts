@@ -11,6 +11,6 @@ export interface HealthResponse {
 export const ApiErrorSchema = z.object({
   error: z.string(),
   detail: z.string().optional(),
+  diagnostics: z.record(z.string(), z.unknown()).optional(),
 });
 export type ApiError = z.infer<typeof ApiErrorSchema>;
-

@@ -8,6 +8,7 @@ import {
   CourseLearningArtifactsResponseSchema,
   CourseMapArtifactSchema,
   CourseSummarySchema,
+  ApiErrorSchema,
   SourceClassificationArtifactSchema,
   type CodexTask,
 } from "@local-learning-studio/contracts";
@@ -36,6 +37,7 @@ function multipartFile(filename: string, content: string) {
 
 class FakeLearningCodex implements LearningCodexClient {
   readonly calls: CodexTask[] = [];
+  invalidNextMapSourceSet = false;
 
   async status() {
     return {
@@ -54,12 +56,13 @@ class FakeLearningCodex implements LearningCodexClient {
   ): Promise<CodexRunResult<T>> {
     this.calls.push(task);
     const input = JSON.parse(prompt.split("INPUT_JSON\n\n")[1]!) as any;
-    const projection = task === "map-course" ? input.projection : input;
+    const projection = input;
     const materialIds = projection.materials.map(({ id }: any) => id);
-    const references = projection.materials.map(({ id, passages }: any) => ({
-      materialId: id,
-      passageId: passages[0].id,
-    }));
+    const references = projection.materials.map(({ id, passages }: any) =>
+      task === "map-course"
+        ? { materialId: id, passageKey: passages[0].passageKey }
+        : { materialId: id, passageId: passages[0].id },
+    );
     const raw =
       task === "classify-course-sources"
         ? {
@@ -113,7 +116,12 @@ class FakeLearningCodex implements LearningCodexClient {
               },
             ],
             warnings: [],
-          };
+        };
+
+    if (task === "map-course" && this.invalidNextMapSourceSet) {
+      this.invalidNextMapSourceSet = false;
+      raw.sourceMaterialIds = [...materialIds, "00000000-0000-4000-8000-000000000000"];
+    }
 
     return {
       task,
@@ -203,6 +211,21 @@ test("course sources flow through cached classification, map review, and accepta
   });
   assert.equal(codex.calls.length, 2, "matching map should be cached");
 
+  codex.invalidNextMapSourceSet = true;
+  const invalidMapResponse = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.id}/course-map`,
+    payload: { regenerate: true },
+  });
+  assert.equal(invalidMapResponse.statusCode, 422, invalidMapResponse.body);
+  const invalidMapError = ApiErrorSchema.parse(invalidMapResponse.json());
+  assert.match(invalidMapError.error, /does not match the supplied course evidence/);
+  assert.equal(invalidMapError.diagnostics?.courseIdMatches, true);
+  assert.deepEqual(invalidMapError.diagnostics?.missingMaterialIds, []);
+  assert.deepEqual(invalidMapError.diagnostics?.unexpectedMaterialIds, ["00000000-0000-4000-8000-000000000000"]);
+  assert.equal(invalidMapError.diagnostics?.invalidReferenceCount, 0);
+  assert.equal(invalidMapError.diagnostics?.omittedPassageCount, 0);
+
   const secondUpload = multipartFile(
     "lecture.md",
     "# Feedback\n\nUse retrieval evidence to revise the plan.",
@@ -237,6 +260,18 @@ test("course sources flow through cached classification, map review, and accepta
   );
   assert.notEqual(refreshedMap.id, courseMap.id);
 
+  const instructorScopeResponse = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.id}/learner/assessments`,
+    payload: {
+      title: "Midterm topics from professor",
+      kind: "exam",
+      topics: [{ title: "Preserve this instructor wording", importance: "high", provenance: "learner" }],
+    },
+  });
+  assert.equal(instructorScopeResponse.statusCode, 201, instructorScopeResponse.body);
+  const instructorScopeId = instructorScopeResponse.json().id as string;
+
   const acceptResponse = await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/course-map/${refreshedMap.id}/accept`,
@@ -251,6 +286,16 @@ test("course sources flow through cached classification, map review, and accepta
   const detail = CourseDetailSchema.parse(detailResponse.json());
   assert.equal(detail.modules.length, 1);
   assert.equal(detail.assessments.length, 1);
+
+  const profileResponse = await app.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/learner/profile`,
+  });
+  const savedInstructorScope = profileResponse.json().assessments.find((item: { id: string }) => item.id === instructorScopeId);
+  assert.equal(savedInstructorScope.title, "Midterm topics from professor");
+  assert.deepEqual(savedInstructorScope.topics.map((item: { title: string; importance: string }) => [item.title, item.importance]), [
+    ["Preserve this instructor wording", "high"],
+  ]);
 
   const artifactsResponse = await app.inject({
     method: "GET",
@@ -275,6 +320,13 @@ test("course sources flow through cached classification, map review, and accepta
       .courseMap?.id,
     refreshedMap.id,
   );
+  const reopenedProfile = await reopened.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/learner/profile`,
+  });
+  const persistedInstructorScope = reopenedProfile.json().assessments.find((item: { id: string }) => item.id === instructorScopeId);
+  assert.equal(persistedInstructorScope.topics[0].title, "Preserve this instructor wording");
+  assert.equal(persistedInstructorScope.topics[0].importance, "high");
   await reopened.close();
   await rm(root, { recursive: true });
 });

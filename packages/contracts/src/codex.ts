@@ -10,6 +10,7 @@ export const CodexTaskSchema = z.enum([
   "evaluate-learner-response",
   "generate-course-quiz",
   "plan-remediation",
+  "review-learning-patterns",
   "audit-learning-artifact",
 ]);
 

@@ -4,5 +4,7 @@ export * from "./course.js";
 export * from "./course-map.js";
 export * from "./learning-artifact.js";
 export * from "./learner.js";
+export * from "./learner-pattern-review.js";
+export * from "./math-text.js";
 export * from "./source.js";
 export * from "./source-classification.js";

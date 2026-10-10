@@ -203,11 +203,37 @@ from recent evidence. Persistence and objective grading remain application
 responsibilities; skills receive only the current concept's bounded evidence
 window and do not diagnose stable learner traits from sparse data.
 
-This is stage one of a planned progression. Later stages can identify recurring
-error patterns across more attempts, compare outcomes across learning methods,
-and let the learner tune how strongly history influences recommendations.
-Observed habits must remain revisable, contextual signals rather than fixed
-learning-style labels.
+The Study page also shows class-scoped counts of scored checks by method. It
+does not rank methods or change recommendations: topic mix and small samples
+make raw rates uncertain. Later stages can identify recurring error patterns
+across more attempts and let the learner tune how strongly history influences
+recommendations. Observed habits must remain revisable, contextual signals
+rather than fixed learning-style labels.
+
+### Pattern review (implemented)
+
+Deeper pattern analysis is a bounded review, not a continuously running learner
+monitor. Its only planned triggers are an explicit `session-end` review and a
+`user-request` review. It never runs after every answer, on a timer, or in the
+background. The Study page exposes both triggers, and each saved attempt is
+linked to the lesson session that produced it.
+
+Each review receives one class ID, a bounded set of that class's attempt IDs,
+and the prior pattern snapshot IDs needed for comparison. Proposals carry a
+stable pattern key, kind, class-local concept links, provisional status,
+confidence, supporting and counterexample attempt IDs, and a rationale for
+any status change. Valid statuses are `emerging`, `reinforced`, `mixed`, and
+`weakened`; a model cannot dismiss or delete a pattern. Sparse evidence can
+yield `insufficient` or `limited` and no change. Review history should be
+append-only in SQLite, with a current projection derived from accepted review
+results and learner status overrides. The learner can inspect, correct the
+status, or dismiss an observation. Reviews store trigger, supplied evidence,
+result, model, and timestamp. They must match the class and exact bounded
+attempt window before persistence.
+
+This review currently evaluates recorded attempts; uploading a file does not
+yet make lesson or question generation use its passages. Source-grounded study
+generation remains a separate follow-up feature.
 
 ## Loop 5: Retention and planning
 

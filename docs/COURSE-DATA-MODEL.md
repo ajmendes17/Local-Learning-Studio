@@ -168,6 +168,12 @@ topic name in another class without sharing its mastery history. A study space
 can start with only an assessment date and topic list; uploaded materials are
 optional.
 
+The Study page accepts instructor topic lists pasted as numbered, bulleted,
+checkbox, comma-separated, or one-topic-per-line text. It removes list markers,
+normalizes whitespace, and drops case-only duplicates while keeping the first
+wording. These remain learner-provided scope; they do not become source-verified
+course-map claims.
+
 The migration adds nullable `course_id` columns so existing database files
 open without destructive rewrites. New API writes require a valid class ID.
 Legacy unassigned rows are excluded from class profiles until explicitly
@@ -180,16 +186,20 @@ assigned or exported.
 - `learner_concepts`: class ID, stable class-local concept ID/key, title, description, and timestamps.
 - `study_attempts`: class and attempt/concept IDs, optional assessment ID, activity kind,
   prompt, response, reasoning, pre-answer confidence, revealed hint count, learning method,
-  outcome, source material/passage references, and timestamp.
+  outcome, source material/passage references, and timestamp. Source references preserve
+  which imported assignment or reading supported a saved answer, allowing source-specific
+  progress without replacing the class-wide concept history.
 - `study_sessions`: class ID, stable concept ID, requested topic and method, validated generated lesson, question, progressive hints, and timestamp. Saved sessions reopen without a model run. A newly generated question is stored as its own session artifact.
 - `mastery_evidence`: class and evidence/attempt/concept IDs, evidence kind, outcome,
   independence (`independent`, `hinted`, `assisted`, or `unknown`), rationale,
   and timestamp. Evidence is appended with its attempt and is not overwritten.
 
-The profile API is class-scoped and currently projects attempt counts, correct counts, latest
-outcome, and last-practiced time per concept. These are transparent summaries,
-not a calibrated mastery score. Evidence aggregation and promotion thresholds
-remain follow-up work.
+The profile API is class-scoped and projects attempt counts, correct counts, latest
+outcome, and last-practiced time per concept, assessment topic, and cited source. Source
+topic totals include only concepts with attempts that cite that source; the accepted course
+map supplies the denominator for homework topic coverage. These are transparent summaries,
+not a calibrated mastery score. Evidence aggregation and promotion thresholds remain
+follow-up work.
 
 The following should be added only with their consuming feature:
 
@@ -200,6 +210,19 @@ The following should be added only with their consuming feature:
 - `questions` and `answer_keys`: versioned prompts, grading modes, rubrics,
   deterministic keys, explanations, and source references
 - `review_schedule`: explainable next-review decisions
+
+### Learner pattern reviews
+
+The versioned `learner-pattern-review.v1` contract and
+`learner-pattern-review.v1` and `review-learning-patterns` are implemented.
+Reviews are class-scoped and invoked only at session end or on an explicit
+learner request. No continuous, per-answer, timed, or background processing is
+used. The `learner_pattern_reviews` table records each result, trigger, model,
+and timestamp. The `learner_patterns` projection exposes the current result and
+learner status override. Attempts optionally link to their study session so an
+end-of-session review can select exact evidence. Every proposal links
+supporting and counterexample attempts and retains status rationale; learners
+can correct status or dismiss a pattern.
 
 ## Integrity rules
 
@@ -231,6 +254,9 @@ The first library API supports:
 | `POST` | `/api/courses/:courseId/course-map` | Generate or reuse a course-map draft |
 | `POST` | `/api/courses/:courseId/course-map/:artifactId/accept` | Apply a current draft atomically |
 | `GET` | `/api/courses/:courseId/learner/profile` | Read this class's assessments and concept evidence summaries |
+| `GET` | `/api/courses/:courseId/learner/patterns` | Read this class's current pattern projection and review history |
+| `PATCH` | `/api/courses/:courseId/learner/patterns/:patternId` | Correct a pattern status or dismiss it |
+| `POST` | `/api/courses/:courseId/learner/pattern-reviews` | Run a bounded class-local review at session end or on request |
 | `POST` | `/api/courses/:courseId/learner/assessments` | Create an assessment and ordered topic scope in this class |
 | `POST` | `/api/courses/:courseId/learner/concepts` | Create a stable class-local concept |
 | `POST` | `/api/courses/:courseId/learner/attempts` | Append a same-class study attempt and evidence record atomically |
@@ -239,12 +265,24 @@ The first library API supports:
 | `GET` | `/api/courses/:courseId/learner/study-sessions/:sessionId` | Reopen a saved lesson scoped to this class |
 | `POST` | `/api/courses/:courseId/learner/study-sessions/:sessionId/next-question` | Generate and save a new question using up to five recent attempts for the same class-local concept |
 | `POST` | `/api/courses/:courseId/learner/clarify` | Ask a clarification question within this class |
+| `GET` | `/api/obsidian/status` | Read local Markdown-export configuration |
+| `POST` | `/api/obsidian/config` | Save an existing vault folder and an in-vault notes folder |
+| `POST` | `/api/courses/:courseId/obsidian/export` | Export the accepted map, course assessments, learner topic scopes, and practice counts |
 
 Manual module editing, assessment editing, deletion, and OCR remain explicit
 follow-up capabilities.
 
-The intended Obsidian layout is
-`<configured-vault>/Local Learning Studio/<course-id>--<slug>/`, with that
-class's `Assessments/`, `Concepts/`, `Evidence/`, and `Materials/` notes beneath
-it. This is a documented target only; vault discovery and synchronization are
-not implemented yet.
+Obsidian export is configured from the class page with an absolute vault path
+and an in-vault folder (default `Codex/Local Learning Studio`). Each class gets
+a stable `<course-slug>--<course-id-prefix>/` folder containing `Course.md`,
+`modules/`, `topics/`, and `assessments/` notes. Notes link to one another using
+vault-relative wikilinks. Topic notes include practice counts; assessment notes
+include accepted-map evidence or learner-provided exam scope. Source files are
+listed by name and remain in the app's course storage.
+
+Every exported note has a generated section bounded by
+`<!-- LLS:GENERATED:START -->` and `<!-- LLS:GENERATED:END -->`. Re-export
+replaces only that section and preserves text outside it, including the
+`My notes` area. Incomplete or duplicate markers stop the export rather than
+overwriting the note. This is a one-way export; edits made inside Obsidian do
+not update the app, and Obsidian Sync remains independently managed by Obsidian.

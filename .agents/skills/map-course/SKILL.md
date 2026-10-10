@@ -9,11 +9,17 @@ description: Propose a source-grounded Local Learning Studio course map containi
    `packages/contracts`, and only the supplied classified passages.
 2. Derive concepts, objectives, modules, assessments, and prerequisite edges
    from explicit source evidence.
-3. Use stable keys within the proposal and ensure every reference resolves to
-   a supplied course, material, and passage.
-4. Mark ambiguity and missing coverage instead of completing gaps from general
+3. Treat homework and assignment problems as evidence of topics the course
+   assesses or expects learners to practice. Derive concepts and objectives
+   from their explicit questions and tasks even when the syllabus omits them.
+   Keep those topics grounded in the assignment; do not infer unseen lectures
+   or readings.
+4. Use stable keys within the proposal. Materials have UUIDs; passages have
+   short `passageKey` aliases. Cite the exact supplied alias with its material
+   UUID in each source reference. Never invent a passage UUID or alias.
+5. Mark ambiguity and missing coverage instead of completing gaps from general
    knowledge.
-5. Return only the requested versioned course-map proposal.
+6. Return only the requested versioned course-map proposal.
 
 Keep the proposal reviewable. Never persist it, treat generated content as a
 source, or silently broaden the source set.
