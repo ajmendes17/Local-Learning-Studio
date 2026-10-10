@@ -31,6 +31,7 @@ test("scored but supported attempts do not imply independent accuracy is zero", 
   });
 
   assert.match(html, /role="progressbar" aria-label="Quiz first scored check accuracy"[^>]*aria-valuenow="67"/);
+  assert.doesNotMatch(html, /Early signal/);
   assert.match(html, /No solo scored checks yet\./);
   assert.equal((html.match(/role="progressbar"/g) ?? []).length, 1);
 });
@@ -46,7 +47,14 @@ test("observed scored and independent results render separate measured bars", ()
 
   assert.match(html, /aria-label="Error analysis scored check accuracy"[^>]*aria-valuenow="50"/);
   assert.match(html, /aria-label="Error analysis independent check accuracy"[^>]*aria-valuenow="50"/);
+  assert.doesNotMatch(html, /Early signal/);
   assert.doesNotMatch(html, /No solo scored checks yet|Ungraded recall/);
+});
+
+test("one or two scored checks are marked as an early signal", () => {
+  const html = renderTracks({ correctCount: 1, scoredAttemptCount: 1 });
+  assert.match(html, /Early signal/);
+  assert.match(html, /at least 3 scored checks/);
 });
 
 test("inconsistent counts cannot render accuracy above 100 percent", () => {
