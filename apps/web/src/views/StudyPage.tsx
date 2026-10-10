@@ -6,14 +6,23 @@ import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTop
 import { appendInstructorTopicWording } from "../lib/instructor-topic-scope";
 import "../styles/study.css";
 
-type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall";
+type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall" | "teach-back";
 const studyMethods: Array<{ value: Method; label: string; description: string }> = [
   { value: "explanation", label: "Clear explanation", description: "Build intuition first, then connect the idea to precise terms and a short example." },
   { value: "worked-example", label: "Worked example", description: "Follow a complete solution step by step, then identify the pattern you can reuse." },
   { value: "quiz", label: "Quiz first", description: "Try retrieval before seeing the lesson; the explanation becomes a debrief afterward." },
   { value: "analogy", label: "Use an analogy", description: "Connect the idea to something familiar, including where that comparison stops working." },
   { value: "free-recall", label: "Free recall", description: "Try one open question from memory, then compare your response with the reference. Optional hints are tracked; your response is saved but not graded." },
+  { value: "teach-back", label: "Teach it back", description: "Explain the idea as if teaching a new student. Compare your explanation with the reference; your response is saved but not graded." },
 ];
+
+function isOpenResponseMethod(method: string | undefined) {
+  return method === "free-recall" || method === "teach-back";
+}
+
+function startsWithCheck(method: string | undefined) {
+  return method === "quiz" || isOpenResponseMethod(method);
+}
 
 function studyMethodLabel(method: string) {
   switch (method) {
@@ -23,6 +32,7 @@ function studyMethodLabel(method: string) {
     case "retrieval-practice": return "Quiz first";
     case "analogy": return "Use an analogy";
     case "free-recall": return "Free recall";
+    case "teach-back": return "Teach it back";
     default: return method.trim() ? method.replaceAll("-", " ") : "Method not recorded";
   }
 }
@@ -72,7 +82,7 @@ function readAttemptDraft(courseId: string, content: StudyContent): StudyAttempt
       ? parsed.selected as number : null;
     const confidence = [0.25, 0.5, 0.75, 1].includes(parsed.confidence ?? Number.NaN) ? parsed.confidence! : 0.5;
     const hintCount = Number.isInteger(parsed.hintCount) ? Math.max(0, Math.min(content.hints.length, parsed.hintCount!)) : 0;
-    const studyTab = parsed.studyTab === "check" || parsed.studyTab === "lesson" ? parsed.studyTab : content.method === "quiz" ? "check" : "lesson";
+    const studyTab = parsed.studyTab === "check" || parsed.studyTab === "lesson" ? parsed.studyTab : startsWithCheck(content.method) ? "check" : "lesson";
     return { selected, response: typeof parsed.response === "string" ? parsed.response.slice(0, 20000) : "", confidence, hintCount, usedOutsideHelp: parsed.usedOutsideHelp === true, studyTab };
   } catch {
     return null;
@@ -234,7 +244,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     setTopic(requestedTopic.trim());
     setMethod(requestedMethod);
     setBusy(true); setError(""); setNotice(""); setContent(null); setSelected(null); setFreeResponse(""); setReopenedAttempt(null); setSaved(false); setAttemptSaveError(""); pendingAttempt.current = null; setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false);
-    setStudyTab(requestedMethod === "quiz" || requestedMethod === "free-recall" ? "check" : "lesson");
+    setStudyTab(startsWithCheck(requestedMethod) ? "check" : "lesson");
     try {
       const generated = await postJson<StudyContent>(`/api/courses/${courseId}/learner/study-session`, { topic: requestedTopic.trim(), method: requestedMethod, ...(sourceMaterialId ? { sourceMaterialId } : {}), ...(assessmentId ? { assessmentId } : {}), ...(reviewSessionId ? { reviewSessionId } : {}) });
       const next = { ...generated, sourceMaterialId: generated.sourceMaterialId ?? sourceMaterialId ?? null };
@@ -258,7 +268,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     pendingAttempt.current = null; setAttemptSaveError("");
     const latestAttempt = reopened.attempts?.at(-1) ?? null;
     const draft = latestAttempt ? null : readAttemptDraft(courseId, reopened);
-    setContent(reopened); setTopic(reopened.topic); setMethod(reopened.method); setStudyTab(draft?.studyTab ?? (reopened.method === "quiz" || reopened.method === "free-recall" ? "check" : "lesson"));
+    setContent(reopened); setTopic(reopened.topic); setMethod(reopened.method); setStudyTab(draft?.studyTab ?? (startsWithCheck(reopened.method) ? "check" : "lesson"));
     setReopenedAttempt(latestAttempt);
     const savedOptionIndex = latestAttempt ? reopened.options.indexOf(latestAttempt.response) : -1;
     setSelected(savedOptionIndex >= 0 ? savedOptionIndex : draft?.selected ?? null);
@@ -345,7 +355,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   function navigateStudyTabs(event: KeyboardEvent<HTMLButtonElement>) {
-    const tabs: readonly ("lesson" | "check")[] = content?.method === "free-recall" && !saved && !reopenedAttempt ? ["check"] : ["lesson", "check"];
+    const tabs: readonly ("lesson" | "check")[] = isOpenResponseMethod(content?.method) && !saved && !reopenedAttempt ? ["check"] : ["lesson", "check"];
     const index = tabs.indexOf(studyTab);
     const nextIndex = event.key === "ArrowRight" ? (index + 1) % tabs.length
       : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length
@@ -359,16 +369,16 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   async function submitAnswer() {
-    if (!content || (content.method === "free-recall" ? !freeResponse.trim() : selected === null) || reopenedAttempt || pendingAttempt.current) return;
+    if (!content || (isOpenResponseMethod(content.method) ? !freeResponse.trim() : selected === null) || reopenedAttempt || pendingAttempt.current) return;
     const correct = selected === content.answerIndex;
     pendingAttempt.current = {
       id: crypto.randomUUID(),
       payload: {
-        sessionId: content.sessionId, conceptId: content.conceptId, assessmentId: content.assessmentId ?? null, activityType: content.method === "free-recall" ? "explanation" : "recognition", prompt: content.question,
-        response: content.method === "free-recall" ? freeResponse.trim() : content.options[selected!], reasoning: "", confidence, hintCount,
+        sessionId: content.sessionId, conceptId: content.conceptId, assessmentId: content.assessmentId ?? null, activityType: isOpenResponseMethod(content.method) ? "explanation" : "recognition", prompt: content.question,
+        response: isOpenResponseMethod(content.method) ? freeResponse.trim() : content.options[selected!], reasoning: "", confidence, hintCount,
         method: content.method === "quiz" ? "retrieval-practice" : content.method,
-        outcome: content.method === "free-recall" ? "not-graded" : correct ? "correct" : "incorrect", sourceRefs: content.sourceMaterialId ? [{ materialId: content.sourceMaterialId }] : [],
-        independence: usedOutsideHelp ? "assisted" : hintCount > 0 ? "hinted" : "independent", rationale: content.method === "free-recall" ? `Learner submitted a free-recall response for self-comparison; not graded. Confidence ${Math.round(confidence * 100)}%.` : `${correct ? "Selected the validated answer key" : "Answer did not match the validated key"}${usedOutsideHelp ? " with help outside this check" : hintCount ? ` after ${hintCount} hint(s)` : " independently"}; confidence ${Math.round(confidence * 100)}%.`,
+        outcome: isOpenResponseMethod(content.method) ? "not-graded" : correct ? "correct" : "incorrect", sourceRefs: content.sourceMaterialId ? [{ materialId: content.sourceMaterialId }] : [],
+        independence: usedOutsideHelp ? "assisted" : hintCount > 0 ? "hinted" : "independent", rationale: isOpenResponseMethod(content.method) ? `Learner submitted a ${content.method === "teach-back" ? "teach-back" : "free-recall"} response for self-comparison; not graded. Confidence ${Math.round(confidence * 100)}%.` : `${correct ? "Selected the validated answer key" : "Answer did not match the validated key"}${usedOutsideHelp ? " with help outside this check" : hintCount ? ` after ${hintCount} hint(s)` : " independently"}; confidence ${Math.round(confidence * 100)}%.`,
       },
     };
     setSaved(false); setAttemptSaveError("");
@@ -683,7 +693,9 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     ? sourceProgress.find(({ materialId }) => materialId === content.sourceMaterialId)?.title
     : undefined;
   const freeRecall = content?.method === "free-recall";
-  const recallInProgress = Boolean(freeRecall && !saved && !reopenedAttempt);
+  const teachBack = content?.method === "teach-back";
+  const openResponse = Boolean(freeRecall || teachBack);
+  const recallInProgress = Boolean(openResponse && !saved && !reopenedAttempt);
   const reviewedAnswerCorrect = reopenedAttempt ? reopenedAttempt.outcome === "correct" : selected === content?.answerIndex;
   const reviewedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
   const displayedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
@@ -692,8 +704,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const independenceSummary = displayedIndependence === "assisted" ? "outside help recorded" : displayedIndependence === "hinted" ? "in-app hints used" : displayedIndependence === "independent" ? "independent attempt" : "support not recorded";
   const confidenceSummary = displayedConfidence == null ? "confidence not recorded" : `confidence ${Math.round(displayedConfidence * 100)}%`;
   const usedOutsideHelpForAnswer = reopenedAttempt?.independence === "assisted" || (!reopenedAttempt && usedOutsideHelp);
-  const answerFollowUp = freeRecall
-    ? "Compare your saved response with the reference explanation. This practice is recorded, but it is not graded."
+  const answerFollowUp = openResponse
+    ? teachBack ? "Compare your explanation with the reference, then try teaching the idea again more clearly. This practice is recorded, but it is not graded." : "Compare your saved response with the reference explanation. This practice is recorded, but it is not graded."
     : !reviewedAnswerCorrect
     ? reviewedConfidence != null && reviewedConfidence >= 0.75
       ? "You felt confident in this answer. Review the explanation and compare the key distinction with the choice you made."
@@ -803,23 +815,23 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           <p className="section-kicker">{method === "worked-example" ? "Worked example" : method === "analogy" ? "A helpful analogy" : "Core idea"}</p>
           <h2>{content.topic}</h2><MathText className="lesson-copy" content={content.lesson} />
           {content.example ? <div className="worked-example"><strong>{method === "analogy" ? "Connect it" : "Walkthrough"}</strong><MathText content={content.example} /></div> : null}
-          {method === "quiz" || method === "free-recall" ? <p className="quiz-first-note">You started with retrieval. Review the explanation after trying the check.</p> : null}
+          {method === "quiz" || isOpenResponseMethod(method) ? <p className="quiz-first-note">You started with retrieval. Review the explanation after trying the check.</p> : null}
         </section>
         <section className="check-card" role="tabpanel" id="study-panel-check" aria-labelledby="study-tab-check" hidden={studyTab !== "check"}>
-          <div><p className="section-kicker">{freeRecall ? "Open-response recall" : "Quick knowledge check"}</p><MathText className="check-question" content={content.question} />{freeRecall && !saved && !reopenedAttempt ? <small>Try from memory first. Save your response to reveal the reference explanation; any hints are recorded, and this response will not be graded.</small> : null}</div>
+          <div><p className="section-kicker">{teachBack ? "Teach it back" : freeRecall ? "Open-response recall" : "Quick knowledge check"}</p><MathText className="check-question" content={content.question} />{openResponse && !saved && !reopenedAttempt ? <small>{teachBack ? "Explain the idea to a new student from memory. Save your response to reveal the reference; it will be recorded but not graded." : "Try from memory first. Save your response to reveal the reference explanation; any hints are recorded, and this response will not be graded."}</small> : null}</div>
           {!saved && !reopenedAttempt && !pendingAttempt.current && content.hints.length ? <div className="study-hints"><div><strong>Need a hint?</strong><small>Hints are counted as part of this attempt.</small></div>{content.hints.slice(0,hintCount).map((hint,index) => <p key={`${index}-${hint}`}><span>Hint {index+1}</span><MathText inline content={hint} /></p>)}{hintCount < content.hints.length ? <button type="button" className="button-secondary" onClick={revealHint}>Show hint {hintCount + 1}</button> : null}</div> : null}
           {!saved && !reopenedAttempt ? <label className="outside-help-input"><input type="checkbox" checked={usedOutsideHelp} disabled={savingAttempt || busy || Boolean(pendingAttempt.current)} onChange={(event) => updateOutsideHelp(event.target.checked)} /><span><strong>I used help outside these hints</strong><small>For example, notes, a textbook, or another person.</small></span></label> : null}
           {reopenedAttempt ? <p className="reopened-attempt-note" role="status">Showing your saved {reopenedAttempt.outcome} response from {new Date(reopenedAttempt.createdAt).toLocaleString()}. Choose “Try this exact question again” below if you want to make another attempt.</p> : null}
-          {freeRecall ? <label className="free-recall-response">Your explanation<textarea maxLength={20000} rows={5} value={freeResponse} disabled={saved || Boolean(reopenedAttempt) || savingAttempt || Boolean(pendingAttempt.current)} onChange={(event) => updateFreeResponse(event.target.value)} placeholder="Explain the idea from memory. Include the key terms, relationships, or steps you remember." /></label> : <div className="answer-options" role="group" aria-label="Answer choices">{content.options.map((option,index) => {
+          {openResponse ? <label className="free-recall-response">{teachBack ? "Teach it back" : "Your explanation"}<textarea maxLength={20000} rows={5} value={freeResponse} disabled={saved || Boolean(reopenedAttempt) || savingAttempt || Boolean(pendingAttempt.current)} onChange={(event) => updateFreeResponse(event.target.value)} placeholder={teachBack ? "Explain the idea as if you were teaching it to a student seeing it for the first time. Include why the main steps or relationships hold." : "Explain the idea from memory. Include the key terms, relationships, or steps you remember."} /></label> : <div className="answer-options" role="group" aria-label="Answer choices">{content.options.map((option,index) => {
             const isCorrect = index === content.answerIndex;
             const className = saved ? selected === index ? isCorrect ? "answer-option answer-option--correct" : "answer-option answer-option--wrong" : isCorrect ? "answer-option answer-option--correct" : "answer-option"
               : selected === index ? "answer-option answer-option--selected" : "answer-option";
             return <button type="button" key={`${index}-${option}`} disabled={saved || savingAttempt || Boolean(reopenedAttempt) || Boolean(pendingAttempt.current)} aria-pressed={selected === index} onClick={() => selectAnswer(index)} className={className}><span>{String.fromCharCode(65+index)}</span><MathText inline content={option} /></button>;
           })}</div>}
           {!saved && !reopenedAttempt ? <label className="confidence-input">How confident are you?<select value={confidence} onChange={(event) => updateConfidence(Number(event.target.value))}><option value={0.25}>Low</option><option value={0.5}>Somewhat</option><option value={0.75}>Confident</option><option value={1}>Very confident</option></select></label> : null}
-          {!saved && !reopenedAttempt ? <button className="button-primary check-submit" type="button" disabled={freeRecall ? !freeResponse.trim() || savingAttempt || busy : selected === null || savingAttempt || busy} onClick={() => void submitAnswer()}>{savingAttempt ? "Saving response…" : freeRecall ? "Save response & compare" : "Check answer"}</button> : null}
-          {saved ? <><div className={freeRecall ? "answer-feedback" : reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{freeRecall ? "Reference explanation" : reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong>{freeRecall && reopenedAttempt?.response ? <div className="free-recall-saved"><strong>Your saved response</strong><MathText content={reopenedAttempt.response} /></div> : freeRecall && freeResponse ? <div className="free-recall-saved"><strong>Your response</strong><MathText content={freeResponse} /></div> : null}<MathText content={content.feedback} /><small>{freeRecall ? "Attempt saved · not graded · " : "Attempt saved · "}{independenceSummary} · {confidenceSummary} · {displayedHintCount} hint{displayedHintCount === 1 ? "" : "s"}.</small></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>The {freeRecall ? "response" : "answer"} could not be saved to your progress: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => void nextQuestion()}>{busy ? "Preparing…" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!freeRecall && (!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2) ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
-          {(!freeRecall || saved || reopenedAttempt) ? <details className="lesson-recap"><summary>Show answer explanation</summary><MathText content={content.feedback} /></details> : null}
+          {!saved && !reopenedAttempt ? <button className="button-primary check-submit" type="button" disabled={openResponse ? !freeResponse.trim() || savingAttempt || busy : selected === null || savingAttempt || busy} onClick={() => void submitAnswer()}>{savingAttempt ? "Saving response…" : openResponse ? "Save response & compare" : "Check answer"}</button> : null}
+          {saved ? <><div className={openResponse ? "answer-feedback" : reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{openResponse ? "Reference explanation" : reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong>{openResponse && reopenedAttempt?.response ? <div className="free-recall-saved"><strong>Your saved response</strong><MathText content={reopenedAttempt.response} /></div> : openResponse && freeResponse ? <div className="free-recall-saved"><strong>Your response</strong><MathText content={freeResponse} /></div> : null}<MathText content={content.feedback} /><small>{openResponse ? "Attempt saved · not graded · " : "Attempt saved · "}{independenceSummary} · {confidenceSummary} · {displayedHintCount} hint{displayedHintCount === 1 ? "" : "s"}.</small></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>The {openResponse ? "response" : "answer"} could not be saved to your progress: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => void nextQuestion()}>{busy ? "Preparing…" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!openResponse && (!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2) ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
+          {(!openResponse || saved || reopenedAttempt) ? <details className="lesson-recap"><summary>Show answer explanation</summary><MathText content={content.feedback} /></details> : null}
         </section>
       </div>
       {recallInProgress ? <aside className="study-chat study-chat--waiting" role="status"><p className="section-kicker">Free recall</p><h2>Try it from memory first.</h2><p>The lesson and side chat open after you save your response, so you can compare without seeing the explanation early.</p></aside> : <aside className="study-chat"><p className="section-kicker">Side chat</p><h2>Clarify a step.</h2><p>Ask a follow-up without losing your place in the lesson.</p><form onSubmit={askClarification}><textarea value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} placeholder="Which part should we unpack?" /><button className="button-secondary" disabled={chatBusy || !chatQuestion.trim()}>{chatBusy ? "Thinking…" : "Ask Codex"}</button></form>{chatAnswer ? <div className="chat-answer"><MathText content={chatAnswer.answer} />{chatAnswer.followUp ? <small>{chatAnswer.followUp}</small> : null}<span>{chatAnswer.sourceBasis === "general-knowledge" ? "General knowledge · not course-verified" : "Course-grounded"}</span></div> : <div className="chat-prompt">Try: “Can you explain why that step works?”</div>}<div className="session-recap"><span>Learning method</span><strong>{studyMethodLabel(content.method)}</strong><span>One check does not establish mastery. More evidence builds your profile.</span></div></aside>}

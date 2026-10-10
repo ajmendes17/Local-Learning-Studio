@@ -162,9 +162,9 @@ export class LearnerLibrary {
   saveStudySession(courseId: string, conceptId: string, content: unknown) {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
-    // Keep compatibility with databases whose CHECK constraint predates free-recall;
+    // Keep compatibility with databases whose CHECK constraint predates open-response methods;
     // the canonical method is preserved in content_json and used by readers below.
-    const storedMethod = (content as any).method === "free-recall" ? "quiz" : (content as any).method;
+    const storedMethod = ["free-recall", "teach-back"].includes((content as any).method) ? "quiz" : (content as any).method;
     this.database.prepare(`INSERT INTO study_sessions (id,course_id,concept_id,topic,method,content_json,created_at)
       VALUES (?,?,?,?,?,?,?)`).run(id, courseId, conceptId, (content as any).topic, storedMethod, JSON.stringify(content), createdAt);
     return { sessionId: id, createdAt, ...(content as object) };
@@ -182,9 +182,9 @@ export class LearnerLibrary {
       | { id: string; contentJson: string; createdAt: string; inferredSourceMaterialId: string | null } | undefined;
     if (!row) return null;
     const content = JSON.parse(row.contentJson);
-    // Older free-recall sessions stored unused multiple-choice placeholders. Hide them
-    // when reopening so every free-recall view follows the open-response contract.
-    if (content.method === "free-recall") {
+    // Older open-response sessions stored unused multiple-choice placeholders. Hide them
+    // when reopening so every open-response view follows the same contract.
+    if (content.method === "free-recall" || content.method === "teach-back") {
       content.options = [];
       content.answerIndex = null;
     }

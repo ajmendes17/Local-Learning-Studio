@@ -37,7 +37,9 @@ async function createAppWithStudyModel() {
         sourceBasis: "course-materials",
         lesson: "## Source-grounded idea\n\nThe key operation is $H\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.",
         example: "Apply the stated operation to the source problem.",
-        question: "Which state does the source operation produce?",
+        question: prompt.includes("Use a teach-back exercise")
+          ? "Teach back the main idea and explain why it holds."
+          : "Which state does the source operation produce?",
         ...(prompt.includes("Start with unaided free recall") ? {} : {
           options: ["$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
           answerIndex: 2,
@@ -540,6 +542,7 @@ test("study methods send distinct learning directions", async () => {
     ["quiz", /Use retrieval first/],
     ["analogy", /concrete analogy/],
     ["free-recall", /Start with unaided free recall/],
+    ["teach-back", /Use a teach-back exercise/],
   ] as const;
   for (const [method, direction] of methods) {
     const response = await app.inject({
@@ -616,6 +619,62 @@ test("free recall saves the learner response as ungraded and keeps the method in
   } finally {
     await app.close();
     await rm(root, { recursive: true });
+  }
+});
+
+test("teach-back is a distinct open response that persists independently and exports its reference", async () => {
+  const { app, root, prompts } = await createAppWithStudyModel();
+  try {
+    const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Teach-back method check" } });
+    const courseId = course.json().id as string;
+    const vaultPath = join(root, "vault");
+    await mkdir(vaultPath, { recursive: true });
+    const vaultConfig = await app.inject({ method: "POST", url: "/api/obsidian/config", payload: { vaultPath } });
+    assert.equal(vaultConfig.statusCode, 200, vaultConfig.body);
+
+    const study = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-session`,
+      payload: { topic: "Conditional states", method: "teach-back" },
+    });
+    assert.equal(study.statusCode, 200, study.body);
+    assert.equal(study.json().method, "teach-back");
+    assert.deepEqual([study.json().options, study.json().answerIndex], [[], null]);
+    assert.equal(study.json().question, "Teach back the main idea and explain why it holds.");
+    assert.match(prompts.at(-1) ?? "", /Use a teach-back exercise/);
+
+    const nextQuestion = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${study.json().sessionId}/next-question`, payload: {} });
+    assert.equal(nextQuestion.statusCode, 200, nextQuestion.body);
+    assert.equal(nextQuestion.json().method, "teach-back");
+    assert.deepEqual([nextQuestion.json().options, nextQuestion.json().answerIndex], [[], null]);
+    assert.match(prompts.at(-1) ?? "", /new teach-back prompt/);
+
+    const reopened = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions/${study.json().sessionId}` });
+    assert.equal(reopened.statusCode, 200, reopened.body);
+    assert.equal(reopened.json().method, "teach-back");
+    assert.deepEqual([reopened.json().options, reopened.json().answerIndex], [[], null]);
+
+    const saved = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
+      payload: {
+        sessionId: study.json().sessionId, conceptId: study.json().conceptId, activityType: "explanation",
+        prompt: study.json().question, response: "The average over outcomes removes the usable signal.", reasoning: "",
+        confidence: 0.5, hintCount: 0, method: "teach-back", outcome: "not-graded", sourceRefs: [],
+        independence: "independent", rationale: "Saved teach-back response for comparison; not graded.",
+      },
+    });
+    assert.equal(saved.statusCode, 201, saved.body);
+    const methods = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
+    assert.deepEqual(methods.json().map((item: { method: string; attemptCount: number; scoredAttemptCount: number }) => [item.method, item.attemptCount, item.scoredAttemptCount]), [["teach-back", 1, 0]]);
+
+    const exported = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
+    assert.equal(exported.statusCode, 200, exported.body);
+    const journal = await readFile(join(vaultPath, exported.json().courseFolder, "Study Journal.md"), "utf8");
+    assert.match(journal, /Teach it back/);
+    assert.match(journal, /\*\*My response\*\*[\s\S]*The average over outcomes removes the usable signal\./);
+    assert.match(journal, /\*\*Reference explanation\*\*[\s\S]*The source identifies the equal superposition\./);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
   }
 });
 

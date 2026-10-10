@@ -82,6 +82,7 @@ function studyMethodLabel(method: string) {
     case "retrieval-practice": return "Quiz first";
     case "analogy": return "Use an analogy";
     case "free-recall": return "Free recall";
+    case "teach-back": return "Teach it back";
     default: return method.trim() ? method.replaceAll("-", " ") : "Method not recorded";
   }
 }
