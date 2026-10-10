@@ -119,6 +119,22 @@ test("professor topic-list parser removes common numbering and bullets and dedup
   ]);
 });
 
+test("professor topic-list parser removes common copied scope headings", () => {
+  assert.deepEqual(parseInstructorTopicList([
+    "Exam topics: conservation laws, Newton's laws",
+    "Topics for the midterm include: energy methods",
+    "The final will cover: wave functions; operators",
+    "Scope for the quiz: measurement",
+  ].join("\n")), [
+    "conservation laws",
+    "Newton's laws",
+    "energy methods",
+    "wave functions",
+    "operators",
+    "measurement",
+  ]);
+});
+
 test("study budget allocates exactly the available minutes and favors weak topics", () => {
   const plan = allocateStudyMinutes(["Weak Bayes", "Bell states", "Partial trace"], 10);
   assert.deepEqual(plan, [

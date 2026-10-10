@@ -4,7 +4,8 @@ export function parseInstructorTopicList(raw: string): string[] {
   const seen = new Set<string>();
   const topics: string[] = [];
   for (const part of raw.replace(/\r\n?/g, "\n").split(/[\n,;]+/)) {
-    const title = part
+    const withoutLeadIn = part.replace(/^\s*(?:(?:the\s+)?(?:exam|quiz|test|midterm(?:\s+\d+)?|final)(?:\s+topics?)?(?:\s+(?:will\s+)?(?:cover|covers|include|includes))?|topics?(?:\s+(?:for|on)\s+(?:the\s+)?(?:exam|quiz|test|midterm(?:\s+\d+)?|final))?(?:\s+(?:include|includes|are))?|scope(?:\s+(?:for|of)\s+(?:the\s+)?(?:exam|quiz|test|midterm|final))?)\s*:\s*/i, "");
+    const title = withoutLeadIn
       .replace(/^\s*(?:(?:[-*+•▪‣◦]\s+)|(?:\d+[.)]\s+)|(?:\[[ xX]\]\s*)|(?:[☐☑]\s*))+/u, "")
       .replace(/\s+/g, " ")
       .trim();
