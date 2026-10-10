@@ -250,6 +250,7 @@ test("instructor topic lists persist as class-scoped learner assessment topics",
     url: `/api/courses/${courseId}/learner/assessments`,
     payload: {
       title: "Midterm 2 · professor scope",
+      instructorText: "The professor said: \"Bell states and partial trace\". Do not study [[private course notes]].",
       kind: "exam",
       scheduledAt: "2026-11-12T16:30:00.000Z",
       availableMinutes: 180,
@@ -267,6 +268,7 @@ test("instructor topic lists persist as class-scoped learner assessment topics",
   assert.equal(profile.json().assessments[0].scheduledAt, "2026-11-12T16:30:00.000Z");
   assert.equal(profile.json().assessments[0].availableMinutes, 180);
   assert.equal(profile.json().assessments[0].dailyMinutes, 45, "assessment scopes should use the default daily target");
+  assert.equal(profile.json().assessments[0].instructorText, "The professor said: \"Bell states and partial trace\". Do not study [[private course notes]].");
   assert.deepEqual(profile.json().assessments[0].topics.map((topic: { title: string; provenance: string }) => [topic.title, topic.provenance]), [
     ["Bell states", "learner"],
     ["Partial trace", "learner"],
@@ -279,9 +281,17 @@ test("instructor topic lists persist as class-scoped learner assessment topics",
   assert.equal(updatedScope.statusCode, 200);
   assert.equal(updatedScope.json().assessment.availableMinutes, 240);
   assert.equal(updatedScope.json().assessment.dailyMinutes, 30);
+  assert.equal(updatedScope.json().assessment.instructorText, profile.json().assessments[0].instructorText, "other plan edits should preserve instructor wording");
   assert.equal(updatedScope.json().assessment.scheduledAt, "2026-11-12T16:30:00.000Z", "partial plan edits should preserve the saved date");
-
   const assessment = updatedScope.json().assessment;
+
+  const editedWording = await app.inject({
+    method: "PATCH", url: `/api/courses/${courseId}/learner/assessments/${assessment.id}`,
+    payload: { instructorText: "Updated wording: focus on partial trace; Bell states are optional." },
+  });
+  assert.equal(editedWording.statusCode, 200);
+  assert.equal(editedWording.json().assessment.instructorText, "Updated wording: focus on partial trace; Bell states are optional.");
+
   const bellTopicId = assessment.topics[0].id;
   const studied = await app.inject({
     method: "POST", url: `/api/courses/${courseId}/learner/study-session`,

@@ -35,7 +35,7 @@ interface SessionSummary { sessionId: string; conceptId: string; topic: string; 
 interface ConceptProgress { id: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
 interface MethodTopicProgress { conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }
 interface MethodProgress { method: string; attemptCount: number; scoredAttemptCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: MethodTopicProgress[]; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }
-interface AssessmentScope { id: string; title: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
+interface AssessmentScope { id: string; title: string; instructorText: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
 interface StudyRecommendation {
   title: string;
   reason: "needs-review" | "lesson-only" | "not-practiced" | "least-recently-practiced";
@@ -123,9 +123,13 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [topicScopeAvailableMinutes, setTopicScopeAvailableMinutes] = useState("");
   const [topicScopeDailyMinutes, setTopicScopeDailyMinutes] = useState("45");
   const [topicScopeText, setTopicScopeText] = useState("");
+  const [topicScopeNotes, setTopicScopeNotes] = useState("");
   const [topicScopeImportance, setTopicScopeImportance] = useState<Record<string, "low" | "normal" | "high">>({});
   const [topicScopeMessage, setTopicScopeMessage] = useState("");
   const [topicScopeSaving, setTopicScopeSaving] = useState(false);
+  const [editingInstructorScopeId, setEditingInstructorScopeId] = useState<string | null>(null);
+  const [instructorTextDraft, setInstructorTextDraft] = useState("");
+  const [instructorTextSaving, setInstructorTextSaving] = useState(false);
   const [savingPriorityTopicId, setSavingPriorityTopicId] = useState<string | null>(null);
   const [budgetTitle, setBudgetTitle] = useState("");
   const [budgetMinutes, setBudgetMinutes] = useState(60);
@@ -466,6 +470,9 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         provenance: "learner" as const,
       };
     });
+    const instructorText = topicScopeNotes.trim()
+      ? `${topicScopeText}\n\nProfessor notes:\n${topicScopeNotes}`
+      : topicScopeText;
     try {
       let addedTopicCount = parsedTopicScope.length;
       if (topicScopeTargetAssessmentId) {
@@ -473,9 +480,16 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           topics,
         }, "PATCH");
         addedTopicCount = result.addedTopicCount;
+        if (addedTopicCount) {
+          const currentText = assessmentScopes.find(({ id }) => id === topicScopeTargetAssessmentId)?.instructorText ?? "";
+          await postJson(`/api/courses/${courseId}/learner/assessments/${topicScopeTargetAssessmentId}`, {
+            instructorText: currentText ? `${currentText.trimEnd()}\n\nAdditional instructor topics (${new Date().toLocaleDateString()}):\n${instructorText}` : instructorText,
+          }, "PATCH");
+        }
       } else {
         await postJson(`/api/courses/${courseId}/learner/assessments`, {
           title: normalizedTopicScopeTitle,
+          instructorText,
           kind: "exam",
           scheduledAt: topicScopeScheduledAt ? new Date(topicScopeScheduledAt).toISOString() : null,
           availableMinutes: topicScopeAvailableMinutes ? Number(topicScopeAvailableMinutes) : null,
@@ -495,6 +509,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       setTopicScopeAvailableMinutes("");
       setTopicScopeDailyMinutes("45");
       setTopicScopeText("");
+      setTopicScopeNotes("");
       setTopicScopeImportance({});
       setTopicScopeOpen(false);
       await refreshClassData();
@@ -503,6 +518,16 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     } finally {
       setTopicScopeSaving(false);
     }
+  }
+
+  async function saveInstructorText(assessmentId: string) {
+    setInstructorTextSaving(true);
+    try {
+      await postJson(`/api/courses/${courseId}/learner/assessments/${assessmentId}`, { instructorText: instructorTextDraft }, "PATCH");
+      setEditingInstructorScopeId(null);
+      await refreshClassData();
+    } catch (err) { setError((err as Error).message); }
+    finally { setInstructorTextSaving(false); }
   }
 
   const parsedTopicScope = parseInstructorTopicList(topicScopeText);
@@ -520,6 +545,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     setTopicScopeAvailableMinutes("");
     setTopicScopeDailyMinutes("45");
     setTopicScopeText("");
+    setTopicScopeNotes("");
     setTopicScopeImportance({});
     setTopicScopeMessage("");
     setTopicScopeOpen(true);
@@ -630,8 +656,9 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           </div>
         </>}
         <label>{topicScopeTargetAssessmentId ? "Additional topics from the instructor" : "Topics from the instructor"}<textarea required value={topicScopeText} onChange={(event) => { setTopicScopeText(event.target.value); setTopicScopeMessage(""); }} placeholder={topicScopeTargetAssessmentId ? "Paste the new topics; topics already saved to this scope will be skipped" : "Paste one per line; numbering, bullets, commas, and semicolons are okay"} /></label>
+        <label>Other instructions or context <span>(optional)</span><textarea value={topicScopeNotes} onChange={(event) => { setTopicScopeNotes(event.target.value); setTopicScopeMessage(""); }} placeholder="For example: You should be able to compute reduced density matrices. No proofs required." /></label>
         {topicScopeText.trim() ? <div className="topic-scope-preview" aria-live="polite"><strong>{parsedTopicScope.length ? `${parsedTopicScope.length} cleaned ${parsedTopicScope.length === 1 ? "topic" : "topics"} ready to ${topicScopeTargetAssessmentId ? "add" : "save"}` : "No topics found yet"}</strong>{providedTopicCount > parsedTopicScope.length ? <small>{providedTopicCount - parsedTopicScope.length} duplicate or empty {providedTopicCount - parsedTopicScope.length === 1 ? "entry was" : "entries were"} removed.</small> : null}{duplicateTopicScope ? <p role="alert">A scope named “{duplicateTopicScope.title}” already exists. Use its “Add topics” action to extend it and keep its progress.</p> : null}{topicScopeTargetAssessmentId ? <p>Topics already in this scope will be skipped; their saved study history remains unchanged.</p> : null}{parsedTopicScope.length ? <ol>{parsedTopicScope.map((item, index) => <li key={`${item}-${index}`}><span>{item}</span><label className="topic-scope-preview__priority">Priority<select aria-label={`Priority for ${item}`} value={topicScopeImportance[item.trim().normalize("NFKC").toLocaleLowerCase()] ?? "normal"} onChange={(event) => setTopicScopeImportance((current) => ({ ...current, [item.trim().normalize("NFKC").toLocaleLowerCase()]: event.target.value as "low" | "normal" | "high" }))}><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></li>)}</ol> : <p>Try one topic per line or separate topics with commas.</p>}</div> : null}
-        <div className="topic-scope-panel__form-actions"><button className="button-primary" disabled={topicScopeSaving || !parsedTopicScope.length}>{topicScopeSaving ? "Saving…" : topicScopeTargetAssessmentId ? "Add topics to this list" : "Save topic scope"}</button>{topicScopeTargetAssessmentId ? <button className="button-secondary" type="button" onClick={() => { setTopicScopeTargetAssessmentId(null); setTopicScopeTitle(""); setTopicScopeScheduledAt(""); setTopicScopeAvailableMinutes(""); setTopicScopeDailyMinutes("45"); setTopicScopeText(""); setTopicScopeImportance({}); setTopicScopeMessage(""); }}>Cancel</button> : null}</div></form> : null}
+        <div className="topic-scope-panel__form-actions"><button className="button-primary" disabled={topicScopeSaving || !parsedTopicScope.length}>{topicScopeSaving ? "Saving…" : topicScopeTargetAssessmentId ? "Add topics to this list" : "Save topic scope"}</button>{topicScopeTargetAssessmentId ? <button className="button-secondary" type="button" onClick={() => { setTopicScopeTargetAssessmentId(null); setTopicScopeTitle(""); setTopicScopeScheduledAt(""); setTopicScopeAvailableMinutes(""); setTopicScopeDailyMinutes("45"); setTopicScopeText(""); setTopicScopeNotes(""); setTopicScopeImportance({}); setTopicScopeMessage(""); }}>Cancel</button> : null}</div></form> : null}
       {assessmentScopes.length ? <div className="topic-scope-panel__saved"><strong>Saved class scopes · checks are practice activity, not mastery estimates</strong>{assessmentScopes.map((assessment) => {
         const coverage = summarizeStudyCoverage(assessment.topics.map(({ title }) => title), assessment.topics);
         const lessonCoveragePercent = coverage.topicCount ? Math.round(coverage.lessonTopicCount / coverage.topicCount * 100) : 0;
@@ -649,6 +676,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         return <article key={assessment.id}>
           <div className="scope-assessment-head"><div><h3>{assessment.title}</h3>{assessment.scheduledAt || assessment.availableMinutes ? <small className="scope-assessment-meta">{assessment.scheduledAt ? `Scheduled ${new Date(assessment.scheduledAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}${deadline ? ` · ${deadline}` : ""}` : "Date not set"}{assessment.availableMinutes ? ` · ${assessment.availableMinutes} total min · up to ${assessment.dailyMinutes} min/day` : ""}</small> : null}</div><small>{assessment.scoredAttemptCount ? `${assessment.correctCount} of ${assessment.scoredAttemptCount} scored checks correct${assessment.attemptCount > assessment.scoredAttemptCount ? ` · ${assessment.attemptCount - assessment.scoredAttemptCount} unscored` : ""}` : assessment.attemptCount ? `${assessment.attemptCount} unscored attempt${assessment.attemptCount === 1 ? "" : "s"}` : assessment.sessionCount ? `${assessment.sessionCount} lesson session${assessment.sessionCount === 1 ? "" : "s"} · no checks saved` : "No checks recorded yet"}</small></div>
           <button className="scope-add-topics" type="button" onClick={() => appendTopicsToAssessment(assessment)}>Add topics to this list →</button>
+          <details className="scope-instructor-text"><summary>{assessment.instructorText ? "Professor’s original wording" : "Add professor wording or notes"}</summary>{editingInstructorScopeId === assessment.id ? <div><textarea aria-label={`Professor wording for ${assessment.title}`} maxLength={12000} value={instructorTextDraft} onChange={(event) => setInstructorTextDraft(event.target.value)} placeholder="Paste the professor’s exact wording, including caveats or emphasis."/><div><button type="button" className="button-primary" disabled={instructorTextSaving} onClick={() => void saveInstructorText(assessment.id)}>{instructorTextSaving ? "Saving…" : "Save wording"}</button><button type="button" className="button-secondary" onClick={() => setEditingInstructorScopeId(null)}>Cancel</button></div></div> : <><pre>{assessment.instructorText || "No original wording saved yet."}</pre><button type="button" className="button-secondary" onClick={() => { setInstructorTextDraft(assessment.instructorText); setEditingInstructorScopeId(assessment.id); }}>Edit wording</button></>}</details>
           <div className="scope-coverage"><span>{coverage.lessonTopicCount}/{coverage.topicCount} topics studied · {coverage.checkedTopicCount}/{coverage.topicCount} checked · {assessment.sessionCount} lesson session{assessment.sessionCount === 1 ? "" : "s"}{latestLesson ? ` · last lesson ${new Date(latestLesson).toLocaleDateString()}` : ""}{latestPractice ? ` · last check ${new Date(latestPractice).toLocaleDateString()}` : ""}</span><div className="scope-coverage__tracks"><div><small>Lesson</small><span className="scope-coverage__track" role="progressbar" aria-label={`${assessment.title} lesson coverage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={lessonCoveragePercent}><span style={{ width: `${lessonCoveragePercent}%` }} /></span></div><div><small>Knowledge checks</small><span className="scope-coverage__track scope-coverage__track--checked" role="progressbar" aria-label={`${assessment.title} knowledge check coverage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={checkCoveragePercent}><span style={{ width: `${checkCoveragePercent}%` }} /></span></div></div></div>
           {studyPlan.length ? <p className="scope-plan-note">Suggested minutes rebalance as you study, giving more time to high-priority topics, missed checks, and topics with less evidence.</p> : null}
           {daySchedule ? <div className="scope-day-plan"><strong>Day-by-day study plan</strong>{daySchedule.days.length ? <ol>{daySchedule.days.map((day) => <li key={day.date}><div><b>{new Date(`${day.date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b><span>{day.minutes} min</span></div><small>{day.topics.map(({ title, minutes }) => `${title} · ${minutes} min`).join("; ")}</small></li>)}</ol> : <p>{daySchedule.status === "missing-deadline" ? "Add the exam date to place study sessions on calendar days." : daySchedule.status === "deadline-passed" ? "This assessment date has passed. Update it to make a future plan." : "No study minutes need scheduling."}</p>}{daySchedule.unscheduledMinutes ? <p className="scope-day-plan__warning">{daySchedule.unscheduledMinutes} minutes do not fit before the assessment at this daily limit. Increase minutes per day or reduce the total study time.</p> : null}</div> : null}

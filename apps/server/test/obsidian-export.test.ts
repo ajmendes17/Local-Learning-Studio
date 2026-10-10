@@ -48,7 +48,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(conceptResponse.statusCode, 201, conceptResponse.body);
     const assessmentResponse = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/assessments`,
-      payload: { title: "Midterm 2 professor scope", kind: "exam", scheduledAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), availableMinutes: 90, dailyMinutes: 30, topics: [
+      payload: { title: "Midterm 2 professor scope", instructorText: "Exam topics:\n1. Bell states\n2. Partial trace\nNote: do not use [[another class]].", kind: "exam", scheduledAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), availableMinutes: 90, dailyMinutes: 30, topics: [
         { title: "Bell states", conceptId: conceptResponse.json().id, importance: "normal", provenance: "learner" },
         { title: "Partial trace", importance: "normal", provenance: "learner" },
       ] },
@@ -89,6 +89,10 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 0\/1 scored checks correct; confidence gap 50% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
     assert.match(courseNote, /Clear explanation:\*\* No scored checks; confidence alignment not available; 1 total attempt; across 1 topic; topics: Bell states; 1 unscored/);
     assert.match(courseNote, /Different topics and small samples make method comparisons uncertain/);
+    const professorAssessmentNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "assessments", `midterm-2-professor-scope--${assessmentResponse.json().id.slice(0, 8)}.md`), "utf8");
+    assert.match(professorAssessmentNote, /## Professor’s original wording[\s\S]*Exam topics:\n1\. Bell states\n2\. Partial trace\nNote: do not use/);
+    assert.match(professorAssessmentNote, /&#91;&#91;another class&#93;&#93;/);
+    assert.doesNotMatch(professorAssessmentNote, /\[\[another class\]\]/);
     const sourceFiles = await readdir(join(vaultPath, firstExport.json().courseFolder, "sources"));
     assert.equal(sourceFiles.length, 1);
     const sourceNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "utf8");

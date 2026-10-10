@@ -276,6 +276,7 @@ export const LearnerAssessmentTopicImportanceUpdateSchema = z.object({ importanc
 
 export const LearnerAssessmentCreateSchema = z.object({
   title: z.string().trim().min(1).max(160),
+  instructorText: z.string().max(12000).default(""),
   kind: z.enum(["exam", "quiz", "other"]).default("exam"),
   scheduledAt: z.string().datetime().nullable().optional(),
   availableMinutes: z.number().int().positive().max(1440).nullable().optional(),
@@ -291,6 +292,7 @@ export type LearnerAssessmentCreate = z.infer<typeof LearnerAssessmentCreateSche
 
 export const LearnerAssessmentUpdateSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
+  instructorText: z.string().max(12000).optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
   availableMinutes: z.number().int().positive().max(1440).nullable().optional(),
   dailyMinutes: z.number().int().min(15).max(240).optional(),
@@ -409,7 +411,7 @@ export const LearnerProfileResponseSchema = z.object({
     topics: z.array(z.object({ conceptId: z.string().uuid(), title: z.string(), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
   })),
   assessments: z.array(z.object({
-    id: z.string().uuid(), title: z.string(), kind: z.enum(["exam", "quiz", "other"]),
+    id: z.string().uuid(), title: z.string(), instructorText: z.string(), kind: z.enum(["exam", "quiz", "other"]),
     scheduledAt: z.string().nullable(), availableMinutes: z.number().int().nullable(), dailyMinutes: z.number().int(), createdAt: z.string(),
     attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
     topics: z.array(z.object({ id: z.string().uuid(), conceptId: z.string().uuid().nullable(), title: z.string(), position: z.number().int(), importance: z.enum(["low", "normal", "high"]), provenance: z.enum(["learner", "model", "material"]), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),

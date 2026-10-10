@@ -14,7 +14,7 @@ export interface ObsidianConfig {
 export interface ObsidianCourseExport {
   course: { id: string; title: string; code: string; term: string; materials: Array<{ id: string; originalName: string; kind: string; status: string; mediaType: string; sizeBytes: number; passageCount: number; errorMessage: string | null; createdAt: string; passages: SourcePassage[] }> };
   map: { modules: Array<{ key: string; title: string; description: string; position: number; conceptKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; concepts: Array<{ key: string; title: string; description: string; learningObjectives: string[]; prerequisiteKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; assessments: Array<{ title: string; kind: string; moduleKey: string | null; dueAt: string | null; weightPercent: number | null; sourceReferences: Array<{ materialId: string; passageId: string }> }> } | null;
-  profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
+  profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; instructorText?: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
   methodProgress?: Array<{ method: string; attemptCount: number; scoredAttemptCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: Array<{ conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }>; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }>;
 }
 
@@ -55,6 +55,12 @@ function escapeImportedWikilinks(content: string) {
   return content.replace(/(!?)\[\[([^\]\n]+)\]\]/g, (_match, embed: string, target: string) =>
     `${embed}&#91;&#91;${target}&#93;&#93;`,
   );
+}
+
+function fencedVerbatim(content: string) {
+  const longestRun = Math.max(0, ...[...content.matchAll(/`+/g)].map(([run]) => run.length));
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return `${fence}text\n${escapeImportedWikilinks(content)}${content.endsWith("\n") ? "" : "\n"}${fence}`;
 }
 
 function studyMethodLabel(method: string) {
@@ -322,7 +328,7 @@ export class ObsidianVault {
         assessment.scheduledAt,
         assessment.dailyMinutes ?? 45,
       );
-      const scope = assessment.topics.map((topic) => {
+      let scope = assessment.topics.map((topic) => {
         const matchingConcept = (data.map?.concepts ?? []).find(({ title }) => title.trim().toLocaleLowerCase() === topic.title.trim().toLocaleLowerCase());
         const noteLink = matchingConcept && topicPaths.get(matchingConcept.key) ? ` · ${wikilink(topicPaths.get(matchingConcept.key)!, "open topic")}` : "";
         const planMinutes = plannedMinutes.get(topic.title.trim().normalize("NFKC").toLocaleLowerCase());
@@ -331,6 +337,9 @@ export class ObsidianVault {
           : `${topic.sessionCount} lesson sessions; no checks saved${topic.lastSessionAt ? `; last lesson: ${topic.lastSessionAt}` : ""}`;
         return `- ${topic.title} _(source: ${topic.provenance}; priority: ${topic.importance ?? "normal"}${planMinutes == null ? "" : `; suggested time: ${planMinutes} min`}; ${activity})_${noteLink}`;
       }).join("\n") || "- No topic scope added yet.";
+      if (assessment.instructorText?.trim()) {
+        scope += `\n\n## Professor’s original wording\n\n${fencedVerbatim(assessment.instructorText)}`;
+      }
       const reviewTopics = assessment.topics.filter((topic) => needsReview(topic.latestOutcome)).length;
       const checkedTopics = assessment.topics.filter((topic) => topic.attemptCount > 0).length;
       const uncheckedTopics = Math.max(0, assessment.topics.length - checkedTopics);

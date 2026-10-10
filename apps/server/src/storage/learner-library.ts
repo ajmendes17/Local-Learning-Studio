@@ -23,14 +23,14 @@ export class LearnerLibrary {
     const id = randomUUID();
     const now = new Date().toISOString();
     const insert = this.database.prepare(`INSERT INTO learner_assessments
-      (id,title,kind,scheduled_at,available_minutes,daily_minutes,created_at,updated_at,course_id)
-      VALUES (?,?,?,?,?,?,?,?,?)`);
+      (id,title,instructor_text,kind,scheduled_at,available_minutes,daily_minutes,created_at,updated_at,course_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`);
     const insertTopic = this.database.prepare(`INSERT INTO learner_topics
       (id,assessment_id,concept_id,title,position,importance,provenance,created_at,course_id)
       VALUES (?,?,?,?,?,?,?,?,?)`);
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      insert.run(id, input.title, input.kind, input.scheduledAt ?? null, input.availableMinutes ?? null, input.dailyMinutes, now, now, courseId);
+      insert.run(id, input.title, input.instructorText, input.kind, input.scheduledAt ?? null, input.availableMinutes ?? null, input.dailyMinutes, now, now, courseId);
       input.topics.forEach((topic, position) => insertTopic.run(
         randomUUID(), id, topic.conceptId ?? null, topic.title, position,
         topic.importance, topic.provenance, now, courseId,
@@ -44,17 +44,18 @@ export class LearnerLibrary {
   }
 
   updateAssessment(courseId: string, assessmentId: string, input: LearnerAssessmentUpdate) {
-    const current = this.database.prepare(`SELECT title,scheduled_at AS scheduledAt,available_minutes AS availableMinutes,daily_minutes AS dailyMinutes
+    const current = this.database.prepare(`SELECT title,instructor_text AS instructorText,scheduled_at AS scheduledAt,available_minutes AS availableMinutes,daily_minutes AS dailyMinutes
       FROM learner_assessments WHERE course_id=? AND id=?`).get(courseId, assessmentId) as
-      | { title: string; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number }
+      | { title: string; instructorText: string; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number }
       | undefined;
     if (!current) return null;
     const title = input.title ?? current.title;
+    const instructorText = input.instructorText ?? current.instructorText;
     const scheduledAt = Object.hasOwn(input, "scheduledAt") ? input.scheduledAt ?? null : current.scheduledAt;
     const availableMinutes = Object.hasOwn(input, "availableMinutes") ? input.availableMinutes ?? null : current.availableMinutes;
     const dailyMinutes = input.dailyMinutes ?? current.dailyMinutes;
-    this.database.prepare(`UPDATE learner_assessments SET title=?,scheduled_at=?,available_minutes=?,daily_minutes=?,updated_at=?
-      WHERE course_id=? AND id=?`).run(title, scheduledAt, availableMinutes, dailyMinutes, new Date().toISOString(), courseId, assessmentId);
+    this.database.prepare(`UPDATE learner_assessments SET title=?,instructor_text=?,scheduled_at=?,available_minutes=?,daily_minutes=?,updated_at=?
+      WHERE course_id=? AND id=?`).run(title, instructorText, scheduledAt, availableMinutes, dailyMinutes, new Date().toISOString(), courseId, assessmentId);
     return this.getProfile(courseId).assessments.find(({ id }) => id === assessmentId) ?? null;
   }
 
@@ -376,7 +377,7 @@ export class LearnerLibrary {
           OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
         ))
       )`).all(courseId) as any[];
-    const assessmentRows = this.database.prepare(`SELECT id,title,kind,scheduled_at AS scheduledAt,
+    const assessmentRows = this.database.prepare(`SELECT id,title,instructor_text AS instructorText,kind,scheduled_at AS scheduledAt,
       available_minutes AS availableMinutes,daily_minutes AS dailyMinutes,created_at AS createdAt,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=learner_assessments.course_id AND a.assessment_id=learner_assessments.id) AS attemptCount,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=learner_assessments.course_id AND a.assessment_id=learner_assessments.id AND a.outcome IN ('correct','incorrect')) AS scoredAttemptCount,
