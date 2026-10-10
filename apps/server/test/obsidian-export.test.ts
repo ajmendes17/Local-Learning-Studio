@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -21,6 +21,38 @@ function markdownUpload(filename: string, content: string) {
       "",
     ].join("\r\n"),
   };
+}
+
+async function assertInternalWikiLinksResolve(vaultPath: string, courseFolder: string) {
+  async function markdownFiles(folder: string): Promise<string[]> {
+    const entries = await readdir(folder, { withFileTypes: true });
+    const nested = await Promise.all(entries.map(async (entry) => {
+      const path = join(folder, entry.name);
+      if (entry.isDirectory()) return markdownFiles(path);
+      return entry.isFile() && entry.name.endsWith(".md") ? [path] : [];
+    }));
+    return nested.flat();
+  }
+
+  const files = await markdownFiles(join(vaultPath, courseFolder));
+  const broken: Array<{ file: string; target: string }> = [];
+  let checked = 0;
+  for (const file of files) {
+    const body = await readFile(file, "utf8");
+    for (const match of body.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
+      const target = match[1]!.split("|", 1)[0]!.split("#", 1)[0]!;
+      if (!target.startsWith("Codex/Local Learning Studio/")) continue;
+      checked += 1;
+      try {
+        await access(join(vaultPath, `${target}.md`));
+      } catch {
+        broken.push({ file, target });
+      }
+    }
+  }
+  assert.ok(checked > 0, "the exported class should contain internal Obsidian links");
+  assert.deepEqual(broken, [], "every internal Obsidian link should resolve to an exported note");
+  return checked;
 }
 
 test("Obsidian export creates linked class notes and preserves learner-owned text on refresh", async () => {
@@ -89,6 +121,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(firstExport.json().notesWritten, 4);
     assert.match(firstExport.json().courseFolder, /^Codex\/Local Learning Studio\//);
     assert.doesNotMatch(firstExport.json().courseFolder, /(^|\/)\.\.(\/|$)/);
+    assert.ok(await assertInternalWikiLinksResolve(vaultPath, firstExport.json().courseFolder) >= 6);
     const courseNotePath = join(vaultPath, firstExport.json().courseFolder, "Course.md");
     const courseNote = await readFile(courseNotePath, "utf8");
     assert.match(courseNote, /\[\[Codex\/Local Learning Studio\/[^\]]+\/assessments\/midterm-2-professor-scope--/);
