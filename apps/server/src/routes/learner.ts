@@ -432,7 +432,15 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       return StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, concept.id, content));
     } catch (error) {
       if (error instanceof Error && error.name === "CodexRunError") {
-        return reply.code(503).send({ error: error.message });
+        const codexError = error as import("../codex/codex-runner.js").CodexRunError;
+        const status = codexError.code === "unavailable" ? 503 : codexError.code === "timeout" ? 504 : 502;
+        return reply.code(status).send({
+          error: codexError.message,
+          detail: codexError.detail ?? (codexError.code === "timeout"
+            ? "The local Codex request exceeded its time limit. Try again after the current workload clears."
+            : "Check the local Codex CLI setup and server output, then retry."),
+          diagnostics: { task: "compose-study-lesson", code: codexError.code },
+        });
       }
       throw error;
     }

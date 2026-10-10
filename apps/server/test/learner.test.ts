@@ -8,6 +8,7 @@ import test from "node:test";
 import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
 import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
+import { CodexRunError } from "../src/codex/codex-runner.js";
 import { openDatabase } from "../src/storage/database.js";
 import { LearningArtifactLibrary } from "../src/storage/learning-artifact-library.js";
 import { SourceLibrary } from "../src/storage/source-library.js";
@@ -26,7 +27,7 @@ function uploadPayload(filename: string, content: string) {
   return { payload: body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-async function createAppWithStudyModel(options: { corruptMath?: boolean } = {}) {
+async function createAppWithStudyModel(options: { corruptMath?: boolean; failure?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "learning-studio-learner-"));
   const prompts: string[] = [];
   const controlCharacter = options.corruptMath ? String.fromCharCode(127) : "";
@@ -34,6 +35,7 @@ async function createAppWithStudyModel(options: { corruptMath?: boolean } = {}) 
     status: async () => ({ installed: true, authenticated: true, ready: true }),
     run: async (task: any, prompt: string, outputSchema: any) => {
       prompts.push(prompt);
+      if (options.failure) throw new CodexRunError("execution_failed", `Codex failed while running ${task}.`, "The selected local model is unavailable.");
       const output = outputSchema.parse({
         conceptId: randomUUID(),
         topic: "model topic",
@@ -60,6 +62,25 @@ async function createAppWithStudyModel(options: { corruptMath?: boolean } = {}) 
   const app = buildApp({ databasePath: join(root, "data", "studio.sqlite"), courseRoot: join(root, "courses"), codex });
   return { app, root, prompts };
 }
+
+test("study generation exposes a safe CLI diagnostic for troubleshooting", async () => {
+  const { app, root } = await createAppWithStudyModel({ failure: true });
+  const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Study diagnostic" } });
+  const courseId = course.json().id as string;
+  const failed = await app.inject({
+    method: "POST",
+    url: `/api/courses/${courseId}/learner/study-session`,
+    payload: { topic: "Bell states", method: "explanation" },
+  });
+
+  assert.equal(failed.statusCode, 502);
+  assert.equal(failed.json().error, "Codex failed while running compose-study-lesson.");
+  assert.equal(failed.json().detail, "The selected local model is unavailable.");
+  assert.deepEqual(failed.json().diagnostics, { task: "compose-study-lesson", code: "execution_failed" });
+
+  await app.close();
+  await rm(root, { recursive: true, force: true });
+});
 
 test("professor topic-list parser removes common numbering and bullets and deduplicates case-insensitively", () => {
   assert.deepEqual(parseInstructorTopicList([

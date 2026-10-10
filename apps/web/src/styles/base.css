@@ -214,6 +214,8 @@ select:focus-visible {
   padding: 14px 16px;
   border: 1px solid rgb(135 63 56 / 18%);
   border-radius: 7px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .form-error {

@@ -113,8 +113,8 @@ class StudyRequestError extends Error {
 
 async function postJson<T>(path: string, body: unknown, method: "POST" | "PATCH" = "POST"): Promise<T> {
   const response = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const result = await response.json().catch(() => null) as { error?: string } | null;
-  if (!response.ok) throw new StudyRequestError(result?.error ?? `The local service returned ${response.status}.`, response.status);
+  const result = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
+  if (!response.ok) throw new StudyRequestError([result?.error, result?.detail].filter(Boolean).join(" ") || `The local service returned ${response.status}.`, response.status);
   if (result == null) throw new Error("The local service returned an empty response. Check that it is running, then try again.");
   return result as T;
 }

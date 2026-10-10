@@ -32,7 +32,7 @@ const valueAfter = (flag) => args[args.indexOf(flag) + 1];
 const delay = Number(prompt.match(/delay:(\\d+)/)?.[1] ?? 0);
 if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
 if (prompt.includes("fail")) {
-  console.error("simulated Codex failure");
+  console.error("simulated Codex failure; OPENAI_API_KEY=sk-test-key-1234567890");
   process.exit(7);
 }
 const output = prompt.includes("invalid")
@@ -108,8 +108,9 @@ test("Codex runner rejects execution failures and invalid output", async () => {
 
   await assert.rejects(
     runner.run("map-course", "fail", outputSchema),
-    (error: unknown) =>
-      error instanceof CodexRunError && error.code === "execution_failed",
+    (error: unknown) => error instanceof CodexRunError
+      && error.code === "execution_failed"
+      && error.detail === "simulated Codex failure; OPENAI_API_KEY=[redacted]",
   );
   await assert.rejects(
     runner.run("map-course", "invalid", outputSchema),

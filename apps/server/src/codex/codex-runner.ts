@@ -84,6 +84,38 @@ function appendBounded(current: string, chunk: Buffer | string) {
   return (current + chunk.toString()).slice(0, MAX_DIAGNOSTIC_LENGTH);
 }
 
+function diagnosticMessageFromEvents(stdout: string) {
+  const messages: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    try {
+      const event: unknown = JSON.parse(line);
+      if (!event || typeof event !== "object") continue;
+      const record = event as Record<string, unknown>;
+      if (record.type !== "error" && record.type !== "turn.failed") continue;
+      const nestedError = record.error && typeof record.error === "object"
+        ? (record.error as Record<string, unknown>).message
+        : record.error;
+      const message = typeof nestedError === "string" ? nestedError
+        : typeof record.message === "string" ? record.message : "";
+      if (message.trim()) messages.push(message.trim());
+    } catch {
+      // Only structured failure events are surfaced; stdout may contain prompt or response data.
+    }
+  }
+  return messages.at(-1) ?? "";
+}
+
+function safeDiagnostic(value: string) {
+  return value
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/(OPENAI_API_KEY|CODEX_API_KEY)\s*[=:]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .replace(/\bBearer\s+[^\s,;]+/gi, "Bearer [redacted]")
+    .replace(/\b(?:sk|rk)-[A-Za-z0-9_-]{12,}\b/g, "[redacted key]")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, 1_200);
+}
+
 export class CodexRunner {
   private readonly command: string;
   private readonly prefixArgs: string[];
@@ -186,10 +218,11 @@ export class CodexRunner {
       );
 
       if (result.exitCode !== 0) {
+        const diagnostic = result.stderr.trim() || diagnosticMessageFromEvents(result.stdout);
         throw new CodexRunError(
           "execution_failed",
           `Codex failed while running ${task}.`,
-          result.stderr.trim() || result.stdout.trim(),
+          safeDiagnostic(diagnostic) || "The Codex CLI exited without reporting a cause.",
         );
       }
 
