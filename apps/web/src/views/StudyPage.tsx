@@ -672,6 +672,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         importance: next.topic.importance,
         assessmentId: assessment.id,
         assessmentTitle: assessment.title,
+        scheduledAt: assessment.scheduledAt,
       }] : [];
     }),
     ...sourceProgress.flatMap((source) => {

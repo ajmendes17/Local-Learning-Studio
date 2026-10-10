@@ -13,6 +13,24 @@ import { openDatabase } from "../src/storage/database.js";
 import { LearningArtifactLibrary } from "../src/storage/learning-artifact-library.js";
 import { SourceLibrary } from "../src/storage/source-library.js";
 
+test("study recommendations prefer nearer upcoming assessments when signals tie", () => {
+  const soon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+  const later = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const recommendations = prioritizeStudyRecommendations([
+    { title: "Later exam topic", reason: "not-practiced" as const, importance: "normal" as const, scheduledAt: later, contextPriority: 0 },
+    { title: "No date topic", reason: "not-practiced" as const, importance: "normal" as const, scheduledAt: null, contextPriority: 0 },
+    { title: "Soon exam topic", reason: "not-practiced" as const, importance: "normal" as const, scheduledAt: soon, contextPriority: 4 },
+    { title: "Missed topic", reason: "needs-review" as const, importance: "normal" as const, scheduledAt: later, contextPriority: 0 },
+  ]);
+
+  assert.deepEqual(recommendations.map(({ title }) => title), [
+    "Missed topic",
+    "Soon exam topic",
+    "Later exam topic",
+    "No date topic",
+  ]);
+});
+
 function uploadPayload(filename: string, content: string) {
   const boundary = "learner-study-test-boundary";
   const body = [

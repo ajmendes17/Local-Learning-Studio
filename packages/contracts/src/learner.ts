@@ -271,6 +271,7 @@ export function prioritizeStudyRecommendations<T extends {
   reason: StudyRecommendationReason;
   importance?: "low" | "normal" | "high";
   lastPracticedAt?: string | null;
+  scheduledAt?: string | null;
   contextPriority?: number;
 }>(recommendations: T[]): T[] {
   const reasonRank: Record<StudyRecommendationReason, number> = {
@@ -287,9 +288,14 @@ export function prioritizeStudyRecommendations<T extends {
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
   };
+  const deadlineRank = (value?: string | null) => {
+    const parsed = timestamp(value);
+    return parsed >= Date.now() ? parsed : Number.MAX_SAFE_INTEGER;
+  };
   return [...recommendations].sort((left, right) =>
     reasonRank[left.reason] - reasonRank[right.reason]
     || importanceRank(right.importance) - importanceRank(left.importance)
+    || deadlineRank(left.scheduledAt) - deadlineRank(right.scheduledAt)
     || (left.reason === "needs-review" ? timestamp(right.lastPracticedAt) - timestamp(left.lastPracticedAt)
       : left.reason === "least-recently-practiced" ? timestamp(left.lastPracticedAt) - timestamp(right.lastPracticedAt) : 0)
     || (left.contextPriority ?? Number.MAX_SAFE_INTEGER) - (right.contextPriority ?? Number.MAX_SAFE_INTEGER)
