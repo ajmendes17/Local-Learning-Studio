@@ -52,21 +52,30 @@ function collisionSafePaths(keys: string[], folder: string) {
   }));
 }
 
-export function expectedObsidianNotePaths(input: {
+export function expectedObsidianNoteIdentities(courseId: string, input: {
   materials: Array<{ id: string; originalName: string }>;
   map: ObsidianCourseExport["map"];
   assessments: Array<{ id: string; title: string }>;
 }) {
-  const paths = ["Course.md", "Study Journal.md"];
+  const identities = new Map([["Course.md", `course:${courseId}`], ["Study Journal.md", `study-journal:${courseId}`]]);
   if (input.map) {
-    paths.push("Topic Progress.md");
-    paths.push(...collisionSafePaths(input.map.concepts.map(({ key }) => key), "topics").values());
-    paths.push(...collisionSafePaths(input.map.modules.map(({ key }) => key), "modules").values());
-    paths.push(...input.map.assessments.map((assessment, index) => `assessments/${slug(assessment.title)}--course-${index + 1}.md`));
+    identities.set("Topic Progress.md", `topic-progress-${courseId}`);
+    const topicPaths = collisionSafePaths(input.map.concepts.map(({ key }) => key), "topics");
+    for (const concept of input.map.concepts) identities.set(topicPaths.get(concept.key)!, `topic:${concept.key}`);
+    const modulePaths = collisionSafePaths(input.map.modules.map(({ key }) => key), "modules");
+    for (const module of input.map.modules) identities.set(modulePaths.get(module.key)!, `module:${module.key}`);
+    input.map.assessments.forEach((assessment, index) => identities.set(
+      `assessments/${slug(assessment.title)}--course-${index + 1}.md`,
+      `course-assessment:${courseId}:${index}:${slug(assessment.title)}`,
+    ));
   }
-  paths.push(...input.assessments.map((assessment) => `assessments/${slug(assessment.title)}--${assessment.id.slice(0, 8)}.md`));
-  paths.push(...input.materials.map((material) => `sources/${slug(material.originalName.replace(/\.[^.]+$/, ""))}--${material.id.slice(0, 8)}.md`));
-  return paths;
+  for (const assessment of input.assessments) identities.set(
+    `assessments/${slug(assessment.title)}--${assessment.id.slice(0, 8)}.md`, `assessment:${assessment.id}`,
+  );
+  for (const material of input.materials) identities.set(
+    `sources/${slug(material.originalName.replace(/\.[^.]+$/, ""))}--${material.id.slice(0, 8)}.md`, `source:${material.id}`,
+  );
+  return identities;
 }
 
 function yaml(value: string) {
@@ -276,7 +285,7 @@ export class ObsidianVault {
     } catch { return null; }
   }
 
-  async validateCourse(courseId: string, courseTitle: string, expectedNotePaths: string[] = []) {
+  async validateCourse(courseId: string, courseTitle: string, expectedNoteIdentities: Map<string, string> = new Map()) {
     const config = await this.getConfig();
     if (!config) throw new Error("Configure an Obsidian vault before checking class notes.");
     const vaultRealPath = await realpath(config.vaultPath);
@@ -323,7 +332,7 @@ export class ObsidianVault {
     };
     await walk(courseFolderRealPath);
     const actualNotePaths = new Set(markdownFiles.map((path) => relative(courseFolderRealPath, path).split(sep).join("/")));
-    for (const expectedPath of expectedNotePaths) {
+    for (const expectedPath of expectedNoteIdentities.keys()) {
       if (!actualNotePaths.has(expectedPath)) issues.push(`Expected class note is missing: ${expectedPath}`);
     }
     let linksChecked = 0;
@@ -331,14 +340,17 @@ export class ObsidianVault {
     for (const path of markdownFiles) {
       const notePath = relative(courseFolderRealPath, path).split(sep).join("/");
       const body = await readFile(path, "utf8");
-      const isExpectedManagedNote = expectedNotePaths.includes(notePath);
+      const expectedIdentity = expectedNoteIdentities.get(notePath);
       const hasExportId = /^id:\s*["'][^"']+["']\s*$/m.test(body);
       const starts = [...body.matchAll(/<!-- LLS:GENERATED:START -->/g)].length;
       const ends = [...body.matchAll(/<!-- LLS:GENERATED:END -->/g)].length;
-      if (isExpectedManagedNote && !hasExportId) {
+      if (expectedIdentity && !hasExportId) {
         issues.push(`Managed note identity is missing: ${notePath}`);
       }
-      if ((hasExportId || isExpectedManagedNote) && (starts !== 1 || ends !== 1 || body.indexOf(START) > body.indexOf(END))) {
+      if (expectedIdentity && hasExportId && markdownProperty(body, "id") !== expectedIdentity) {
+        issues.push(`Managed note identity does not match the class export: ${notePath}`);
+      }
+      if ((hasExportId || expectedIdentity) && (starts !== 1 || ends !== 1 || body.indexOf(START) > body.indexOf(END))) {
         issues.push(`Generated section is missing or damaged: ${notePath}`);
       } else if (!hasExportId && starts !== ends) {
         issues.push(`Generated section markers are unbalanced: ${notePath}`);

@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { CourseLibrary } from "../storage/course-library.js";
 import type { LearnerLibrary } from "../storage/learner-library.js";
 import type { SourceLibrary } from "../storage/source-library.js";
-import { expectedObsidianNotePaths, ObsidianVault } from "../storage/obsidian-vault.js";
+import { expectedObsidianNoteIdentities, ObsidianVault } from "../storage/obsidian-vault.js";
 import type { LearningWorkflowService } from "../learning/learning-workflow-service.js";
 
 const configSchema = z.object({ vaultPath: z.string().trim().min(1).max(1000), folderPath: z.string().trim().min(1).max(300).optional() });
@@ -88,13 +88,13 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
     const course = options.courses.getCourseDetail(parsed.data.courseId);
     if (!course) return reply.code(404).send({ error: "Class not found." });
     const acceptedMap = options.learning.getAcceptedCourseMap(course.id)?.payload ?? null;
-    const expectedNotePaths = expectedObsidianNotePaths({
+    const expectedNoteIdentities = expectedObsidianNoteIdentities(course.id, {
       materials: course.materials,
       map: acceptedMap,
       assessments: options.learner.getProfile(course.id).assessments,
     });
     try {
-      return await options.vault.validateCourse(course.id, course.title, expectedNotePaths);
+      return await options.vault.validateCourse(course.id, course.title, expectedNoteIdentities);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not check class notes.";
       const status = message.includes("Configure an Obsidian vault") ? 409 : 422;
