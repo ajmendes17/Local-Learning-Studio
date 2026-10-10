@@ -49,6 +49,14 @@ function createSourceAnnotationsTable(database: DatabaseSync) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS source_annotation_imports (
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+      import_key TEXT NOT NULL,
+      annotation_id TEXT NOT NULL,
+      imported_at TEXT NOT NULL,
+      PRIMARY KEY(course_id, material_id, import_key)
+    );
   `);
 }
 

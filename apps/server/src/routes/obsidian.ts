@@ -95,4 +95,45 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
       return reply.code(status).send({ error: message });
     }
   });
+
+  app.post<{ Params: { courseId: string } }>("/api/courses/:courseId/obsidian/import-comments", async (request, reply) => {
+    const parsed = courseParams.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ error: "Class ID is invalid." });
+    const course = options.courses.getCourseDetail(parsed.data.courseId);
+    if (!course) return reply.code(404).send({ error: "Class not found." });
+    try {
+      const materials = course.materials.map((material) => {
+        const passages = [];
+        if (material.status === "ready") {
+          let offset = 0;
+          while (true) {
+            const batch = options.sources.getPassages(course.id, material.id, 200, offset);
+            passages.push(...batch);
+            if (batch.length < 200) break;
+            offset += batch.length;
+          }
+        }
+        return { id: material.id, originalName: material.originalName, passages };
+      });
+      const read = await options.vault.readSourceCommentDrafts(course.id, course.title, materials);
+      const passagesByMaterial = new Map(materials.map((material) => [material.id, new Map(material.passages.map((passage) => [passage.ordinal, passage]))]));
+      const entries = read.drafts.flatMap((draft) => {
+        const passage = passagesByMaterial.get(draft.materialId)?.get(draft.ordinal);
+        return passage ? [{ materialId: draft.materialId, passageId: passage.id, body: draft.body, importKey: draft.importKey }] : [];
+      });
+      const imported = options.sources.importAnnotations(course.id, entries);
+      return {
+        notesChecked: read.notesChecked,
+        commentsFound: read.drafts.length,
+        importedCount: imported.created,
+        duplicateCount: imported.duplicates,
+        issues: read.issues,
+        issueCount: read.issueCount,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not import source comments from Obsidian.";
+      const status = message.includes("Configure an Obsidian vault") ? 409 : 422;
+      return reply.code(status).send({ error: message });
+    }
+  });
 }

@@ -150,6 +150,55 @@ export class SourceLibrary {
     return this.getAnnotations(courseId, materialId).find((annotation) => annotation.id === id) ?? null;
   }
 
+  importAnnotations(courseId: string, entries: Array<{ materialId: string; passageId: string; body: string; importKey: string }>) {
+    if (entries.length > 500) throw new Error("Only 500 source comments can be imported at once.");
+    let created = 0;
+    let duplicates = 0;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const entry of entries) {
+        const passageRow = this.database.prepare(`${passageSelect} WHERE course_id=? AND material_id=? AND id=?`)
+          .get(courseId, entry.materialId, entry.passageId) as unknown as PassageRow | undefined;
+        if (!passageRow) throw new Error("An imported comment refers to a passage outside this class.");
+        const passage = mapPassage(passageRow);
+        const body = entry.body.trim();
+        if (!body || body.length > 8000) throw new Error("Imported comments must contain 1–8000 characters.");
+        const wasImported = this.database.prepare(`SELECT 1 FROM source_annotation_imports
+          WHERE course_id=? AND material_id=? AND import_key=? LIMIT 1`)
+          .get(courseId, entry.materialId, entry.importKey);
+        if (wasImported) { duplicates += 1; continue; }
+        const exists = this.database.prepare(`SELECT 1 FROM source_annotations
+          WHERE course_id=? AND material_id=? AND passage_ordinal=? AND content_hash=? AND location_json=? AND body=? LIMIT 1`)
+          .get(courseId, entry.materialId, passage.ordinal, passage.contentHash, JSON.stringify(passage.location), body);
+        if (exists) {
+          const existing = this.database.prepare(`SELECT id FROM source_annotations
+            WHERE course_id=? AND material_id=? AND passage_ordinal=? AND content_hash=? AND location_json=? AND body=? LIMIT 1`)
+            .get(courseId, entry.materialId, passage.ordinal, passage.contentHash, JSON.stringify(passage.location), body) as { id: string };
+          this.database.prepare(`INSERT INTO source_annotation_imports (course_id,material_id,import_key,annotation_id,imported_at)
+            VALUES (?,?,?,?,?)`).run(courseId, entry.materialId, entry.importKey, existing.id, new Date().toISOString());
+          duplicates += 1;
+          continue;
+        }
+        const now = new Date().toISOString();
+        const annotationId = randomUUID();
+        this.database.prepare(`INSERT INTO source_annotations
+          (id,course_id,material_id,passage_id,passage_ordinal,content_hash,location_json,excerpt,body,created_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+          annotationId, courseId, entry.materialId, passage.id, passage.ordinal, passage.contentHash,
+          JSON.stringify(passage.location), passage.content.slice(0, 800), body, now, now,
+        );
+        this.database.prepare(`INSERT INTO source_annotation_imports (course_id,material_id,import_key,annotation_id,imported_at)
+          VALUES (?,?,?,?,?)`).run(courseId, entry.materialId, entry.importKey, annotationId, now);
+        created += 1;
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { created, duplicates };
+  }
+
   updateAnnotation(courseId: string, materialId: string, annotationId: string, body: string) {
     const result = this.database.prepare(`UPDATE source_annotations SET body=?,updated_at=?
       WHERE course_id=? AND material_id=? AND id=?`).run(body, new Date().toISOString(), courseId, materialId, annotationId);

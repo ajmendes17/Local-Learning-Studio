@@ -5,6 +5,8 @@ import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, normalizeMathText
 
 const START = "<!-- LLS:GENERATED:START -->";
 const END = "<!-- LLS:GENERATED:END -->";
+const COMMENT_GUIDE_START = "<!-- LLS:OBSIDIAN:COMMENTS:GUIDE:START";
+const COMMENT_GUIDE_END = "LLS:OBSIDIAN:COMMENTS:GUIDE:END -->";
 
 export interface ObsidianConfig {
   vaultPath: string;
@@ -105,7 +107,59 @@ function pathIsInside(parent: string, candidate: string) {
   return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
 }
 
-async function replaceManagedSection(path: string, id: string, title: string, generated: string, properties: Record<string, string | number | string[]> = {}) {
+function sourceFingerprint(passages: SourcePassage[]) {
+  const hash = createHash("sha256");
+  for (const passage of [...passages].sort((left, right) => left.ordinal - right.ordinal)) {
+    hash.update(`${passage.ordinal}\0${passage.contentHash}\0${JSON.stringify(passage.location)}\n`);
+  }
+  return hash.digest("hex");
+}
+
+function markdownProperty(markdown: string, property: string) {
+  const match = markdown.match(new RegExp(`^${property}:\\s*[\"']?([^\\r\\n\"']*)[\"']?\\s*$`, "m"));
+  return match?.[1]?.trim() ?? null;
+}
+
+function sourceCommentEntries(markdown: string, passageCount: number) {
+  const end = markdown.indexOf(END);
+  if (end < 0 || markdown.indexOf(START) < 0 || markdown.indexOf(START) > end
+    || markdown.indexOf(START, markdown.indexOf(START) + START.length) >= 0
+    || markdown.indexOf(END, end + END.length) >= 0) {
+    return { entries: [], issues: ["The source note has missing or repeated generated-section markers."] };
+  }
+  const userText = markdown.slice(end + END.length);
+  const notesHeading = /^## My notes\s*$/mi.exec(userText);
+  if (!notesHeading || notesHeading.index === undefined) return { entries: [], issues: ["The source note has no ‘My notes’ section."] };
+  const notesStart = notesHeading.index + notesHeading[0].length;
+  const nextHeading = /^##\s+.+$/m.exec(userText.slice(notesStart));
+  const notes = userText.slice(notesStart, nextHeading ? notesStart + nextHeading.index : undefined);
+  const entries: Array<{ ordinal: number; body: string }> = [];
+  const issues: string[] = [];
+  let inFence = false;
+  let inComment = false;
+  for (const line of notes.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (/^(```|~~~)/.test(trimmed)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    if (inComment || trimmed.includes("<!--")) {
+      if (inComment || trimmed.includes("<!--")) {
+        inComment = !trimmed.includes("-->");
+        continue;
+      }
+    }
+    if (!trimmed.startsWith("- [Passage")) continue;
+    const match = trimmed.match(/^- \[Passage\s+(\d+)\]\s+(.+)$/);
+    if (!match) { issues.push("A comment line must look like ‘- [Passage 3] Your note’."); continue; }
+    const ordinal = Number(match[1]);
+    const body = match[2]!.trim();
+    if (ordinal < 1 || ordinal > passageCount) { issues.push(`Passage ${ordinal} does not exist in the current source.`); continue; }
+    if (!body || body.length > 8000) { issues.push(`The comment for passage ${ordinal} must contain 1–8000 characters.`); continue; }
+    entries.push({ ordinal: ordinal - 1, body });
+  }
+  return { entries, issues };
+}
+
+async function replaceManagedSection(path: string, id: string, title: string, generated: string, properties: Record<string, string | number | string[]> = {}, commentGuide = "") {
   let previous = "";
   try { previous = await readFile(path, "utf8"); } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -147,6 +201,20 @@ async function replaceManagedSection(path: string, id: string, title: string, ge
     }
     const body = next.slice(match[0].length).replace(/^\n+/, "");
     next = `---\n${lines.join("\n")}\n---\n\n${body}`;
+  }
+  if (commentGuide) {
+    const end = next.indexOf(END);
+    const prefix = next.slice(0, end + END.length);
+    let userText = next.slice(end + END.length);
+    if (!/^## My notes\s*$/mi.test(userText)) userText = `${userText.trimEnd()}\n\n## My notes\n\n`;
+    if (!userText.includes(COMMENT_GUIDE_START)) {
+      const heading = /^## My notes[ \t]*\r?\n/m.exec(userText);
+      if (heading && heading.index !== undefined) {
+        const insertion = heading.index + heading[0].length;
+        userText = `${userText.slice(0, insertion)}\n${commentGuide.trim()}\n\n${userText.slice(insertion)}`;
+      }
+    }
+    next = `${prefix}${userText}`;
   }
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -274,6 +342,70 @@ export class ObsidianVault {
     return { courseFolder: courseFolderRelative, notesChecked: markdownFiles.length, linksChecked, issueCount, issues: issues.slice(0, 20), healthy: issueCount === 0 && markdownFiles.length > 0 };
   }
 
+  async readSourceCommentDrafts(courseId: string, courseTitle: string, materials: Array<{ id: string; originalName: string; passages: SourcePassage[] }>) {
+    const config = await this.getConfig();
+    if (!config) throw new Error("Configure an Obsidian vault before importing source comments.");
+    const vaultRealPath = await realpath(config.vaultPath);
+    const notesRoot = resolve(vaultRealPath, config.folderPath);
+    if (!pathIsInside(vaultRealPath, notesRoot)) throw new Error("The configured notes folder must stay inside the selected vault.");
+    const notesRootRealPath = await realpath(notesRoot);
+    if (!pathIsInside(vaultRealPath, notesRootRealPath)) throw new Error("The configured notes folder resolves outside the selected vault.");
+    const courseFolder = resolve(notesRootRealPath, `${slug(courseTitle)}--${courseId.slice(0, 8)}`);
+    if (!pathIsInside(notesRootRealPath, courseFolder)) throw new Error("The class note folder must stay inside the configured notes folder.");
+    const courseFolderInfo = await lstat(courseFolder);
+    if (courseFolderInfo.isSymbolicLink() || !courseFolderInfo.isDirectory()) throw new Error("The class note folder is not a regular folder.");
+    const courseFolderRealPath = await realpath(courseFolder);
+    if (!pathIsInside(notesRootRealPath, courseFolderRealPath)) throw new Error("The class note folder resolves outside the configured notes folder.");
+    const drafts: Array<{ materialId: string; ordinal: number; body: string; importKey: string }> = [];
+    const issues: string[] = [];
+    for (const material of materials) {
+      if (!material.passages.length) continue;
+      const filename = `${slug(material.originalName.replace(/\.[^.]+$/, ""))}--${material.id.slice(0, 8)}.md`;
+      const sourceFolder = join(courseFolderRealPath, "sources");
+      const sourcePath = join(sourceFolder, filename);
+      if (!pathIsInside(courseFolderRealPath, sourcePath)) { issues.push(`Unsafe source-note path for ${material.originalName}.`); continue; }
+      let note: string;
+      try {
+        const sourceFolderInfo = await lstat(sourceFolder);
+        if (sourceFolderInfo.isSymbolicLink() || !sourceFolderInfo.isDirectory() || !pathIsInside(courseFolderRealPath, await realpath(sourceFolder))) {
+          issues.push(`Unsafe source-note folder for ${material.originalName}.`); continue;
+        }
+        const sourceInfo = await lstat(sourcePath);
+        if (sourceInfo.isSymbolicLink() || !sourceInfo.isFile() || sourceInfo.size > 2_000_000 || !pathIsInside(courseFolderRealPath, await realpath(sourcePath))) {
+          issues.push(`Source note is unsafe or too large to import: ${material.originalName}.`); continue;
+        }
+        note = await readFile(sourcePath, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") issues.push(`Export the source note before importing comments: ${material.originalName}.`);
+        else throw error;
+        continue;
+      }
+      if (markdownProperty(note, "id") !== `source:${material.id}`
+        || markdownProperty(note, "course_id") !== courseId
+        || markdownProperty(note, "material_id") !== material.id) {
+        issues.push(`Source note identity does not match this class and material: ${material.originalName}.`); continue;
+      }
+      if (markdownProperty(note, "source_hash") !== sourceFingerprint(material.passages)) {
+        issues.push(`Source note is out of date; export ${material.originalName} again before importing comments.`); continue;
+      }
+      const parsed = sourceCommentEntries(note, material.passages.length);
+      issues.push(...parsed.issues.map((issue) => `${material.originalName}: ${issue}`));
+      drafts.push(...parsed.entries.map((entry) => ({
+        materialId: material.id,
+        ...entry,
+        importKey: createHash("sha256")
+          .update(`${courseId}\0${material.id}\0${sourceFingerprint(material.passages)}\0${entry.ordinal}\0${entry.body}`)
+          .digest("hex"),
+      })));
+      if (drafts.length > 500) {
+        issues.push("Only the first 500 source comments can be imported at once.");
+        drafts.length = 500;
+        break;
+      }
+    }
+    return { drafts, notesChecked: materials.filter((material) => material.passages.length > 0).length, issues: issues.slice(0, 50), issueCount: issues.length };
+  }
+
   async configure(vaultPath: string, folderPath = "Codex/Local Learning Studio") {
     if (!isAbsolute(vaultPath.trim())) throw new Error("Choose an absolute path to an existing Obsidian vault.");
     const absoluteVault = resolve(vaultPath.trim());
@@ -318,7 +450,7 @@ export class ObsidianVault {
     const sourcePaths = new Map(data.course.materials.map((item) => [item.id, `sources/${slug(item.originalName.replace(/\.[^.]+$/, ""))}--${item.id.slice(0, 8)}.md`]));
     const passageById = new Map(data.course.materials.flatMap((material) => material.passages.map((passage) => [passage.id, { materialId: material.id, ordinal: passage.ordinal }] as const)));
     const mapAssessmentPaths = (data.map?.assessments ?? []).map((item, index) => `assessments/${slug(item.title)}--course-${index + 1}.md`);
-    const managed: Array<{ path: string; id: string; title: string; body: string; properties?: Record<string, string | number | string[]> }> = [];
+    const managed: Array<{ path: string; id: string; title: string; body: string; properties?: Record<string, string | number | string[]>; commentGuide?: string }> = [];
     const sourceCitation = (reference: { materialId: string; passageId: string }) => {
       const material = data.course.materials.find(({ id }) => id === reference.materialId);
       const passage = passageById.get(reference.passageId);
@@ -331,6 +463,19 @@ export class ObsidianVault {
     };
 
     for (const material of data.course.materials) {
+      const materialSourceHash = sourceFingerprint(material.passages);
+      const sourceRelativePath = join(courseFolder, sourcePaths.get(material.id)!);
+      await ensureSafeManagedPath(courseFolderRealPath, sourceRelativePath);
+      let sourceHashToWrite = materialSourceHash;
+      try {
+        const previousSourceNote = await readFile(sourceRelativePath, "utf8");
+        if (sourceCommentEntries(previousSourceNote, Number.MAX_SAFE_INTEGER).entries.length > 0
+          && markdownProperty(previousSourceNote, "source_hash") !== materialSourceHash) {
+          sourceHashToWrite = markdownProperty(previousSourceNote, "source_hash") ?? "";
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
       const sourceProgress = data.profile.sources?.find(({ materialId }) => materialId === material.id);
       const relatedConcepts = (data.map?.concepts ?? []).filter((concept) =>
         concept.sourceReferences.some((reference) => reference.materialId === material.id),
@@ -417,7 +562,18 @@ export class ObsidianVault {
         "", "## Extracted source text", extracted,
         "", "_Practice activity is evidence of study, not mastery. This note mirrors locally extracted text; the original upload remains stored in Local Learning Studio. Passage numbers and locators preserve source provenance._",
       ].join("\n");
-      managed.push({ path: join(courseFolder, sourcePaths.get(material.id)!), id: `source:${material.id}`, title: material.originalName, body: generated });
+      const commentGuide = [
+        COMMENT_GUIDE_START,
+        "Only lines inside this My notes section are candidates for import. Add one comment per line using the 1-based passage number:",
+        "- [Passage 3] The professor emphasized this derivation.",
+        "Use Import notes from Obsidian in Local Learning Studio. Imports append; exact duplicates are skipped. Edit or delete imported comments in the app.",
+        COMMENT_GUIDE_END,
+      ].join("\n");
+      managed.push({
+        path: sourceRelativePath, id: `source:${material.id}`, title: material.originalName, body: generated,
+        properties: { course_id: data.course.id, material_id: material.id, source_hash: sourceHashToWrite },
+        commentGuide,
+      });
     }
 
     let topicProgressLink = "";
@@ -694,7 +850,7 @@ export class ObsidianVault {
     });
 
     for (const note of managed) await ensureSafeManagedPath(courseFolderRealPath, note.path);
-    for (const note of managed) await replaceManagedSection(note.path, note.id, note.title, note.body, note.properties);
+    for (const note of managed) await replaceManagedSection(note.path, note.id, note.title, note.body, note.properties, note.commentGuide);
     return { courseFolder: vaultRelativeCoursePath, notesWritten: managed.length, exportedAt };
   }
 }

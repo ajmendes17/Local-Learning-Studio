@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 interface VaultStatus { configured: boolean; vaultPath: string | null; folderPath: string; mode: "local-files" }
 interface VaultValidation { courseFolder: string; notesChecked: number; linksChecked: number; issueCount: number; issues: string[]; healthy: boolean }
+interface ObsidianCommentImport { notesChecked: number; commentsFound: number; importedCount: number; duplicateCount: number; issueCount: number; issues: string[] }
 
 export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: string; courseTitle: string }) {
   const [status, setStatus] = useState<VaultStatus | null>(null);
@@ -60,6 +61,19 @@ export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: strin
     finally { setBusy(false); }
   }
 
+  async function importComments() {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch(`/api/courses/${courseId}/obsidian/import-comments`, { method: "POST" });
+      const result = await response.json() as ObsidianCommentImport | { error?: string };
+      if (!response.ok) throw new Error((result as { error?: string }).error ?? "Could not import source comments.");
+      const imported = result as ObsidianCommentImport;
+      const issues = imported.issues.slice(0, 2).join(" · ");
+      setMessage(`Read ${imported.notesChecked} source notes; imported ${imported.importedCount} comment${imported.importedCount === 1 ? "" : "s"}; skipped ${imported.duplicateCount} duplicate${imported.duplicateCount === 1 ? "" : "s"}.${imported.issueCount ? ` ${imported.issueCount} note: ${issues}` : ""}`);
+    } catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
+  }
+
   return <section className="obsidian-export" aria-label="Obsidian course notes">
     <div className="obsidian-export__intro"><span className="obsidian-export__mark" aria-hidden="true">◈</span><div><p className="section-kicker">Your notes, connected</p><h2>Keep a copy in Obsidian</h2><p>Export the course map, progress, professor topic lists, and extracted text from imported sources as linked Markdown notes.</p></div><span className={`obsidian-export__status${status?.configured ? " obsidian-export__status--ready" : ""}`}>{status?.configured ? "Vault folder saved" : status ? "Not connected" : "Checking…"}</span></div>
     <form className="obsidian-export__settings" onSubmit={(event) => void saveSettings(event)}>
@@ -67,7 +81,7 @@ export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: strin
       <label>Notes folder inside vault<input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="Codex/Local Learning Studio" required /></label>
       <button className="button-secondary" type="submit" disabled={busy || !vaultPath.trim()}>{busy ? "Saving…" : "Save vault folder"}</button>
     </form>
-    <div className="obsidian-export__actions"><p>Exports {courseTitle} as editable Markdown files. Source notes keep extracted page, slide, paragraph, or line locations. Re-export refreshes generated sections and keeps your own notes.</p><div><button className="button-secondary" type="button" disabled={busy || !status?.configured} onClick={() => void validateNotes()}>{busy ? "Checking…" : "Check notes"}</button><button className="button-primary" type="button" disabled={busy || !status?.configured} onClick={() => void exportNotes()}>{busy ? "Working…" : "Export this class →"}</button></div></div>
+    <div className="obsidian-export__actions"><p>Exports {courseTitle} as editable Markdown files. To add comments from Obsidian, write <code>- [Passage 3] Your comment</code> under a source note’s <strong>My notes</strong> section, then import. Imports append; edit or delete them in the app. Re-export refreshes generated sections and keeps your notes.</p><div><button className="button-secondary" type="button" disabled={busy || !status?.configured} onClick={() => void validateNotes()}>{busy ? "Checking…" : "Check notes"}</button><button className="button-secondary" type="button" disabled={busy || !status?.configured} onClick={() => void importComments()}>{busy ? "Importing…" : "Import comments"}</button><button className="button-primary" type="button" disabled={busy || !status?.configured} onClick={() => void exportNotes()}>{busy ? "Working…" : "Export this class →"}</button></div></div>
     <p className="obsidian-export__message" role="status">{error || message || (status?.configured ? `Local file export · ${status.folderPath}. Obsidian Sync is managed separately by Obsidian.` : "Enter your vault’s full folder path to connect it. The app writes local Markdown files and does not change Obsidian Sync settings.")}</p>
   </section>;
 }

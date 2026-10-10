@@ -177,6 +177,31 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(sourceNote, /\*\*Practice activity:\*\* 0\/1 scored checks correct; 1 unscored/);
     assert.match(sourceNote, /\*\*Lesson sessions opened:\*\* 0/);
     assert.match(sourceNote, /## Practice by topic[\s\S]*Bell states:\*\* 0\/1 scored checks correct; 1 unscored; latest not-graded/);
+    assert.match(sourceNote, /^source_hash: "[a-f0-9]{64}"$/m);
+    assert.match(sourceNote, /LLS:OBSIDIAN:COMMENTS:GUIDE:START[\s\S]*- \[Passage 3\] The professor emphasized this derivation\./);
+    await appendFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "\n- [Passage 1] Imported from Obsidian: compare the two basis states.\n");
+    const firstImport = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/import-comments` });
+    assert.equal(firstImport.statusCode, 200, firstImport.body);
+    assert.deepEqual([firstImport.json().commentsFound, firstImport.json().importedCount, firstImport.json().duplicateCount], [1, 1, 0]);
+    const duplicateImport = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/import-comments` });
+    assert.equal(duplicateImport.statusCode, 200, duplicateImport.body);
+    assert.deepEqual([duplicateImport.json().commentsFound, duplicateImport.json().importedCount, duplicateImport.json().duplicateCount], [1, 0, 1]);
+    const savedComments = await app.inject({ method: "GET", url: `/api/courses/${courseId}/materials/${uploaded.json().id}/annotations` });
+    assert.equal(savedComments.statusCode, 200);
+    const importedAnnotation = savedComments.json().find((annotation: { body: string }) => annotation.body === "Imported from Obsidian: compare the two basis states.");
+    assert.ok(importedAnnotation);
+    const editedAnnotation = await app.inject({
+      method: "PATCH", url: `/api/courses/${courseId}/materials/${uploaded.json().id}/annotations/${importedAnnotation.id}`,
+      payload: { body: "Edited in the app; this should remain the only version." },
+    });
+    assert.equal(editedAnnotation.statusCode, 200, editedAnnotation.body);
+    const retryAfterEdit = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/import-comments` });
+    assert.equal(retryAfterEdit.statusCode, 200, retryAfterEdit.body);
+    assert.deepEqual([retryAfterEdit.json().importedCount, retryAfterEdit.json().duplicateCount], [0, 1]);
+    const commentsAfterEdit = await app.inject({ method: "GET", url: `/api/courses/${courseId}/materials/${uploaded.json().id}/annotations` });
+    const editedBodies = commentsAfterEdit.json().map((annotation: { body: string }) => annotation.body);
+    assert.ok(editedBodies.includes("Edited in the app; this should remain the only version."));
+    assert.equal(editedBodies.includes("Imported from Obsidian: compare the two basis states."), false);
     const assessmentFiles = await readdir(join(vaultPath, firstExport.json().courseFolder, "assessments"));
     const assessmentNotePath = join(vaultPath, firstExport.json().courseFolder, "assessments", assessmentFiles[0]!);
     const assessmentNote = await readFile(assessmentNotePath, "utf8");
@@ -203,6 +228,12 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     changedExtraction.prepare("UPDATE source_passages SET content_hash=? WHERE course_id=? AND material_id=? AND id=?")
       .run("e".repeat(64), courseId, uploaded.json().id, firstPassageId);
     changedExtraction.close();
+    const sourceNotePath = join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!);
+    await appendFile(sourceNotePath, "\n- [Passage 1] This line is stale after re-extraction.\n");
+    const staleImport = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/import-comments` });
+    assert.equal(staleImport.statusCode, 200, staleImport.body);
+    assert.equal(staleImport.json().importedCount, 0);
+    assert.ok(staleImport.json().issues.some((issue: string) => issue.includes("out of date")));
     await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/assessments`,
       payload: { title: "Final exam scope", kind: "exam", topics: [{ title: "No-signaling", importance: "normal", provenance: "learner" }] },
@@ -217,6 +248,10 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(refreshedJournal, /Which state is \$\\lvert\\Phi\^\+\\rangle\$ and \$\\ket\{0\}\$\?/);
     const refreshedSourceNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "sources", sourceFiles[0]!), "utf8");
     assert.match(refreshedSourceNote, /## Comments from older source versions[\s\S]*OBSIDIAN_SOURCE_SENTINEL[\s\S]*Professor emphasis: compare \|0〉 and \|1〉 in \(\|0〉 \+ \|1〉\)\/√2/);
+    assert.match(refreshedSourceNote, /^source_hash: "[a-f0-9]{64}"$/m);
+    assert.match(refreshedSourceNote, /- \[Passage 1\] This line is stale after re-extraction\./);
+    const staleRetry = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/import-comments` });
+    assert.equal(staleRetry.json().importedCount, 0, "refreshing the note must not relabel old comments as current");
     const finalJournal = await readFile(studyJournalPath, "utf8");
     assert.match(finalJournal, /Review eigenstate notation next week\./);
     assert.equal(finalJournal.includes("\u007f"), false);
