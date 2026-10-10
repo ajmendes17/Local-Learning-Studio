@@ -38,7 +38,7 @@ interface CoursePageProps {
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAcceptMap: () => Promise<void>;
   onStudy: () => void;
-  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string) => void;
+  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string, method?: "quiz") => void;
   onStudyMaterial: (topic: string, materialId: string) => void;
   onRefreshCourse: () => Promise<void>;
 }

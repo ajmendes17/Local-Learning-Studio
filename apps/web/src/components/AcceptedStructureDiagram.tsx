@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { recommendNextStudyTopic, summarizeStudyCoverage, type CourseMapProposal, type CourseMaterial, type LearnerProfileResponse } from "@local-learning-studio/contracts";
 import { MathText } from "./MathText";
+import { describePractice, practiceReviewMethod } from "../lib/study-progress";
 
 interface AcceptedStructureDiagramProps {
   proposal: CourseMapProposal;
@@ -8,7 +9,7 @@ interface AcceptedStructureDiagramProps {
   learnerProgress: LearnerProfileResponse["concepts"];
   sourceProgress: LearnerProfileResponse["sources"];
   learnerAssessments?: LearnerProfileResponse["assessments"];
-  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string) => void;
+  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string, method?: "quiz") => void;
 }
 
 interface ModuleConnection {
@@ -23,39 +24,6 @@ function referenceKey(reference: { materialId: string; passageId: string }) {
 
 function topicKey(title: string) {
   return title.trim().normalize("NFKC").toLocaleLowerCase();
-}
-
-type PracticeSignal = {
-  attemptCount: number;
-  scoredAttemptCount?: number;
-  correctCount: number;
-  latestOutcome?: string | null;
-  lastPracticedAt?: string | null;
-  sessionCount?: number;
-  lastSessionAt?: string | null;
-};
-
-function describePractice(signal: PracticeSignal | undefined) {
-  if (!signal?.attemptCount) {
-    if (signal?.sessionCount) {
-      const date = signal.lastSessionAt ? ` · last lesson ${new Date(signal.lastSessionAt).toLocaleDateString()}` : "";
-      return `Lesson opened · no checks saved${date}`;
-    }
-    return "Not practiced yet";
-  }
-  const outcome = signal.latestOutcome;
-  const needsReview = outcome === "incorrect" || outcome === "incomplete" || outcome === "unsupported" || outcome === "not-graded";
-  const scoredAttemptCount = signal.scoredAttemptCount ?? signal.attemptCount;
-  const summary = scoredAttemptCount
-    ? `${signal.correctCount}/${scoredAttemptCount} scored checks correct${signal.attemptCount > scoredAttemptCount ? ` · ${signal.attemptCount - scoredAttemptCount} unscored` : ""}`
-    : `${signal.attemptCount} unscored attempt${signal.attemptCount === 1 ? "" : "s"}`;
-  const date = signal.lastPracticedAt ? ` · last ${new Date(signal.lastPracticedAt).toLocaleDateString()}` : "";
-  const reviewReason = outcome === "incorrect" ? "last check incorrect"
-    : outcome === "incomplete" ? "last check incomplete"
-      : outcome === "unsupported" ? "last check needs another pass"
-        : outcome === "not-graded" ? "last response was not scored" : null;
-  const lessons = signal.sessionCount ? `${signal.sessionCount} lesson${signal.sessionCount === 1 ? "" : "s"}` : "no lesson sessions";
-  return `${needsReview ? `Needs review · ${reviewReason}` : "Practice recorded"} · ${summary} · ${lessons}${date}`;
 }
 
 function CategoryProgress({ label, coverage }: { label: string; coverage: ReturnType<typeof summarizeStudyCoverage> }) {
@@ -194,7 +162,7 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                 const concept = conceptsByKey.get(key);
                 if (!concept) return null;
                 const itemProgress = progressByTitle.get(topicKey(concept.title));
-                return <button className="accepted-map__topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title)}><span className="accepted-map__topic-kicker">TOPIC</span><strong><MathText inline content={concept.title} /></strong><span><MathText inline content={concept.description} /></span><small>{describePractice(itemProgress)} · Study topic →</small></button>;
+                return <button className="accepted-map__topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title, undefined, undefined, practiceReviewMethod(itemProgress))}><span className="accepted-map__topic-kicker">TOPIC</span><strong><MathText inline content={concept.title} /></strong><span><MathText inline content={concept.description} /></span><small>{describePractice(itemProgress)} · Study topic →</small></button>;
               })}
             </div>
           </section>
@@ -283,13 +251,15 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                   const recommendedTopic = recommendation?.topic;
                   const recommendationAction = !recommendation ? "No study topics available yet" : recommendation.reason === "needs-review"
                     ? `Review ${recommendedTopic!.title} · needs another pass →`
+                    : recommendation.reason === "spaced-review"
+                      ? `Spaced review due · take a knowledge check on ${recommendedTopic!.title} →`
                     : recommendation.reason === "lesson-only"
                       ? `Try a first check on ${recommendedTopic!.title} →`
                       : recommendation.reason === "not-practiced"
                         ? `Start with ${recommendedTopic!.title} · not studied yet →`
                         : `Revisit ${recommendedTopic!.title} · least recently studied →`;
                   return <div className="accepted-map__homework-group" key={material.id}>
-                    <button className="accepted-map__homework" type="button" aria-label={recommendedTopic ? `Study ${studyTopic}: ${recommendedTopic.title}` : `Study ${studyTopic}, no mapped study topics yet`} disabled={material.status !== "ready" || !recommendedTopic} onClick={() => recommendedTopic && onStudyTopic(recommendedTopic.title, material.id)}>
+                    <button className="accepted-map__homework" type="button" aria-label={recommendedTopic ? `Study ${studyTopic}: ${recommendedTopic.title}` : `Study ${studyTopic}, no mapped study topics yet`} disabled={material.status !== "ready" || !recommendedTopic} onClick={() => recommendedTopic && onStudyTopic(recommendedTopic.title, material.id, undefined, recommendation?.reason === "spaced-review" ? "quiz" : undefined)}>
                       <span>{studyTopic}<span className="accepted-map__homework-action">{recommendedTopic ? "Study this homework →" : "No study topics available"}</span></span>
                       <small>{material.status === "ready" ? `${homeworkLessonSessions} homework lesson session${homeworkLessonSessions === 1 ? "" : "s"}${homeworkLastPracticedAt ? ` · last topic check ${new Date(homeworkLastPracticedAt).toLocaleDateString()}` : ""}` : "Source extraction is not ready yet"}</small>
                       {material.status === "ready" && homeworkProgress.topicCount ? <CategoryProgress label={studyTopic} coverage={homeworkProgress} /> : null}
@@ -307,22 +277,22 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                         {homeworkTopics.map((concept) => {
                           const conceptProgress = topicProgress.get(topicKey(concept.title));
                           const classProgress = progressByTitle.get(topicKey(concept.title));
-                          return <button className="accepted-map__assessment-topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title, material.id)}>
+                          return <button className="accepted-map__assessment-topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title, material.id, undefined, practiceReviewMethod(conceptProgress))}>
                             <span><MathText inline content={concept.title} /></span>
                             <small>{conceptProgress?.attemptCount || conceptProgress?.sessionCount ? `${describePractice(conceptProgress)} for this homework · Study here →` : classProgress?.attemptCount ? `${classProgress.scoredAttemptCount ? `Practiced in class · ${classProgress.correctCount}/${classProgress.scoredAttemptCount} scored checks correct${classProgress.attemptCount > classProgress.scoredAttemptCount ? ` · ${classProgress.attemptCount - classProgress.scoredAttemptCount} unscored` : ""}` : `${classProgress.attemptCount} unscored class attempt${classProgress.attemptCount === 1 ? "" : "s"}`} · not checked with this homework yet · Study here →` : classProgress?.sessionCount ? `Lesson opened in class · no checks saved · not checked with this homework yet · Study here →` : "Not practiced yet · Start studying →"}</small>
                           </button>;
                         })}
-                      </> : <><p>No map topics cite this assignment yet. Choose a topic connected to the homework category:</p>{assessmentTopics.map((concept) => <button className="accepted-map__assessment-topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title, material.id)}><span><MathText inline content={concept.title} /></span><small>Study with this homework →</small></button>)}</>}
+                      </> : <><p>No map topics cite this assignment yet. Choose a topic connected to the homework category:</p>{assessmentTopics.map((concept) => <button className="accepted-map__assessment-topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title, material.id, undefined, practiceReviewMethod(topicProgress.get(topicKey(concept.title))))}><span><MathText inline content={concept.title} /></span><small>Study with this homework →</small></button>)}</>}
                     </div> : null}
                   </div>;
                 })}</> : <p>Upload the homework file as an assignment to see its topic list here.</p>}</> : null}
                 {isExam ? <><strong>Study the connected exam topics</strong>
                   {learnerAssessment && learnerAssessmentTopics.length ? <><p>Practice is scoped to your saved instructor list for this exam.</p>{learnerAssessmentTopics.map((topic) => {
                     const proposalTopic = examTopics.find((concept) => topicKey(concept.title) === topicKey(topic.title));
-                    return <button className="accepted-map__assessment-topic" key={topic.id} type="button" onClick={() => onStudyTopic(topic.title, undefined, learnerAssessment.id)}><span><MathText inline content={topic.title} /></span><small>{describePractice(topic)} · Open a focused exam practice session →</small>{proposalTopic && topic.title.trim() !== proposalTopic.title.trim() ? <small>Mapped topic: {proposalTopic.title}</small> : null}</button>;
+                    return <button className="accepted-map__assessment-topic" key={topic.id} type="button" onClick={() => onStudyTopic(topic.title, undefined, learnerAssessment.id, practiceReviewMethod(topic))}><span><MathText inline content={topic.title} /></span><small>{describePractice(topic)} · Open a focused exam practice session →</small>{proposalTopic && topic.title.trim() !== proposalTopic.title.trim() ? <small>Mapped topic: {proposalTopic.title}</small> : null}</button>;
                   })}</> : examTopics.length ? examTopics.map((concept) => {
                     const signal = progressByTitle.get(topicKey(concept.title));
-                    return <button className="accepted-map__assessment-topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title)}><span><MathText inline content={concept.title} /></span><small>{describePractice(signal)} · Open a focused study session →</small></button>;
+                    return <button className="accepted-map__assessment-topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title, undefined, undefined, practiceReviewMethod(signal))}><span><MathText inline content={concept.title} /></span><small>{describePractice(signal)} · Open a focused study session →</small></button>;
                   }) : <p>No linked topics were identified. Open a module above to choose a topic.</p>}
                 </> : null}
               </div> : null}
@@ -330,7 +300,7 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
           }) : <p className="accepted-map__empty">No exams or assignments linked yet.</p>}
           {unrepresentedExamScopes.map((assessment) => <section className="accepted-map__scope-card" key={assessment.id} aria-label={`${assessment.title} instructor topic scope`}>
             <div><span>INSTRUCTOR EXAM SCOPE</span><h5><MathText inline content={assessment.title} /></h5><small>{assessment.topics.length} supplied topics · {describePractice(assessment)}</small></div>
-            <div className="accepted-map__scope-topics">{assessment.topics.map((topic) => <button className="accepted-map__assessment-topic" key={topic.id} type="button" onClick={() => onStudyTopic(topic.title, undefined, assessment.id)}><span><MathText inline content={topic.title} /></span><small>{describePractice(topic)} · Study this exam topic →</small></button>)}</div>
+            <div className="accepted-map__scope-topics">{assessment.topics.map((topic) => <button className="accepted-map__assessment-topic" key={topic.id} type="button" onClick={() => onStudyTopic(topic.title, undefined, assessment.id, practiceReviewMethod(topic))}><span><MathText inline content={topic.title} /></span><small>{describePractice(topic)} · Study this exam topic →</small></button>)}</div>
           </section>)}
         </aside>
       </div>

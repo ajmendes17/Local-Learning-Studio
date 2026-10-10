@@ -25,7 +25,7 @@ interface CourseMapPanelProps {
   onAnalyze: (regenerate: boolean) => Promise<void>;
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAccept: () => Promise<void>;
-  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string) => void;
+  onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string, method?: "quiz") => void;
   onStudyMaterial: (topic: string, materialId: string) => void;
 }
 

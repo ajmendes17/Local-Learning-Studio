@@ -205,12 +205,48 @@ export function summarizeStudyCoverage(
   };
 }
 
+const STUDY_DAY_MS = 86_400_000;
+
+export interface SpacedReviewInput {
+  latestOutcome?: string | null;
+  scoredAttemptCount?: number;
+  correctCount?: number;
+  independentScoredAttemptCount?: number;
+  independentCorrectCount?: number;
+  latestConfidence?: number | null;
+  lastPracticedAt?: string | null;
+}
+
+export function getSpacedReviewSchedule(signal: SpacedReviewInput, now = Date.now()) {
+  if (signal.latestOutcome !== "correct" || !signal.scoredAttemptCount || signal.correctCount == null || !signal.lastPracticedAt) return null;
+  const lastPracticedAt = Date.parse(signal.lastPracticedAt);
+  if (!Number.isFinite(lastPracticedAt)) return null;
+
+  const accuracy = Math.max(0, Math.min(1, (signal.correctCount ?? 0) / signal.scoredAttemptCount));
+  const independentCount = signal.independentScoredAttemptCount ?? 0;
+  const independentAccuracy = independentCount
+    ? Math.max(0, Math.min(1, (signal.independentCorrectCount ?? 0) / independentCount))
+    : null;
+  const intervalDays = accuracy < 0.6 || (signal.latestConfidence != null && signal.latestConfidence <= 0.5)
+    ? 1
+    : accuracy >= 0.85 && independentCount >= 2 && independentAccuracy! >= 0.8
+      ? 7
+      : 3;
+  const dueAt = lastPracticedAt + intervalDays * STUDY_DAY_MS;
+  return {
+    intervalDays,
+    dueAt: new Date(dueAt).toISOString(),
+    due: dueAt <= now,
+  };
+}
+
 export function recommendNextStudyTopic<T extends { title: string }>(
   topics: T[],
-  signals: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; sessionCount?: number; latestOutcome?: string | null; lastPracticedAt?: string | null; lastSessionAt?: string | null }>,
-  independenceSignals: Array<{ title: string; scoredAttemptCount: number; independentScoredAttemptCount: number }> = [],
+  signals: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount?: number; independentScoredAttemptCount?: number; independentCorrectCount?: number; sessionCount?: number; latestOutcome?: string | null; latestConfidence?: number | null; lastPracticedAt?: string | null; lastSessionAt?: string | null }>,
+  independenceSignals: Array<{ title: string; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount?: number }> = [],
   confidenceSignals: Array<{ title: string; latestOutcome: string | null; latestConfidence: number | null }> = [],
-): { topic: T; reason: "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced" } | null {
+  now = Date.now(),
+): { topic: T; reason: "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced"; nextReviewAt?: string } | null {
   if (!topics.length) return null;
   const signalByTitle = new Map(signals.map((signal) => [signal.title.trim().normalize("NFKC").toLocaleLowerCase(), signal]));
   const candidates = topics.map((topic, index) => ({
@@ -268,12 +304,47 @@ export function recommendNextStudyTopic<T extends { title: string }>(
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || a.index - b.index)[0];
   if (notPracticed) return { topic: notPracticed.topic, reason: "not-practiced" };
 
+  const dueReview = candidates.flatMap((candidate) => {
+    const key = candidate.topic.title.trim().normalize("NFKC").toLocaleLowerCase();
+    const confidence = confidenceByTitle.get(key);
+    const independence = independenceByTitle.get(key);
+    const schedule = getSpacedReviewSchedule({
+      ...candidate.signal,
+      latestConfidence: confidence?.latestConfidence ?? candidate.signal?.latestConfidence
+        ?? (candidate.topic as T & { latestConfidence?: number | null }).latestConfidence,
+      independentScoredAttemptCount: independence?.independentScoredAttemptCount
+        ?? (candidate.topic as T & { independentScoredAttemptCount?: number }).independentScoredAttemptCount,
+      independentCorrectCount: independence?.independentCorrectCount
+        ?? candidate.signal?.independentCorrectCount
+        ?? (candidate.topic as T & { independentCorrectCount?: number }).independentCorrectCount,
+    }, now);
+    return schedule?.due ? [{ ...candidate, schedule }] : [];
+  }).sort((a, b) => Date.parse(a.schedule.dueAt) - Date.parse(b.schedule.dueAt)
+    || importanceRank(b.topic) - importanceRank(a.topic)
+    || a.index - b.index)[0];
+  if (dueReview) return { topic: dueReview.topic, reason: "spaced-review", nextReviewAt: dueReview.schedule.dueAt };
+
   const leastRecentlyPracticed = candidates
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0]!;
-  return { topic: leastRecentlyPracticed.topic, reason: "least-recently-practiced" };
+  const key = leastRecentlyPracticed.topic.title.trim().normalize("NFKC").toLocaleLowerCase();
+  const schedule = getSpacedReviewSchedule({
+    ...leastRecentlyPracticed.signal,
+    latestConfidence: confidenceByTitle.get(key)?.latestConfidence ?? leastRecentlyPracticed.signal?.latestConfidence
+      ?? (leastRecentlyPracticed.topic as T & { latestConfidence?: number | null }).latestConfidence,
+    independentScoredAttemptCount: independenceByTitle.get(key)?.independentScoredAttemptCount
+      ?? (leastRecentlyPracticed.topic as T & { independentScoredAttemptCount?: number }).independentScoredAttemptCount,
+    independentCorrectCount: independenceByTitle.get(key)?.independentCorrectCount
+      ?? leastRecentlyPracticed.signal?.independentCorrectCount
+      ?? (leastRecentlyPracticed.topic as T & { independentCorrectCount?: number }).independentCorrectCount,
+  }, now);
+  return {
+    topic: leastRecentlyPracticed.topic,
+    reason: "least-recently-practiced",
+    ...(schedule ? { nextReviewAt: schedule.dueAt } : {}),
+  };
 }
 
-type StudyRecommendationReason = "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
+type StudyRecommendationReason = "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced";
 
 export function prioritizeStudyRecommendations<T extends {
   title: string;
@@ -281,6 +352,7 @@ export function prioritizeStudyRecommendations<T extends {
   importance?: "low" | "normal" | "high";
   lastPracticedAt?: string | null;
   scheduledAt?: string | null;
+  nextReviewAt?: string;
   contextPriority?: number;
 }>(recommendations: T[]): T[] {
   const reasonRank: Record<StudyRecommendationReason, number> = {
@@ -290,7 +362,8 @@ export function prioritizeStudyRecommendations<T extends {
     "lesson-only": 3,
     "needs-scored-check": 4,
     "not-practiced": 5,
-    "least-recently-practiced": 6,
+    "spaced-review": 6,
+    "least-recently-practiced": 7,
   };
   const importanceRank = (importance?: T["importance"]) => importance === "high" ? 2 : importance === "low" ? 0 : 1;
   const timestamp = (value?: string | null) => {
@@ -306,7 +379,8 @@ export function prioritizeStudyRecommendations<T extends {
     reasonRank[left.reason] - reasonRank[right.reason]
     || importanceRank(right.importance) - importanceRank(left.importance)
     || deadlineRank(left.scheduledAt) - deadlineRank(right.scheduledAt)
-    || (left.reason === "needs-review" ? timestamp(right.lastPracticedAt) - timestamp(left.lastPracticedAt)
+    || (left.reason === "spaced-review" ? timestamp(left.nextReviewAt) - timestamp(right.nextReviewAt)
+      : left.reason === "needs-review" ? timestamp(right.lastPracticedAt) - timestamp(left.lastPracticedAt)
       : left.reason === "least-recently-practiced" ? timestamp(left.lastPracticedAt) - timestamp(right.lastPracticedAt) : 0)
     || (left.contextPriority ?? Number.MAX_SAFE_INTEGER) - (right.contextPriority ?? Number.MAX_SAFE_INTEGER)
     || left.title.localeCompare(right.title),
@@ -469,18 +543,19 @@ export const LearnerProfileResponseSchema = z.object({
     sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
     topicCount: z.number().int().nonnegative(), practicedTopicCount: z.number().int().nonnegative(),
     lastPracticedAt: z.string().nullable(),
-    topics: z.array(z.object({ conceptId: z.string().uuid(), title: z.string(), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
+    topics: z.array(z.object({ conceptId: z.string().uuid(), title: z.string(), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), latestConfidence: z.number().min(0).max(1).nullable().optional(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
   })),
   assessments: z.array(z.object({
     id: z.string().uuid(), title: z.string(), instructorText: z.string(), kind: z.enum(["exam", "quiz", "other"]),
     scheduledAt: z.string().nullable(), availableMinutes: z.number().int().nullable(), dailyMinutes: z.number().int(), createdAt: z.string(),
     attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
-    topics: z.array(z.object({ id: z.string().uuid(), conceptId: z.string().uuid().nullable(), title: z.string(), position: z.number().int(), importance: z.enum(["low", "normal", "high"]), provenance: z.enum(["learner", "model", "material"]), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
+    topics: z.array(z.object({ id: z.string().uuid(), conceptId: z.string().uuid().nullable(), title: z.string(), position: z.number().int(), importance: z.enum(["low", "normal", "high"]), provenance: z.enum(["learner", "model", "material"]), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), latestConfidence: z.number().min(0).max(1).nullable().optional(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
   })),
   concepts: z.array(z.object({
     id: z.string().uuid(), stableKey: z.string(), title: z.string(), description: z.string(),
     attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(),
     latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(),
+    latestConfidence: z.number().min(0).max(1).nullable().optional(),
     lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
   })),
 });

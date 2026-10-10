@@ -26,6 +26,7 @@ import {
   uploadMaterial,
   type ApiErrorInfo,
 } from "./lib/api";
+import { studyTopicPath, suggestedStudyMethod } from "./lib/study-navigation";
 
 const CoursePage = lazy(() => import("./views/CoursePage").then(({ CoursePage }) => ({ default: CoursePage })));
 const HomePage = lazy(() => import("./views/HomePage").then(({ HomePage }) => ({ default: HomePage })));
@@ -36,7 +37,7 @@ const KnowledgePage = lazy(() => import("./views/KnowledgePage").then(({ Knowled
 
 type AppRoute =
   | { kind: "library" }
-  | { kind: "course-study"; courseId: string; topic?: string; sourceMaterialId?: string; assessmentId?: string; sessionId?: string }
+  | { kind: "course-study"; courseId: string; topic?: string; sourceMaterialId?: string; assessmentId?: string; sessionId?: string; initialMethod?: "quiz" }
   | { kind: "hand-tracking" }
   | { kind: "knowledge" }
   | { kind: "info" }
@@ -59,7 +60,7 @@ function routeFromPath(): AppRoute {
   const studyMatch = window.location.pathname.match(/^\/courses\/([^/]+)\/study$/);
   if (studyMatch?.[1]) {
     const query = new URLSearchParams(window.location.search);
-    return { kind: "course-study", courseId: studyMatch[1], topic: query.get("topic") ?? undefined, sourceMaterialId: query.get("sourceMaterialId") ?? undefined, assessmentId: query.get("assessmentId") ?? undefined, sessionId: query.get("sessionId") ?? undefined };
+    return { kind: "course-study", courseId: studyMatch[1], topic: query.get("topic") ?? undefined, sourceMaterialId: query.get("sourceMaterialId") ?? undefined, assessmentId: query.get("assessmentId") ?? undefined, sessionId: query.get("sessionId") ?? undefined, initialMethod: suggestedStudyMethod(query.get("method")) };
   }
   if (window.location.pathname === "/hand-tracking") return { kind: "hand-tracking" };
   if (window.location.pathname === "/knowledge") return { kind: "knowledge" };
@@ -326,7 +327,7 @@ export function App() {
       />
       <Suspense fallback={<div className="page-chunk-loading" role="status">Loading your workspace…</div>}>
       {route.kind === "course-study" ? (
-        <StudyPage key={route.courseId} courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} initialTopic={route.topic} initialSourceMaterialId={route.sourceMaterialId} initialAssessmentId={route.assessmentId} initialSessionId={route.sessionId} onBack={() => navigate(`/courses/${route.courseId}`)} />
+        <StudyPage key={route.courseId} courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} initialTopic={route.topic} initialSourceMaterialId={route.sourceMaterialId} initialAssessmentId={route.assessmentId} initialSessionId={route.sessionId} initialMethod={route.initialMethod} onBack={() => navigate(`/courses/${route.courseId}`)} />
       ) : route.kind === "course" ? (
       <CoursePage
           course={selectedCourse}
@@ -346,7 +347,7 @@ export function App() {
           onBuildMap={handleBuildCourseMap}
           onAcceptMap={handleAcceptCourseMap}
           onStudy={() => navigate(`/courses/${route.courseId}/study`)}
-          onStudyTopic={(topic, sourceMaterialId, assessmentId) => navigate(`/courses/${route.courseId}/study?topic=${encodeURIComponent(topic)}${sourceMaterialId ? `&sourceMaterialId=${encodeURIComponent(sourceMaterialId)}` : ""}${assessmentId ? `&assessmentId=${encodeURIComponent(assessmentId)}` : ""}`)}
+          onStudyTopic={(topic, sourceMaterialId, assessmentId, method) => navigate(studyTopicPath(route.courseId, topic, sourceMaterialId, assessmentId, method))}
           onStudyMaterial={(topic, materialId) => navigate(`/courses/${route.courseId}/study?topic=${encodeURIComponent(topic)}&sourceMaterialId=${encodeURIComponent(materialId)}`)}
           onRefreshCourse={() => loadCourse(route.courseId)}
         />

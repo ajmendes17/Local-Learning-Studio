@@ -18,7 +18,7 @@ export interface ObsidianCourseExport {
   map: { modules: Array<{ key: string; title: string; description: string; position: number; conceptKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; concepts: Array<{ key: string; title: string; description: string; learningObjectives: string[]; prerequisiteKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; assessments: Array<{ title: string; kind: string; moduleKey: string | null; dueAt: string | null; weightPercent: number | null; sourceReferences: Array<{ materialId: string; passageId: string }> }> } | null;
   mapStatus?: "current" | "stale" | "none";
   mapDraftStatus?: "current" | "none";
-  profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; instructorText?: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
+  profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; independentScoredAttemptCount?: number; independentCorrectCount?: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; instructorText?: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
   methodProgress?: Array<{ method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: Array<{ conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }>; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }>;
   studyAttempts?: Array<{ id: string; conceptId: string; topic: string; assessmentId: string | null; assessmentTitle: string | null; activityType: string; prompt: string; response: string; reasoning: string; confidence: number | null; hintCount: number; method: string; outcome: string; independence: string; correctAnswer?: string | null; referenceExplanation?: string | null; createdAt: string; sourceMaterialIds: string[] }>;
 }
@@ -650,6 +650,18 @@ export class ObsidianVault {
         const practiceStatus = !progress || progress.attemptCount === 0
           ? (progress?.sessionCount ? "lesson-started" : "not-started")
           : needsReview(progress.latestOutcome) ? "review-needed" : "checked";
+        const scoredAttemptCount = progress?.scoredAttemptCount ?? progress?.attemptCount ?? 0;
+        const independentScoredAttemptCount = progress?.independentScoredAttemptCount ?? 0;
+        const independentCorrectCount = progress?.independentCorrectCount ?? 0;
+        const evidenceLevel = needsReview(progress?.latestOutcome)
+          ? "needs-another-look"
+          : scoredAttemptCount === 0
+            ? (progress?.attemptCount ?? 0) > 0 ? "unscored-practice" : "no-check-yet"
+            : independentScoredAttemptCount === 0
+              ? "supported-practice"
+              : independentScoredAttemptCount >= 3 && independentCorrectCount / independentScoredAttemptCount >= 0.8
+                ? "repeated-independent-success"
+                : "some-independent-evidence";
         const prerequisites = concept.prerequisiteKeys.map((key) => topicPaths.get(key) ? wikilink(topicPaths.get(key)!, data.map!.concepts.find((item) => item.key === key)?.title ?? key) : key);
         const objectives = concept.learningObjectives.map((objective) => `- ${objective}`).join("\n") || "- No learning objectives listed yet.";
         const evidenceLinks = concept.sourceReferences.map(sourceCitation).filter((link): link is string => Boolean(link));
@@ -657,6 +669,8 @@ export class ObsidianVault {
           `**Course:** ${wikilink("Course.md", data.course.title)}`,
           `**Modules:** ${moduleTitles.join(", ") || "Not assigned"}`,
           `**Practice evidence:** ${progress ? `${scoredProgress(progress.attemptCount, progress.scoredAttemptCount, progress.correctCount)}; latest: ${progress.latestOutcome ?? "not checked"}` : "No checks recorded yet."}`,
+          `**Evidence level:** ${evidenceLevel.replaceAll("-", " ")}`,
+          `**Independent checks:** ${independentCorrectCount}/${independentScoredAttemptCount} correct`,
           `**Last practiced:** ${progress?.lastPracticedAt ?? "Never"}`,
           `**Lesson sessions opened:** ${progress?.sessionCount ?? 0}${progress?.lastSessionAt ? ` · last ${progress.lastSessionAt}` : ""}`,
           "", "## Overview", concept.description || "No description provided.",
@@ -674,6 +688,9 @@ export class ObsidianVault {
             attempt_count: progress?.attemptCount ?? 0,
             scored_attempt_count: progress?.scoredAttemptCount ?? 0,
             correct_count: progress?.correctCount ?? 0,
+            independent_scored_attempt_count: independentScoredAttemptCount,
+            independent_correct_count: independentCorrectCount,
+            evidence_level: evidenceLevel,
             modules: moduleTitles.length ? moduleTitles : ["Not assigned"],
             source_count: evidenceLinks.length,
           },

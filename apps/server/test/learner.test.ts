@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import test from "node:test";
-import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, getSpacedReviewSchedule, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
 import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
 import { CodexRunError } from "../src/codex/codex-runner.js";
@@ -256,6 +256,60 @@ test("homework next-topic recommendation prioritizes review, untouched topics, t
   assert.equal(recommendNextStudyTopic([], []), null);
 });
 
+test("spaced recall uses shorter intervals for uncertain evidence and extends after independent success", () => {
+  const now = Date.parse("2026-10-10T12:00:00.000Z");
+  const base = {
+    latestOutcome: "correct",
+    scoredAttemptCount: 3,
+    correctCount: 3,
+    independentScoredAttemptCount: 2,
+    independentCorrectCount: 2,
+    lastPracticedAt: "2026-10-03T12:00:00.000Z",
+  };
+
+  assert.deepEqual(getSpacedReviewSchedule(base, now), {
+    intervalDays: 7,
+    dueAt: "2026-10-10T12:00:00.000Z",
+    due: true,
+  });
+  assert.equal(getSpacedReviewSchedule({ ...base, latestConfidence: 0.5 }, now)?.intervalDays, 1);
+  assert.equal(getSpacedReviewSchedule({ ...base, correctCount: 1 }, now)?.intervalDays, 1);
+  assert.equal(getSpacedReviewSchedule({ ...base, independentScoredAttemptCount: 0, independentCorrectCount: 0 }, now)?.intervalDays, 3);
+  assert.equal(getSpacedReviewSchedule({ ...base, latestOutcome: "incorrect" }, now), null);
+  assert.equal(getSpacedReviewSchedule({ ...base, latestOutcome: "not-graded" }, now), null);
+  assert.equal(getSpacedReviewSchedule({ ...base, lastPracticedAt: "not-a-date" }, now), null);
+});
+
+test("recommendations surface due spaced recall and show the next date before it is due", () => {
+  const topics = [{ title: "Bell states" }, { title: "Partial trace" }];
+  const now = Date.parse("2026-10-10T12:00:00.000Z");
+  const signals = [
+    { title: "Bell states", attemptCount: 3, scoredAttemptCount: 3, correctCount: 3, latestOutcome: "correct", lastPracticedAt: "2026-10-03T12:00:00.000Z" },
+    { title: "Partial trace", attemptCount: 1, scoredAttemptCount: 1, correctCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-09T12:00:00.000Z" },
+  ];
+  const independence = [
+    { title: "Bell states", scoredAttemptCount: 3, independentScoredAttemptCount: 2, independentCorrectCount: 2 },
+    { title: "Partial trace", scoredAttemptCount: 1, independentScoredAttemptCount: 1, independentCorrectCount: 1 },
+  ];
+  const confidence = [
+    { title: "Bell states", latestOutcome: "correct", latestConfidence: 0.75 },
+    { title: "Partial trace", latestOutcome: "correct", latestConfidence: 0.75 },
+  ];
+
+  assert.deepEqual(recommendNextStudyTopic(topics, signals, independence, confidence, now), {
+    topic: topics[0],
+    reason: "spaced-review",
+    nextReviewAt: "2026-10-10T12:00:00.000Z",
+  });
+
+  const upcoming = recommendNextStudyTopic(topics.slice(1), [signals[1]!], [independence[1]!], [confidence[1]!], now);
+  assert.deepEqual(upcoming, {
+    topic: topics[1],
+    reason: "least-recently-practiced",
+    nextReviewAt: "2026-10-12T12:00:00.000Z",
+  });
+});
+
 test("class recommendation distinguishes lesson-only topics and suggests their first knowledge check", () => {
   const topics = [
     { title: "Bell states", attemptCount: 0, sessionCount: 2, latestOutcome: null, lastPracticedAt: null, lastSessionAt: "2026-10-09T12:00:00.000Z" },
@@ -309,6 +363,8 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
     { title: "No independent check yet", reason: "needs-independent-check" as const, importance: "high" as const, contextPriority: 0 },
     { title: "Correct, low confidence", reason: "low-confidence-correct" as const, importance: "high" as const, contextPriority: 0 },
     { title: "Normal priority, untouched", reason: "not-practiced" as const, importance: "normal" as const, contextPriority: 0 },
+    { title: "Spaced review", reason: "spaced-review" as const, nextReviewAt: "2026-10-10T10:00:00.000Z", contextPriority: 0 },
+    { title: "Least recently practiced", reason: "least-recently-practiced" as const, contextPriority: 0 },
   ];
   assert.deepEqual(prioritizeStudyRecommendations(candidates).map(({ title }) => title), [
     "High priority, older miss",
@@ -318,6 +374,8 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
     "Lesson opened, no check",
     "High priority, untouched",
     "Normal priority, untouched",
+    "Spaced review",
+    "Least recently practiced",
   ]);
   assert.equal(candidates[0]!.title, "Low priority, newer miss", "ranking should not reorder the caller's array");
 });
@@ -523,6 +581,8 @@ test("study attempts from a learner exam scope update assessment and topic progr
   assert.equal(updated.topics[0].sessionCount, 1);
   assert.equal(updated.topics[0].correctCount, 1);
   assert.equal(updated.topics[0].latestOutcome, "correct");
+  assert.equal(updated.topics[0].latestConfidence, 0.75, "assessment topic summaries retain the latest learner confidence");
+  assert.equal(profile.json().concepts.find((item: { id: string }) => item.id === session.json().conceptId).latestConfidence, 0.75);
 
   const secondSession = await app.inject({
     method: "POST", url: `/api/courses/${courseId}/learner/study-session`,
@@ -1199,6 +1259,7 @@ test("assignment study sessions retrieve only the selected course material and r
   assert.deepEqual([sourceSignal.attemptCount, sourceSignal.correctCount, sourceSignal.practicedTopicCount], [1, 0, 1]);
   assert.equal(sourceSignal.sessionCount, 2, "the focused remediation lesson is also attached to the selected source");
   assert.deepEqual([sourceSignal.topics[0].attemptCount, sourceSignal.topics[0].latestOutcome], [1, "incorrect"]);
+  assert.equal(sourceSignal.topics[0].latestConfidence, 0.5, "source topic summaries retain the latest learner confidence");
   assert.deepEqual([sourceSignal.topics[0].independentScoredAttemptCount, sourceSignal.topics[0].independentCorrectCount], [0, 0], "source progress does not count hinted checks as independent");
   assert.equal(progress.json().sources.some((item: { materialId: string; attemptCount: number }) => item.materialId !== materialId && item.attemptCount), false);
 

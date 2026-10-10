@@ -6,6 +6,7 @@ import { getAcceptedCourseMap } from "../lib/api";
 import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTopicDraft } from "../lib/instructor-topic-draft";
 import { clearStudyAttemptDraft, readStudyAttemptDraft, writeStudyAttemptDraft, type DraftStorage, type StudyAttemptDraft } from "../lib/study-attempt-draft";
 import { appendInstructorTopicWording, partitionInstructorTopics } from "../lib/instructor-topic-scope";
+import { describeTopicEvidence, getTopicScore } from "../lib/study-progress";
 import "../styles/study.css";
 
 type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall" | "teach-back" | "compare-contrast" | "error-analysis";
@@ -50,16 +51,16 @@ interface StudyContent {
   lesson: string; example: string; question: string; options: string[]; answerIndex: number | null; feedback: string; clarification: string; hints: string[];
   attempts?: StudyAttemptSummary[];
 }
-interface SourceTopicProgress { conceptId: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
+interface SourceTopicProgress { conceptId: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
 interface SourceProgress { materialId: string; title: string; kind: string; mediaType: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; topicCount: number; practicedTopicCount: number; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null; topics: SourceTopicProgress[] }
 interface SessionSummary { sessionId: string; conceptId: string; topic: string; method: Method; createdAt: string; attemptCount: number; correctCount: number; latestOutcome: string | null }
-interface ConceptProgress { id: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
+interface ConceptProgress { id: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
 interface MethodTopicProgress { conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; correctCount: number; lowConfidenceCorrectCount: number; confidenceRatedAttemptCount: number; latestOutcome: string | null; latestConfidence: number | null; meanConfidenceGap: number | null; lastPracticedAt: string | null }
 interface MethodProgress { method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: MethodTopicProgress[]; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }
-interface AssessmentScope { id: string; title: string; instructorText: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
+interface AssessmentScope { id: string; title: string; instructorText: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
 interface StudyRecommendation {
   title: string;
-  reason: "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
+  reason: "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced";
   latestOutcome: string | null;
   lastPracticedAt: string | null;
   assessmentId?: string;
@@ -68,12 +69,14 @@ interface StudyRecommendation {
   sourceTitle?: string;
   importance?: "low" | "normal" | "high";
   scheduledAt?: string | null;
+  nextReviewAt?: string;
   mapTopic?: boolean;
 }
 interface ChatAnswer { answer: string; followUp: string; sourceBasis: "general-knowledge" | "course-materials" }
 interface PatternEvidence { id: string; conceptTitle: string; response: string; outcome: string; confidence: number | null; hintCount: number; method: string; createdAt: string }
 interface Pattern { id: string; patternKey: string; kind: string; conceptIds: string[]; claim: string; status: string; confidence: number; supportingAttemptIds: string[]; counterexampleAttemptIds: string[]; supportingEvidence: PatternEvidence[]; counterexampleEvidence: PatternEvidence[]; statusRationale: string }
 interface PendingAttempt { id: string; payload: Record<string, unknown> }
+
 function readAttemptDraft(courseId: string, content: StudyContent): StudyAttemptDraft | null {
   return readStudyAttemptDraft(browserAttemptDraftStorages(), courseId, content);
 }
@@ -111,7 +114,7 @@ async function postJson<T>(path: string, body: unknown, method: "POST" | "PATCH"
   return result as T;
 }
 
-export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMaterialId, initialAssessmentId, initialSessionId, onBack }: { courseId: string; courseTitle: string; initialTopic?: string; initialSourceMaterialId?: string; initialAssessmentId?: string; initialSessionId?: string; onBack: () => void }) {
+export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMaterialId, initialAssessmentId, initialSessionId, initialMethod, onBack }: { courseId: string; courseTitle: string; initialTopic?: string; initialSourceMaterialId?: string; initialAssessmentId?: string; initialSessionId?: string; initialMethod?: "quiz"; onBack: () => void }) {
   const [initialTopicScopeDraft] = useState(() => {
     const storage = typeof window === "undefined" ? null : browserSessionStorage();
     return storage ? readInstructorTopicDraft(storage, courseId) : null;
@@ -191,6 +194,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     query.delete("topic");
     query.delete("sourceMaterialId");
     query.delete("assessmentId");
+    query.delete("method");
     query.set("sessionId", sessionId);
     window.history.replaceState({}, "", `${window.location.pathname}?${query}`);
   }
@@ -312,8 +316,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   useEffect(() => {
     if (initialSessionId || !initialTopic || autoStartedTopic.current === initialTopic) return;
     autoStartedTopic.current = initialTopic;
-    void startStudy(initialTopic, "explanation", initialSourceMaterialId, initialAssessmentId);
-  }, [initialTopic, initialSourceMaterialId, initialAssessmentId]);
+    void startStudy(initialTopic, initialMethod ?? "explanation", initialSourceMaterialId, initialAssessmentId);
+  }, [initialTopic, initialSourceMaterialId, initialAssessmentId, initialMethod]);
 
   function selectAnswer(index: number) {
     if (!saved && !reopenedAttempt && !pendingAttempt.current) {
@@ -655,12 +659,13 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     : null;
   const recommendations: StudyRecommendation[] = [
     ...assessmentScopes.flatMap((assessment) => {
-      const next = recommendNextStudyTopic(assessment.topics, assessment.topics, independenceSignals);
+      const next = recommendNextStudyTopic(assessment.topics, assessment.topics, independenceSignals, confidenceSignals);
       return next ? [{
         title: next.topic.title,
         reason: next.reason,
         latestOutcome: next.topic.latestOutcome,
         lastPracticedAt: next.topic.lastPracticedAt,
+        nextReviewAt: next.nextReviewAt,
         importance: next.topic.importance,
         assessmentId: assessment.id,
         assessmentTitle: assessment.title,
@@ -668,12 +673,13 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       }] : [];
     }),
     ...sourceProgress.flatMap((source) => {
-      const next = recommendNextStudyTopic(source.topics, source.topics, independenceSignals);
+      const next = recommendNextStudyTopic(source.topics, source.topics, independenceSignals, confidenceSignals);
       return next ? [{
         title: next.topic.title,
         reason: next.reason,
         latestOutcome: next.topic.latestOutcome,
         lastPracticedAt: next.topic.lastPracticedAt,
+        nextReviewAt: next.nextReviewAt,
         sourceMaterialId: source.materialId,
         sourceTitle: source.title,
       }] : [];
@@ -683,6 +689,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       reason: mappedNextTopic.reason,
       latestOutcome: progress.find((item) => item.title.trim().normalize("NFKC").toLocaleLowerCase() === mappedNextTopic.topic.title.trim().normalize("NFKC").toLocaleLowerCase())?.latestOutcome ?? null,
       lastPracticedAt: progress.find((item) => item.title.trim().normalize("NFKC").toLocaleLowerCase() === mappedNextTopic.topic.title.trim().normalize("NFKC").toLocaleLowerCase())?.lastPracticedAt ?? null,
+      nextReviewAt: mappedNextTopic.nextReviewAt,
       sourceMaterialId: mappedNextTopic.topic.sourceReferences[0]?.materialId,
       sourceTitle: sourceProgress.find((source) => source.materialId === mappedNextTopic.topic.sourceReferences[0]?.materialId)?.title,
       mapTopic: true,
@@ -692,6 +699,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       reason: classNextTopic.reason,
       latestOutcome: classNextTopic.topic.latestOutcome,
       lastPracticedAt: classNextTopic.topic.lastPracticedAt,
+      nextReviewAt: classNextTopic.nextReviewAt,
     }] : []),
   ];
   const contextPriority = (item: StudyRecommendation) => item.assessmentId ? 0
@@ -721,12 +729,22 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const recommendationDeadline = nextRecommendation?.scheduledAt
     ? assessmentDeadlineLabel(nextRecommendation.scheduledAt)
     : null;
+  const spacedReviewDate = nextRecommendation?.nextReviewAt
+    ? assessmentDeadlineLabel(nextRecommendation.nextReviewAt)
+    : null;
+  const spacedReviewStatus = spacedReviewDate
+    ? nextRecommendation?.reason === "spaced-review"
+      ? `A spaced recall review is ${spacedReviewDate}.`
+      : `Next spaced recall ${spacedReviewDate}.`
+    : null;
   const recommendationMethod: Method = nextRecommendation?.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect"
     ? "error-analysis"
     : nextRecommendation?.reason === "needs-independent-check" || nextRecommendation?.reason === "needs-scored-check"
       ? "quiz"
       : nextRecommendation?.reason === "low-confidence-correct"
         ? "free-recall"
+        : nextRecommendation?.reason === "spaced-review" || nextRecommendation?.nextReviewAt
+          ? "quiz"
     : method;
   const topicIndependenceSummary = (title: string) => {
     const signal = independenceByTitle.get(title.trim().normalize("NFKC").toLocaleLowerCase());
@@ -858,7 +876,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         {budget ? <div className="budget-result"><p className="budget-result__total">{budget.reduce((sum, item) => sum + item.minutes, 0)} minutes suggested · saved to {budgetTitle}</p>{budget.map((item) => <p key={item.topic}><strong>{item.topic}</strong><span>{item.minutes} min</span></p>)}</div> : null}
       </form>
     </section> : null}
-    <section className="study-memory"><div className="study-memory__head"><div><p className="section-kicker">This class</p><h2>Your learning trail</h2></div><span>Evidence builds over time; one correct answer does not establish mastery.</span></div>{nextRecommendation ? <div className="next-review-card"><div><p className="section-kicker">{nextRecommendation.reason === "lesson-only" ? "First knowledge check" : nextRecommendation.reason === "not-practiced" ? "A useful next study" : nextRecommendation.reason === "needs-independent-check" ? "Check solo recall" : "A useful next review"}</p><strong>{nextRecommendation.title}</strong><span>{nextRecommendation.importance === "high" ? "High-priority topic · " : ""}{recommendationStatus}{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? " We’ll use first-mistake analysis to unpack it." : ""}{nextRecommendation.assessmentTitle ? ` · ${nextRecommendation.assessmentTitle}${recommendationDeadline ? ` · ${recommendationDeadline}` : ""}` : nextRecommendation.sourceTitle ? ` · ${nextRecommendation.sourceTitle}` : " · Across this class"}</span></div><button type="button" className="button-secondary" disabled={busy} onClick={() => void startStudy(nextRecommendation.title, recommendationMethod, nextRecommendation.sourceMaterialId, nextRecommendation.assessmentId)}>{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? "Find the first mistake →" : nextRecommendation.reason === "lesson-only" ? "Try your first check →" : nextRecommendation.reason === "needs-independent-check" ? "Try it without hints →" : nextRecommendation.assessmentTitle ? "Practice for this scope →" : nextRecommendation.sourceTitle ? `Study with ${nextRecommendation.sourceTitle} →` : recommendationMethod === "quiz" ? "Practice with a quiz →" : `Practice with ${studyMethodLabel(recommendationMethod)} →`}</button></div> : null}<div className="study-memory__grid"><div className="study-memory__progress"><strong>Topic signals</strong>{progress.length ? progress.map((item) => <div className="progress-row" key={item.id}><span>{item.title}</span><small>{item.scoredAttemptCount ? `${item.correctCount} of ${item.scoredAttemptCount} scored checks correct${item.attemptCount > item.scoredAttemptCount ? ` · ${item.attemptCount - item.scoredAttemptCount} unscored` : ""}${item.latestOutcome ? ` · latest ${item.latestOutcome}` : ""}${item.lastPracticedAt ? ` · last checked ${new Date(item.lastPracticedAt).toLocaleDateString()}` : ""}` : item.attemptCount ? `${item.attemptCount} unscored attempt${item.attemptCount === 1 ? "" : "s"}${item.latestOutcome ? ` · latest ${item.latestOutcome}` : ""}` : item.sessionCount ? `${item.sessionCount} lesson session${item.sessionCount === 1 ? "" : "s"} · no checks saved${item.lastSessionAt ? ` · last lesson ${new Date(item.lastSessionAt).toLocaleDateString()}` : ""}` : "No lesson or check activity yet"}{topicIndependenceSummary(item.title)}</small></div>) : <p>Saved class progress will appear here as you study.</p>}</div><div className="study-memory__history"><strong>Recent lessons</strong>{history.length ? history.slice(0,5).map((item) => <button type="button" key={item.sessionId} onClick={() => void reopenSession(item.sessionId)}><span>{item.topic}</span><small>{studyMethodLabel(item.method)} · {item.attemptCount} checks · {new Date(item.createdAt).toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></button>) : <p>Your generated lessons will be saved here for later.</p>}</div></div><div className="study-method-progress"><div><strong>Practice by approach</strong><p>Confidence gap averages the distance between your rated confidence and each scored outcome; lower is closer to outcomes. Small samples and different topics make method comparisons uncertain.</p></div>{methodProgress.length ? <ul>{methodProgress.map((item) => {
+    <section className="study-memory"><div className="study-memory__head"><div><p className="section-kicker">This class</p><h2>Your learning trail</h2></div><span>Evidence builds over time; one correct answer does not establish mastery.</span></div>{nextRecommendation ? <div className="next-review-card"><div><p className="section-kicker">{nextRecommendation.reason === "lesson-only" ? "First knowledge check" : nextRecommendation.reason === "not-practiced" ? "A useful next study" : nextRecommendation.reason === "needs-independent-check" ? "Check solo recall" : nextRecommendation.reason === "spaced-review" ? "Spaced review due" : "A useful next review"}</p><strong>{nextRecommendation.title}</strong><span>{nextRecommendation.importance === "high" ? "High-priority topic · " : ""}{spacedReviewStatus && (nextRecommendation.reason === "spaced-review" || nextRecommendation.reason === "least-recently-practiced") ? spacedReviewStatus : recommendationStatus}{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? " We’ll use first-mistake analysis to unpack it." : ""}{nextRecommendation.assessmentTitle ? ` · ${nextRecommendation.assessmentTitle}${recommendationDeadline ? ` · ${recommendationDeadline}` : ""}` : nextRecommendation.sourceTitle ? ` · ${nextRecommendation.sourceTitle}` : " · Across this class"}</span></div><button type="button" className="button-secondary" disabled={busy} onClick={() => void startStudy(nextRecommendation.title, recommendationMethod, nextRecommendation.sourceMaterialId, nextRecommendation.assessmentId)}>{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? "Find the first mistake →" : nextRecommendation.reason === "lesson-only" ? "Try your first check →" : nextRecommendation.reason === "needs-independent-check" ? "Try it without hints →" : nextRecommendation.reason === "spaced-review" || nextRecommendation.nextReviewAt ? "Review from memory →" : nextRecommendation.assessmentTitle ? "Practice for this scope →" : nextRecommendation.sourceTitle ? `Study with ${nextRecommendation.sourceTitle} →` : recommendationMethod === "quiz" ? "Practice with a quiz →" : `Practice with ${studyMethodLabel(recommendationMethod)} →`}</button></div> : null}<div className="study-memory__grid"><div className="study-memory__progress"><strong>Topic signals</strong>{progress.length ? progress.map((item) => { const score = getTopicScore(item.attemptCount, item.scoredAttemptCount, item.correctCount); const evidence = describeTopicEvidence(item); return <div className="progress-row" key={item.id}><div className="topic-progress-heading"><span>{item.title}</span><small className={`topic-evidence topic-evidence--${evidence.toLowerCase().replaceAll(" ", "-")}`}>{evidence}</small></div>{score ? <><div className="topic-score__track" role="progressbar" aria-label={`${item.title} scored check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score.percent}><span style={{ width: `${score.percent}%` }} /></div><small>{score.percent}% · {score.correctCount}/{score.scoredAttemptCount} scored{score.unscoredCount ? ` · ${score.unscoredCount} unscored` : ""}</small></> : <small className="topic-score__unmeasured">{item.attemptCount ? `${item.attemptCount} unscored attempt${item.attemptCount === 1 ? "" : "s"}${item.latestOutcome ? ` · latest ${item.latestOutcome}` : ""}` : item.sessionCount ? `${item.sessionCount} lesson session${item.sessionCount === 1 ? "" : "s"} · no checks saved${item.lastSessionAt ? ` · last lesson ${new Date(item.lastSessionAt).toLocaleDateString()}` : ""}` : "No lesson or check activity yet"}</small>}{score && item.latestOutcome ? <small>Latest {item.latestOutcome}{item.lastPracticedAt ? ` · checked ${new Date(item.lastPracticedAt).toLocaleDateString()}` : ""}</small> : null}{topicIndependenceSummary(item.title)}</div>; }) : <p>Saved class progress will appear here as you study.</p>}</div><div className="study-memory__history"><strong>Recent lessons</strong>{history.length ? history.slice(0,5).map((item) => <button type="button" key={item.sessionId} onClick={() => void reopenSession(item.sessionId)}><span>{item.topic}</span><small>{studyMethodLabel(item.method)} · {item.attemptCount} checks · {new Date(item.createdAt).toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></button>) : <p>Your generated lessons will be saved here for later.</p>}</div></div><div className="study-method-progress"><div><strong>Practice by approach</strong><p>Confidence gap averages the distance between your rated confidence and each scored outcome; lower is closer to outcomes. Small samples and different topics make method comparisons uncertain.</p></div>{methodProgress.length ? <ul>{methodProgress.map((item) => {
       const label = studyMethodLabel(item.method);
       const notScored = item.attemptCount - item.scoredAttemptCount;
       const lastUsed = item.lastPracticedAt ? ` · last used ${new Date(item.lastPracticedAt).toLocaleDateString()}` : "";

@@ -443,7 +443,9 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     assert.equal(moduleFiles.filter((name) => name.startsWith("composite-systems")).length, 2);
     const topicFiles = await readdir(join(folder, "topics"));
     const tensorTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
-    assert.match(tensorTopic, /^---\nid: "topic:tensor-products"\ncourse_id: "course-id"\ncourse_code: "PHGN 519"\ntopic_key: "tensor-products"\npractice_status: "review-needed"\nattempt_count: 2\nscored_attempt_count: 1\ncorrect_count: 1\nmodules:[\s\S]*source_count: 1\n---/);
+    assert.match(tensorTopic, /^---\nid: "topic:tensor-products"\ncourse_id: "course-id"\ncourse_code: "PHGN 519"\ntopic_key: "tensor-products"\npractice_status: "review-needed"\nattempt_count: 2\nscored_attempt_count: 1\ncorrect_count: 1\n[\s\S]*modules:[\s\S]*source_count: 1\n---/);
+    assert.match(tensorTopic, /independent_scored_attempt_count: 0\nindependent_correct_count: 0\nevidence_level: "needs-another-look"/);
+    assert.match(tensorTopic, /\*\*Evidence level:\*\* needs another look\n\*\*Independent checks:\*\* 0\/0 correct/);
     const withLearnerProperty = tensorTopic.replace("course_id: \"course-id\"", "course_id: \"course-id\"\nlearner_tag: \"exam-focus\"");
     await writeFile(join(folder, "topics", "tensor-products.md"), withLearnerProperty);
     const syllabusTopic = await readFile(join(folder, "topics", "syllabus-only.md"), "utf8");
@@ -479,13 +481,15 @@ test("Obsidian source notes link assignments to their accepted topics and assess
         assessments: [],
       },
       profile: {
-        concepts: [{ title: "Tensor Products", attemptCount: 2, scoredAttemptCount: 1, correctCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-10T00:00:00.000Z", sessionCount: 1, lastSessionAt: "2026-10-10T00:00:00.000Z" }],
+        concepts: [{ title: "Tensor Products", attemptCount: 4, scoredAttemptCount: 4, correctCount: 4, independentScoredAttemptCount: 3, independentCorrectCount: 3, latestOutcome: "correct", lastPracticedAt: "2026-10-10T00:00:00.000Z", sessionCount: 3, lastSessionAt: "2026-10-10T00:00:00.000Z" }],
         assessments: [],
       },
     } as any);
     const refreshedTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
     assert.match(refreshedTopic, /learner_tag: "exam-focus"/);
     assert.match(refreshedTopic, /practice_status: "checked"/);
+    assert.match(refreshedTopic, /independent_scored_attempt_count: 3\nindependent_correct_count: 3\nevidence_level: "repeated-independent-success"/);
+    assert.match(refreshedTopic, /\*\*Evidence level:\*\* repeated independent success\n\*\*Independent checks:\*\* 3\/3 correct/);
     assert.match(refreshedTopic, /^---\n[\s\S]*\n---\n\n# Tensor Products\n/);
   } finally {
     await rm(root, { recursive: true, force: true });

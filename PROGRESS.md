@@ -199,14 +199,22 @@ Acceptance:
 ## Milestone 4: Adaptive review
 
 - [ ] Define an explainable mastery model.
-- [ ] Schedule retrieval practice and delayed review.
+- [x] Schedule retrieval practice and delayed review.
+  - Evidence: deterministic 1-, 3-, and 7-day recall intervals use recorded
+    accuracy, latest confidence, and independent-check evidence. Missed and
+    ungraded checks retain their immediate remediation paths. Due or upcoming
+    dates appear in class recommendations and homework/exam topic summaries;
+    due map actions open quiz-first practice so spaced review adds scored
+    evidence. Contract, service, and web tests cover
+    interval boundaries, priority, display, and method routing.
 - [ ] Automatically version and revise the training plan after quiz evidence.
 - [ ] Adapt format based on measured outcomes and user preference.
 - [~] Add progress and weak-point views without noisy gamification.
   - Evidence: accepted-map module categories show topic-practice coverage and
     per-topic attempt/correct counts; learner-provided exam scopes now also
-    separate lesson coverage from saved scored checks per topic and offer direct
-    lesson and practice actions. Calibrated weak-point summaries remain.
+    separate lesson coverage from saved scored checks per topic, show spaced
+    recall timing, and offer direct lesson and practice actions. Calibrated
+    weak-point summaries remain.
 - [ ] Provide export and deletion for learner data.
 
 Acceptance:
@@ -379,3 +387,7 @@ u`). Live browser review reopened a saved Homework 3 lesson and confirmed bra/ke
 | 2026-10-10 | Repair Obsidian journal math and repeat-export frontmatter | Journal export now applies the same repair for control characters inside LaTeX as the web renderer, so a saved prompt with a stray control character before `\ket` exports as valid `\ket` notation. Topic-note property refresh now accepts and repairs the legacy `---# Heading` boundary created by earlier repeated exports, and regression coverage verifies a refreshed topic note retains valid frontmatter, generated content, and learner-owned metadata. Refreshed the configured local vault successfully (38 notes); direct file audit confirmed the saved prompt no longer contains the stray control character and the affected topic note has a valid YAML boundary. `npm run check` passed workspace typechecks, all 46 tests, and production builds; `git diff --check` passed. Existing Vite large-bundle advisory remains. |
 
 | 2026-10-10 | Split browser pages into route-loaded chunks | The course, study, information, and hand-tracking pages now load on demand with an accessible loading status. The production build separates the ~966 kB initial JavaScript bundle into a ~193 kB app entry plus route and math chunks; no chunk exceeds Vite’s 500 kB warning threshold. Live browser review opened the Study route, reopened a saved lesson, switched to the separate Knowledge check tab, and confirmed the saved Bell-state notation appears as formatted math; the saved attempt was read-only and no new attempt was created. `npm run check` passed all workspace typechecks, all 46 tests, and production builds; `git diff --check` passed. |
+
+| 2026-10-10 | Schedule evidence-based spaced review | Correct checks now receive deterministic 1-, 3-, or 7-day recall intervals based on accuracy, confidence, and independent results; misses and ungraded responses retain their existing remediation paths. Due dates appear in class recommendations and homework/exam topic summaries, and due actions start Quiz first while preserving the course and assessment/material scope. Contract, service, progress-summary, and navigation tests cover interval selection, priorities, due labels, and scoped method routing. `rtk npm run check` passed all workspace typechecks, 62 server tests, 30 web tests, and production builds; `rtk git diff --check` passed. Browser review was not run because the local app ports were already occupied. |
+
+| 2026-10-10 | Add scored topic progress and explainable evidence labels | The class learning trail now shows an accessible accuracy bar for topics with scored checks and keeps ungraded recall/teach-back and lesson-only activity explicitly unmeasured. Counts and percentages use scored attempts only, with inconsistent counts bounded. Cautious evidence labels distinguish no check, unscored or supported practice, some independent evidence, a recent setback, and repeated independent success (at least 3 independent scored checks and 80% accuracy); these are study signals, not mastery claims. Obsidian topic notes export matching `evidence_level` and independent-check YAML fields and show the readable label/counts. Disposable repeat-export coverage verifies progression from a setback to repeated independent success and preservation of a learner-added property. Focused tests cover measured, unmeasured, mixed scored/unscored, out-of-range data, and evidence-label boundaries. `rtk npm run check` passed all workspace typechecks, 62 server tests, 34 web tests, and production builds; `rtk git diff --check` passed. Browser visual review remains pending because the app preview ports are already occupied. |
