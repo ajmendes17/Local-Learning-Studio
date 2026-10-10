@@ -575,7 +575,8 @@ test("exam topic study selects a matching class source and marks unmatched topic
       method: "POST", url: `/api/courses/${courseId}/materials?kind=syllabus`,
       headers: { "content-type": syllabus.contentType }, payload: syllabus.payload,
     });
-    const reading = uploadPayload("Bell states reading.md", "# Bell states\n\nBell states are entangled two-qubit states. READING_MATCH_SENTINEL");
+    const unrelatedBackground = Array.from({ length: 45 }, (_, index) => `Background section ${index + 1} introduces an unrelated principle from the course.`).join("\n\n");
+    const reading = uploadPayload("Bell states reading.md", `${unrelatedBackground}\n\n# Bell states\n\nBell states are entangled two-qubit states. READING_MATCH_SENTINEL`);
     const readingUpload = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/materials?kind=reading`,
       headers: { "content-type": reading.contentType }, payload: reading.payload,
@@ -597,6 +598,7 @@ test("exam topic study selects a matching class source and marks unmatched topic
     const groundedInput = JSON.parse(prompts.at(-1)!.split("INPUT_JSON\n\n")[1]!);
     assert.equal(groundedInput.sourceMaterial.id, readingUpload.json().id);
     assert.ok(groundedInput.sourceMaterial.passages.some((passage: { content: string }) => passage.content.includes("READING_MATCH_SENTINEL")));
+    assert.ok(groundedInput.sourceMaterial.passages[0].ordinal > 24, "topic-matched evidence after the old retrieval window must reach the model");
     assert.equal(groundedInput.sourceMaterial.passages.some((passage: { content: string }) => passage.content.includes("SYLLABUS_MATCH_SENTINEL")), false);
     const adaptive = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${sourceGrounded.json().sessionId}/next-question`, payload: {},

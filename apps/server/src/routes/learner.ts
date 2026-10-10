@@ -20,6 +20,7 @@ import {
   type LearnerPatternReviewResult,
   type CodexTask,
   type CourseMapProposal,
+  type SourcePassage,
 } from "@local-learning-studio/contracts";
 import type { FastifyInstance } from "fastify";
 import type { LearnerLibrary } from "../storage/learner-library.js";
@@ -62,6 +63,37 @@ function topicTerms(value: string) {
   return value.normalize("NFKC").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+function studyPassageMatchScore(content: string, topic: string) {
+  const terms = topicTerms(topic);
+  const usefulTerms = terms.filter((term) => term.length > 2 && !["and", "for", "from", "into", "the", "with"].includes(term));
+  if (!usefulTerms.length) return 0;
+  const passageTerms = topicTerms(content);
+  const passageTermSet = new Set(passageTerms);
+  const exactPhrase = terms.length > 1 && passageTerms.join(" ").includes(terms.join(" "));
+  if (exactPhrase) return 100 + usefulTerms.length;
+  const matched = usefulTerms.filter((term) => passageTermSet.has(term)).length;
+  return usefulTerms.length >= 2 && matched === usefulTerms.length ? 50 + matched : 0;
+}
+
+function getTopicStudyPassages(courseId: string, materialId: string, topic: string, options: { sources: SourceLibrary }) {
+  const allPassages: SourcePassage[] = [];
+  let offset = 0;
+  while (true) {
+    const batch = options.sources.getPassages(courseId, materialId, 200, offset);
+    allPassages.push(...batch);
+    if (batch.length < 200) break;
+    offset += batch.length;
+  }
+  const relevant = allPassages
+    .map((passage) => ({ passage, score: studyPassageMatchScore(passage.content, topic) }))
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || left.passage.ordinal - right.passage.ordinal)
+    .slice(0, 24)
+    .map(({ passage }) => passage)
+    .sort((left, right) => left.ordinal - right.ordinal);
+  return relevant.length ? relevant : allPassages.slice(0, 24);
+}
+
 function findMatchingStudySource(courseId: string, topic: string, options: {
   courses: CourseLibrary;
   sources: SourceLibrary;
@@ -69,8 +101,6 @@ function findMatchingStudySource(courseId: string, topic: string, options: {
   const terms = topicTerms(topic);
   const usefulTerms = terms.filter((term) => term.length > 2 && !["and", "for", "from", "into", "the", "with"].includes(term));
   if (terms.length < 2 || usefulTerms.length < 2) return null;
-  const phrase = terms.join(" ");
-
   const kindPriority: Record<string, number> = {
     reading: 4,
     "lecture-notes": 4,
@@ -80,7 +110,7 @@ function findMatchingStudySource(courseId: string, topic: string, options: {
     syllabus: 1,
     other: 0,
   };
-  let best: { material: NonNullable<ReturnType<SourceLibrary["getMaterial"]>>; matchScore: number; kindPriority: number } | null = null;
+  let best: { material: NonNullable<ReturnType<SourceLibrary["getMaterial"]>>; matchScore: number; kindPriority: number; passages: SourcePassage[] } | null = null;
   const materials = options.courses.getCourseDetail(courseId)?.materials ?? [];
   for (const material of materials) {
     if (material.status !== "ready" || !material.passageCount) continue;
@@ -89,22 +119,27 @@ function findMatchingStudySource(courseId: string, topic: string, options: {
       const passages = options.sources.getPassages(courseId, material.id, 200, offset);
       if (!passages.length) break;
       for (const passage of passages) {
-        const passageTerms = topicTerms(passage.content);
-        const passageTermSet = new Set(passageTerms);
-        const exactPhrase = passageTerms.join(" ").includes(phrase);
-        const allUsefulTerms = usefulTerms.every((term) => passageTermSet.has(term));
-        if (!exactPhrase && !allUsefulTerms) continue;
-        const matchScore = exactPhrase ? 2 : 1;
+        const matchScore = studyPassageMatchScore(passage.content, topic);
+        if (!matchScore) continue;
         const priority = kindPriority[material.kind] ?? 0;
-        if (!best || matchScore > best.matchScore || (matchScore === best.matchScore && priority > best.kindPriority)) {
-          best = { material, matchScore, kindPriority: priority };
+        if (best?.material.id === material.id) {
+          best.passages.push(passage);
+          best.matchScore = Math.max(best.matchScore, matchScore);
+        } else if (!best || matchScore > best.matchScore || (matchScore === best.matchScore && priority > best.kindPriority)) {
+          best = { material, matchScore, kindPriority: priority, passages: [passage] };
         }
       }
       offset += passages.length;
       if (passages.length < 200) break;
     }
   }
-  return best?.material ?? null;
+  return best ? {
+    material: best.material,
+    passages: best.passages
+      .sort((left, right) => studyPassageMatchScore(right.content, topic) - studyPassageMatchScore(left.content, topic) || left.ordinal - right.ordinal)
+      .slice(0, 24)
+      .sort((left, right) => left.ordinal - right.ordinal),
+  } : null;
 }
 
 export async function registerLearnerRoutes(app: FastifyInstance, options: {
@@ -306,11 +341,17 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
     let sourceMaterial = requestedSourceMaterialId
       ? options.sources.getMaterial(courseId, requestedSourceMaterialId)
       : null;
+    let selectedSourcePassages: SourcePassage[] | null = null;
     if (requestedSourceMaterialId && (!sourceMaterial || sourceMaterial.status !== "ready")) {
       return reply.code(422).send({ error: "That assignment is unavailable for source-grounded study." });
     }
     if (!sourceMaterial && assessment && assessmentTopic && !reviewSession) {
-      sourceMaterial = findMatchingStudySource(courseId, assessmentTopic.title, options);
+      const matched = findMatchingStudySource(courseId, assessmentTopic.title, options);
+      sourceMaterial = matched?.material ?? null;
+      selectedSourcePassages = matched?.passages ?? null;
+    }
+    if (sourceMaterial && !selectedSourcePassages) {
+      selectedSourcePassages = getTopicStudyPassages(courseId, sourceMaterial.id, parsed.data.topic, options);
     }
     if (reviewSession && (reviewSession.topic !== parsed.data.topic
       || (reviewSession.assessmentId ?? null) !== (assessment?.id ?? null)
@@ -324,9 +365,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       return reply.code(422).send({ error: "The selected study session has no saved response to review yet." });
     }
     const sourcePassages = sourceMaterial
-      ? options.sources.getPassages(courseId, sourceMaterial.id, 40, 0)
-        .map(({ id, ordinal, content, location }) => ({ id, ordinal, content: content.slice(0, 1800), location }))
-        .slice(0, 24)
+      ? (selectedSourcePassages ?? []).map(({ id, ordinal, content, location }) => ({ id, ordinal, content: content.slice(0, 1800), location }))
       : [];
     const contrastTopics = parsed.data.method === "compare-contrast"
       ? acceptedContrastTopics(options.learning.getCurrentAcceptedCourseMap(courseId)?.payload ?? null, parsed.data.topic)
@@ -402,9 +441,8 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         : undefined;
       if (assessment && !assessmentTopic) return reply.code(422).send({ error: "The study topic is no longer in this assessment scope." });
       const sourcePassages = sourceMaterial
-        ? options.sources.getPassages(courseId, sourceMaterial.id, 40, 0)
+        ? getTopicStudyPassages(courseId, sourceMaterial.id, session.topic, options)
           .map(({ id, ordinal, content, location }) => ({ id, ordinal, content: content.slice(0, 1800), location }))
-          .slice(0, 24)
         : [];
       const contrastTopics = session.method === "compare-contrast"
         ? acceptedContrastTopics(options.learning.getCurrentAcceptedCourseMap(courseId)?.payload ?? null, session.topic)
