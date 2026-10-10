@@ -14,6 +14,7 @@ import {
 } from "@local-learning-studio/contracts";
 import type { z } from "zod";
 import { buildApp } from "../src/app.js";
+import { CodexRunError } from "../src/codex/codex-runner.js";
 import type { CodexRunResult } from "../src/codex/codex-runner.js";
 import type { LearningCodexClient } from "../src/learning/learning-workflow-service.js";
 
@@ -37,7 +38,9 @@ function multipartFile(filename: string, content: string) {
 
 class FakeLearningCodex implements LearningCodexClient {
   readonly calls: CodexTask[] = [];
+  readonly prompts: string[] = [];
   invalidNextMapSourceSet = false;
+  invalidNextClassificationOutput = false;
 
   async status() {
     return {
@@ -55,6 +58,11 @@ class FakeLearningCodex implements LearningCodexClient {
     outputSchema: z.ZodType<T>,
   ): Promise<CodexRunResult<T>> {
     this.calls.push(task);
+    this.prompts.push(prompt);
+    if (task === "classify-course-sources" && this.invalidNextClassificationOutput) {
+      this.invalidNextClassificationOutput = false;
+      throw new CodexRunError("invalid_output", "Codex returned a response that failed validation.", "sources.0.evidence: expected at least one source passage reference");
+    }
     const input = JSON.parse(prompt.split("INPUT_JSON\n\n")[1]!) as any;
     const projection = input;
     const materialIds = projection.materials.map(({ id }: any) => id);
@@ -170,6 +178,17 @@ test("course sources flow through cached classification, map review, and accepta
   });
   assert.equal(uploadResponse.statusCode, 201);
 
+  codex.invalidNextClassificationOutput = true;
+  const invalidClassificationResponse = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.id}/source-classification`,
+    payload: {},
+  });
+  assert.equal(invalidClassificationResponse.statusCode, 502);
+  const invalidClassificationError = ApiErrorSchema.parse(invalidClassificationResponse.json());
+  assert.match(invalidClassificationError.detail ?? "", /did not match the expected structure/);
+  assert.match(String(invalidClassificationError.diagnostics?.responseValidation), /sources\.0\.evidence/);
+
   const classificationResponse = await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/source-classification`,
@@ -179,8 +198,10 @@ test("course sources flow through cached classification, map review, and accepta
   const classification = SourceClassificationArtifactSchema.parse(
     classificationResponse.json(),
   );
+  assert.match(codex.prompts.at(-1) ?? "", /every evidence reference must use that same source's materialId/);
+  assert.match(codex.prompts.at(-1) ?? "", /never cite a passage from another material/);
   assert.equal(classification.payload.sources[0]?.role, "syllabus");
-  assert.deepEqual(codex.calls, ["classify-course-sources"]);
+  assert.deepEqual(codex.calls, ["classify-course-sources", "classify-course-sources"]);
 
   const cachedClassificationResponse = await app.inject({
     method: "POST",
@@ -192,7 +213,7 @@ test("course sources flow through cached classification, map review, and accepta
       .id,
     classification.id,
   );
-  assert.equal(codex.calls.length, 1, "matching classification should be cached");
+  assert.equal(codex.calls.length, 2, "matching classification should be cached");
 
   const mapResponse = await app.inject({
     method: "POST",
@@ -202,14 +223,14 @@ test("course sources flow through cached classification, map review, and accepta
   assert.equal(mapResponse.statusCode, 200);
   const courseMap = CourseMapArtifactSchema.parse(mapResponse.json());
   assert.equal(courseMap.status, "draft");
-  assert.deepEqual(codex.calls, ["classify-course-sources", "map-course"]);
+  assert.deepEqual(codex.calls, ["classify-course-sources", "classify-course-sources", "map-course"]);
 
   await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/course-map`,
     payload: {},
   });
-  assert.equal(codex.calls.length, 2, "matching map should be cached");
+  assert.equal(codex.calls.length, 3, "matching map should be cached");
 
   codex.invalidNextMapSourceSet = true;
   const invalidMapResponse = await app.inject({

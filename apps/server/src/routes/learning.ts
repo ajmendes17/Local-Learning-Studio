@@ -36,7 +36,12 @@ function sendWorkflowError(error: unknown, reply: FastifyReply) {
       detail:
         error.code === "timeout"
           ? "Try again after the current Codex workload clears."
-          : "Check the configured model and local Codex authentication.",
+          : error.code === "invalid_output"
+            ? "The generated response did not match the expected structure. Inspect the validation details and retry."
+            : "Check the configured model and local Codex authentication.",
+      ...(error.code === "invalid_output" && error.detail
+        ? { diagnostics: { responseValidation: error.detail.slice(0, 4_000) } }
+        : {}),
     });
   }
   throw error;

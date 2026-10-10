@@ -171,7 +171,7 @@ export function CourseMapPanel({
         </div>
       ) : null}
 
-      {error ? <div className="map-error" role="alert"><p>{error.error}</p>{error.diagnostics ? <details className="map-error__diagnostics" open><summary>Inspect course-map validation details</summary><p>These checks compare Codex’s course and evidence references with the exact sources supplied for this run.</p><dl>{Object.entries(error.diagnostics).map(([key, value]) => <div key={key}><dt>{key.replaceAll(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())}</dt><dd>{diagnosticText(value)}</dd></div>)}</dl></details> : null}</div> : null}
+      {error ? <div className="map-error" role="alert"><p>{error.error}</p>{error.diagnostics ? <details className="map-error__diagnostics" open><summary>Inspect validation details</summary><p>These checks compare the generated response with the supported structure and the exact course evidence supplied for this run.</p><dl>{Object.entries(error.diagnostics).map(([key, value]) => <div key={key}><dt>{key.replaceAll(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())}</dt><dd>{diagnosticText(value)}</dd></div>)}</dl></details> : null}</div> : null}
       {!codexReady && codex ? (
         <div className="map-notice">
           <strong>Connect Codex before running analysis.</strong>

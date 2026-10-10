@@ -270,6 +270,7 @@ export class LearningWorkflowService {
     return [
       "Use $classify-course-sources for this Local Learning Studio action.",
       "Return only the requested structured output. Classify every supplied material exactly once.",
+      "For each classified source, every evidence reference must use that same source's materialId and a passageId listed under that material; never cite a passage from another material.",
       projection.omittedPassageCount > 0
         ? `The deterministic projection omitted ${projection.omittedPassageCount} passages because of the input budget; include this limitation in warnings.`
         : "No passages were omitted from the deterministic projection.",
