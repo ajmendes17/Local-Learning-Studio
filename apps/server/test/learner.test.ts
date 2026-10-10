@@ -572,7 +572,7 @@ test("study methods send distinct learning directions", async () => {
   const errorSession = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-session`, payload: { topic: "Method check: error analysis", method: "error-analysis" } });
   assert.equal(errorSession.statusCode, 200, errorSession.body);
   assert.equal(errorSession.json().method, "error-analysis");
-  assert.equal(StudySessionContentSchema.safeParse({ ...errorSession.json(), example: "" }).success, false, "error-analysis sessions must keep a visible flawed solution");
+  assert.equal(StudySessionContentSchema.safeParse({ ...(errorSession.json() as Record<string, unknown>), example: "" }).success, false, "error-analysis sessions must keep a visible flawed solution");
   assert.match(prompts.at(-1) ?? "", /four-step numbered example containing exactly one invalid reasoning step/);
   const nextError = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${errorSession.json().sessionId}/next-question`, payload: {} });
   assert.equal(nextError.statusCode, 200, nextError.body);
