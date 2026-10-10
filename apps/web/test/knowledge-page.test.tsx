@@ -95,7 +95,8 @@ test("knowledge dashboard keeps mapped, learner-created, and instructor-scope to
   assert.match(html, /1 topic with saved attempts/);
   assert.match(html, /1<\/span><span>topics to revisit/);
   assert.match(html, /Revisit a topic after a difficult check\./);
-  assert.match(html, /Study A learner-created topic/);
+  assert.match(html, /next-step-topic">A learner-created topic<\/div>/);
+  assert.match(html, /Study suggested topic/);
   assert.match(html, /No independent checks yet/);
   assert.doesNotMatch(html, /role="progressbar" aria-label="Mapped but not practiced independent check accuracy"/);
   assert.doesNotMatch(html, /Bayesian inference|Recursive definitions|Quantum measurement/);
