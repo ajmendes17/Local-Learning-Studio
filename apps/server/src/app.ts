@@ -142,7 +142,7 @@ export function buildApp(options: AppOptions = {}) {
       if (subscribers.size === 0) operationSubscribers.delete(courseId);
     });
   });
-  void app.register(registerLearnerRoutes, { learner, codex, courses: library, sources: sourceLibrary });
+  void app.register(registerLearnerRoutes, { learner, artifacts, codex, courses: library, sources: sourceLibrary });
   void app.register(registerObsidianRoutes, { vault: obsidian, courses: library, artifacts, learner, sources: sourceLibrary });
 
   app.setErrorHandler((error, _request, reply) => {

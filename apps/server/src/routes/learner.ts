@@ -19,15 +19,48 @@ import {
   LearnerPatternReviewTriggerSchema,
   type LearnerPatternReviewResult,
   type CodexTask,
+  type CourseMapProposal,
 } from "@local-learning-studio/contracts";
 import type { FastifyInstance } from "fastify";
 import type { LearnerLibrary } from "../storage/learner-library.js";
 import type { CourseLibrary } from "../storage/course-library.js";
 import type { SourceLibrary } from "../storage/source-library.js";
+import type { LearningArtifactLibrary } from "../storage/learning-artifact-library.js";
 import { z } from "zod";
+
+function acceptedContrastTopics(map: CourseMapProposal | null, rawTopic: string) {
+  if (!map) return [];
+  const keyFor = (value: string) => value.trim().normalize("NFKC").toLocaleLowerCase();
+  const focus = map.concepts.find((concept) => keyFor(concept.title) === keyFor(rawTopic));
+  if (!focus) return [];
+  const concepts = new Map(map.concepts.map((concept) => [concept.key, concept]));
+  const candidates = new Map<string, { title: string; relationship: string; description: string; learningObjectives: string[] }>();
+  for (const module of map.modules.filter((item) => item.conceptKeys.includes(focus.key))) {
+    for (const relatedKey of module.conceptKeys) {
+      if (relatedKey === focus.key || candidates.has(relatedKey)) continue;
+      const related = concepts.get(relatedKey);
+      if (related) candidates.set(relatedKey, {
+        title: related.title,
+        relationship: `same accepted module: ${module.title}`,
+        description: related.description,
+        learningObjectives: related.learningObjectives.slice(0, 3),
+      });
+    }
+  }
+  for (const related of map.concepts) {
+    if (related.key === focus.key || candidates.has(related.key)) continue;
+    if (focus.prerequisiteKeys.includes(related.key)) {
+      candidates.set(related.key, { title: related.title, relationship: "accepted prerequisite", description: related.description, learningObjectives: related.learningObjectives.slice(0, 3) });
+    } else if (related.prerequisiteKeys.includes(focus.key)) {
+      candidates.set(related.key, { title: related.title, relationship: "accepted follow-on concept", description: related.description, learningObjectives: related.learningObjectives.slice(0, 3) });
+    }
+  }
+  return [...candidates.values()].slice(0, 6);
+}
 
 export async function registerLearnerRoutes(app: FastifyInstance, options: {
   learner: LearnerLibrary;
+  artifacts: LearningArtifactLibrary;
   courses: CourseLibrary;
   sources: SourceLibrary;
   codex: { run<T>(task: CodexTask, prompt: string, schema: import("zod").ZodType<T>): Promise<{ output: T; model?: string }> };
@@ -242,6 +275,9 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         .map(({ id, ordinal, content, location }) => ({ id, ordinal, content: content.slice(0, 1800), location }))
         .slice(0, 24)
       : [];
+    const contrastTopics = parsed.data.method === "compare-contrast"
+      ? acceptedContrastTopics(options.artifacts.acceptedCourseMap(courseId)?.payload ?? null, parsed.data.topic)
+      : [];
     const concept = options.learner.ensureConcept(courseId, parsed.data.topic);
     if (reviewSession && reviewSession.conceptId !== concept.id) {
       return reply.code(422).send({ error: "Remediation must stay with the original course concept." });
@@ -256,7 +292,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       analogy: "Choose a concrete analogy that maps the important parts of the concept, state where the analogy breaks, then connect it back to precise terms.",
       "free-recall": "Start with unaided free recall: ask one open-ended question that requires the learner to explain the core concept in their own words. Progressive in-app hints may be requested and are tracked separately. Do not make the question multiple choice. Keep the answer explanation hidden until the learner submits a short response; after submission, show a concise reference explanation they can compare against. Do not claim the response was graded.",
       "teach-back": "Use a teach-back exercise: ask the learner to explain the core idea as if teaching a curious student who has not seen it before. Prompt them to state the key relationship and explain why it holds, in their own words. Keep the reference explanation hidden until they submit. Do not make the question multiple choice or claim their response was graded.",
-      "compare-contrast": "Use contrastive learning: identify a closely related course-supported idea that learners may confuse with this topic. Explain both ideas side by side, emphasize the decisive difference, and give a concise example of when each applies. The knowledge check should test that distinction in a new case. Ground both sides in supplied course evidence when available and do not invent unsupported contrasts.",
+      "compare-contrast": "Use contrastive learning: first use the accepted course-map related concepts supplied in INPUT_JSON, when available, to choose one closely related idea learners may confuse with this topic. Explain both ideas side by side, emphasize the decisive difference, and give a concise example of when each applies. The knowledge check should test that distinction in a new case. Ground both sides in supplied course evidence when available. If no supported neighboring concept exists, contrast the topic with a boundary case and do not invent course-specific facts.",
     } satisfies Record<typeof parsed.data.method, string>;
     const openResponse = parsed.data.method === "free-recall" || parsed.data.method === "teach-back";
     try {
@@ -275,7 +311,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         "Write mathematical notation with Markdown math delimiters: use $...$ inline; for display equations put $$ on its own line, the equation on following line(s), and the closing $$ on its own line. For quantum notation use supported LaTeX such as \\ket{\\psi}, \\bra{\\phi}, and \\braket{\\phi|\\psi}; do not leave raw TeX commands outside math delimiters.",
         methodDirections[parsed.data.method],
         "Never say the learner has mastered the topic based on this generated lesson.",
-        "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
+        "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, ...(parsed.data.method === "compare-contrast" ? { acceptedMapRelatedConcepts: contrastTopics } : {}), sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
       ].join("\n\n"), StudySessionGenerationContentSchema);
       const content = StudySessionContentSchema.parse({ ...result.output, ...(sourceMaterial ? { sourceBasis: "course-materials" } : {}), conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(openResponse ? { options: [], answerIndex: null } : {}) });
       return StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, concept.id, content));
@@ -314,6 +350,9 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           .map(({ id, ordinal, content, location }) => ({ id, ordinal, content: content.slice(0, 1800), location }))
           .slice(0, 24)
         : [];
+      const contrastTopics = session.method === "compare-contrast"
+        ? acceptedContrastTopics(options.artifacts.acceptedCourseMap(courseId)?.payload ?? null, session.topic)
+        : [];
       const openResponse = session.method === "free-recall" || session.method === "teach-back";
       const questionSchema = openResponse ? StudyFreeRecallQuestionSchema : StudyQuestionSchema;
       const result = await options.codex.run("generate-adaptive-practice", [
@@ -322,7 +361,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
             ? "Use $generate-adaptive-practice to create one new teach-back prompt for this same concept. Ask the learner to explain the idea as if teaching a new student; the learner will submit text and compare it with a reference explanation, so do not make the prompt multiple choice."
             : "Use $generate-adaptive-practice to create one new open-ended free-recall prompt for this same concept. Ask the learner to explain or retrieve the idea in their own words; the learner will submit text and compare it with a reference explanation, so do not make the prompt multiple choice."
             : session.method === "compare-contrast"
-              ? "Use $generate-adaptive-practice to create one new multiple-choice question that tests the distinction between this concept and a closely related course-supported idea. Use a new case and explain the decisive difference in feedback."
+              ? "Use $generate-adaptive-practice to create one new multiple-choice question that tests the distinction between this concept and a related idea in acceptedMapRelatedConcepts when available. Use a new case and explain the decisive difference in feedback. If no neighboring concept is supported, test a boundary case for this concept instead."
               : "Use $generate-adaptive-practice to create exactly one new multiple-choice question for this same concept.",
         "Use the attempt history to target likely uncertainty. Change the surface form or reasoning path; do not repeat any prior question or simply paraphrase its choices.",
         openResponse
@@ -339,6 +378,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           className: options.courses.getCourse(courseId)?.title,
           concept: { id: session.conceptId, title: session.topic },
           learningMethod: session.method,
+          ...(session.method === "compare-contrast" ? { acceptedMapRelatedConcepts: contrastTopics } : {}),
           sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null,
           assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null,
           priorLesson: session.lesson,

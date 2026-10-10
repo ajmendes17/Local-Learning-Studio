@@ -8,6 +8,8 @@ import test from "node:test";
 import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
 import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
+import { openDatabase } from "../src/storage/database.js";
+import { LearningArtifactLibrary } from "../src/storage/learning-artifact-library.js";
 
 function uploadPayload(filename: string, content: string) {
   const boundary = "learner-study-test-boundary";
@@ -569,6 +571,84 @@ test("study methods send distinct learning directions", async () => {
   assert.equal(prompts.length, methods.length + 2);
   await app.close();
   await rm(root, { recursive: true });
+});
+
+test("compare and contrast uses accepted course-map neighbors in initial and adaptive study", async () => {
+  const { app, root, prompts } = await createAppWithStudyModel();
+  try {
+    const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Contrastive study fixture" } });
+    const courseId = course.json().id as string;
+    const upload = uploadPayload("density-notes.md", "Density operators describe mixed quantum states. The partial trace obtains a subsystem state by tracing out the other subsystem.");
+    const material = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/materials?kind=reading`,
+      headers: { "content-type": upload.contentType }, payload: upload.payload,
+    });
+    assert.equal(material.statusCode, 201, material.body);
+    const passages = await app.inject({ method: "GET", url: `/api/courses/${courseId}/materials/${material.json().id}/passages` });
+    const passageId = passages.json().passages[0].id as string;
+    const database = openDatabase(join(root, "data", "studio.sqlite"));
+    const artifacts = new LearningArtifactLibrary(database);
+    const artifact = artifacts.saveCourseMap({
+      courseId,
+      sourceFingerprint: "a".repeat(64),
+      model: "test-model",
+      payload: {
+        schemaVersion: "course-map.v1",
+        courseId,
+        sourceMaterialIds: [material.json().id],
+        modules: [{ key: "states-and-subsystems", title: "States and Subsystems", description: "Representing states and obtaining subsystem states.", position: 0, conceptKeys: ["density-operators", "partial-trace"], sourceReferences: [{ materialId: material.json().id, passageId }] }],
+        concepts: [
+          { key: "density-operators", title: "Density operators", description: "Represent pure and mixed states with density operators.", learningObjectives: ["Distinguish pure and mixed states"], prerequisiteKeys: [], sourceReferences: [{ materialId: material.json().id, passageId }] },
+          { key: "partial-trace", title: "Partial trace", description: "Obtain a subsystem state by tracing over another subsystem.", learningObjectives: ["Compute reduced states"], prerequisiteKeys: ["density-operators"], sourceReferences: [{ materialId: material.json().id, passageId }] },
+        ],
+        assessments: [],
+        warnings: [],
+      },
+    });
+    artifacts.acceptCourseMap(courseId, artifact.id);
+    database.close();
+
+    const study = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-session`,
+      payload: { topic: "Partial trace", method: "compare-contrast", sourceMaterialId: material.json().id },
+    });
+    assert.equal(study.statusCode, 200, study.body);
+    const initialInput = JSON.parse((prompts.at(-1) ?? "").split("INPUT_JSON\n\n")[1] ?? "{}");
+    assert.deepEqual(initialInput.acceptedMapRelatedConcepts.map(({ title, relationship }: { title: string; relationship: string }) => [title, relationship]), [["Density operators", "same accepted module: States and Subsystems"]]);
+
+    const next = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${study.json().sessionId}/next-question`, payload: {} });
+    assert.equal(next.statusCode, 200, next.body);
+    const adaptiveInput = JSON.parse((prompts.at(-1) ?? "").split("INPUT_JSON\n\n")[1] ?? "{}");
+    assert.deepEqual(adaptiveInput.acceptedMapRelatedConcepts.map(({ title }: { title: string }) => title), ["Density operators"]);
+    assert.equal(next.json().method, "compare-contrast");
+
+    const attempt = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
+      payload: {
+        sessionId: next.json().sessionId, conceptId: next.json().conceptId,
+        activityType: "recognition", prompt: next.json().question,
+        response: next.json().options[next.json().answerIndex], reasoning: "",
+        confidence: 0.75, hintCount: 0, method: "compare-contrast", outcome: "correct",
+        sourceRefs: [{ materialId: material.json().id }], independence: "independent",
+        rationale: "Correctly distinguished the neighboring course concepts.",
+      },
+    });
+    assert.equal(attempt.statusCode, 201, attempt.body);
+    const methodProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
+    assert.deepEqual(methodProgress.json().map((item: { method: string; attemptCount: number; correctCount: number }) => [item.method, item.attemptCount, item.correctCount]), [["compare-contrast", 1, 1]]);
+
+    const vaultPath = join(root, "vault");
+    await mkdir(vaultPath, { recursive: true });
+    const configured = await app.inject({ method: "POST", url: "/api/obsidian/config", payload: { vaultPath } });
+    assert.equal(configured.statusCode, 200, configured.body);
+    const exported = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
+    assert.equal(exported.statusCode, 200, exported.body);
+    const journal = await readFile(join(vaultPath, exported.json().courseFolder, "Study Journal.md"), "utf8");
+    assert.match(journal, /Compare & contrast/);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("free recall saves the learner response as ungraded and keeps the method in history", async () => {
