@@ -134,6 +134,17 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(initialValidation.json().healthy, true);
     assert.equal(initialValidation.json().notesChecked, 4);
     assert.ok(initialValidation.json().linksChecked >= 6);
+    const validationDatabase = openDatabase(databasePath);
+    validationDatabase.prepare("UPDATE source_passages SET content_hash=? WHERE course_id=? AND material_id=? AND id=?")
+      .run("f".repeat(64), courseId, uploaded.json().id, firstPassageId);
+    validationDatabase.close();
+    const staleSourceValidation = await app.inject({ method: "GET", url: `/api/courses/${courseId}/obsidian/validate` });
+    assert.equal(staleSourceValidation.json().healthy, false);
+    assert.ok(staleSourceValidation.json().issues.some((issue: string) => issue.includes("Source note is out of date")));
+    const unchangedDatabase = openDatabase(databasePath);
+    unchangedDatabase.prepare("UPDATE source_passages SET content_hash=? WHERE course_id=? AND material_id=? AND id=?")
+      .run(uploadedPassages.json().passages[0].contentHash, courseId, uploaded.json().id, firstPassageId);
+    unchangedDatabase.close();
     const courseNotePath = join(vaultPath, firstExport.json().courseFolder, "Course.md");
     const intactCourseNote = await readFile(courseNotePath, "utf8");
     await writeFile(courseNotePath, intactCourseNote.replace(/^id: .*\r?\n/m, ""));
@@ -153,6 +164,13 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(missingNoteValidation.json().healthy, false);
     assert.ok(missingNoteValidation.json().issues.some((issue: string) => issue.includes(`Expected class note is missing: sources/bell-states-reading--${uploaded.json().id.slice(0, 8)}.md`)));
     await writeFile(missingSourceNotePath, missingSourceNoteBody);
+    const unexpectedNotePath = join(vaultPath, firstExport.json().courseFolder, "topics", "removed-topic.md");
+    await mkdir(join(vaultPath, firstExport.json().courseFolder, "topics"), { recursive: true });
+    await writeFile(unexpectedNotePath, `---\nid: "topic:removed-topic"\n---\n\n# Removed topic\n\n${"<!-- LLS:GENERATED:START -->"}\nOld map entry\n${"<!-- LLS:GENERATED:END -->"}\n`);
+    const obsoleteNoteValidation = await app.inject({ method: "GET", url: `/api/courses/${courseId}/obsidian/validate` });
+    assert.equal(obsoleteNoteValidation.json().healthy, false);
+    assert.ok(obsoleteNoteValidation.json().issues.some((issue: string) => issue.includes("Unexpected managed note for this export: topics/removed-topic.md")));
+    await rm(unexpectedNotePath);
     const journalForAnchorTestPath = join(vaultPath, firstExport.json().courseFolder, "Study Journal.md");
     const journalForAnchorTest = await readFile(journalForAnchorTestPath, "utf8");
     const brokenPassageTarget = `${firstExport.json().courseFolder}/sources/bell-states-reading--${uploaded.json().id.slice(0, 8)}#Passage 999`;

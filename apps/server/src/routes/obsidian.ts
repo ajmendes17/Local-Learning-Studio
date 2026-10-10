@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { CourseLibrary } from "../storage/course-library.js";
 import type { LearnerLibrary } from "../storage/learner-library.js";
 import type { SourceLibrary } from "../storage/source-library.js";
-import { expectedObsidianNoteIdentities, ObsidianVault } from "../storage/obsidian-vault.js";
+import { expectedObsidianNoteIdentities, expectedObsidianSourceHashes, ObsidianVault } from "../storage/obsidian-vault.js";
 import type { LearningWorkflowService } from "../learning/learning-workflow-service.js";
 
 const configSchema = z.object({ vaultPath: z.string().trim().min(1).max(1000), folderPath: z.string().trim().min(1).max(300).optional() });
@@ -93,8 +93,20 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
       map: acceptedMap,
       assessments: options.learner.getProfile(course.id).assessments,
     });
+    const currentPassages = course.materials.map((material) => {
+      if (material.status !== "ready") return { id: material.id, passages: [] };
+      const passages = [];
+      let offset = 0;
+      while (true) {
+        const batch = options.sources.getPassages(course.id, material.id, 200, offset);
+        passages.push(...batch);
+        if (batch.length < 200) break;
+        offset += 200;
+      }
+      return { id: material.id, passages };
+    });
     try {
-      return await options.vault.validateCourse(course.id, course.title, expectedNoteIdentities);
+      return await options.vault.validateCourse(course.id, course.title, expectedNoteIdentities, expectedObsidianSourceHashes(currentPassages));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not check class notes.";
       const status = message.includes("Configure an Obsidian vault") ? 409 : 422;

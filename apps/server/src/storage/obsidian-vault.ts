@@ -78,6 +78,10 @@ export function expectedObsidianNoteIdentities(courseId: string, input: {
   return identities;
 }
 
+export function expectedObsidianSourceHashes(materials: Array<{ id: string; passages: SourcePassage[] }>) {
+  return new Map(materials.filter(({ passages }) => passages.length > 0).map(({ id, passages }) => [id, sourceFingerprint(passages)]));
+}
+
 function yaml(value: string) {
   return JSON.stringify(value);
 }
@@ -285,7 +289,7 @@ export class ObsidianVault {
     } catch { return null; }
   }
 
-  async validateCourse(courseId: string, courseTitle: string, expectedNoteIdentities: Map<string, string> = new Map()) {
+  async validateCourse(courseId: string, courseTitle: string, expectedNoteIdentities: Map<string, string> = new Map(), expectedSourceHashes: Map<string, string> = new Map()) {
     const config = await this.getConfig();
     if (!config) throw new Error("Configure an Obsidian vault before checking class notes.");
     const vaultRealPath = await realpath(config.vaultPath);
@@ -335,6 +339,7 @@ export class ObsidianVault {
     for (const expectedPath of expectedNoteIdentities.keys()) {
       if (!actualNotePaths.has(expectedPath)) issues.push(`Expected class note is missing: ${expectedPath}`);
     }
+    const expectedIdentities = new Set(expectedNoteIdentities.values());
     let linksChecked = 0;
     const classPrefix = `${courseFolderRelative}/`;
     for (const path of markdownFiles) {
@@ -349,6 +354,17 @@ export class ObsidianVault {
       }
       if (expectedIdentity && hasExportId && markdownProperty(body, "id") !== expectedIdentity) {
         issues.push(`Managed note identity does not match the class export: ${notePath}`);
+      }
+      const noteIdentity = markdownProperty(body, "id");
+      if (hasExportId && !expectedIdentity && noteIdentity && expectedIdentities.has(noteIdentity)) {
+        issues.push(`Managed note is stored at an unexpected path: ${notePath}`);
+      } else if (hasExportId && !expectedIdentity && noteIdentity && /^(?:course:|study-journal:|topic-progress-|topic:|module:|course-assessment:|assessment:|source:)/.test(noteIdentity)) {
+        issues.push(`Unexpected managed note for this export: ${notePath}`);
+      }
+      const materialId = markdownProperty(body, "material_id");
+      const expectedSourceHash = materialId ? expectedSourceHashes.get(materialId) : undefined;
+      if (expectedSourceHash && markdownProperty(body, "source_hash") !== expectedSourceHash) {
+        issues.push(`Source note is out of date; export it again: ${notePath}`);
       }
       if ((hasExportId || expectedIdentity) && (starts !== 1 || ends !== 1 || body.indexOf(START) > body.indexOf(END))) {
         issues.push(`Generated section is missing or damaged: ${notePath}`);
