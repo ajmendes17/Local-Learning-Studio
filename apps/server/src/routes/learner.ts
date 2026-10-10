@@ -21,6 +21,7 @@ import {
   type CodexTask,
   type CourseMapProposal,
   type SourcePassage,
+  normalizeMathText,
 } from "@local-learning-studio/contracts";
 import type { FastifyInstance } from "fastify";
 import type { LearnerLibrary } from "../storage/learner-library.js";
@@ -61,6 +62,25 @@ function acceptedContrastTopics(map: CourseMapProposal | null, rawTopic: string)
 
 function topicTerms(value: string) {
   return value.normalize("NFKC").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function normalizeGeneratedQuestionText<T extends { question: string; feedback: string; hints: string[]; options?: string[] }>(content: T): T {
+  return {
+    ...content,
+    question: normalizeMathText(content.question),
+    feedback: normalizeMathText(content.feedback),
+    hints: content.hints.map((hint) => normalizeMathText(hint)),
+    ...(content.options ? { options: content.options.map((option) => normalizeMathText(option)) } : {}),
+  };
+}
+
+function normalizeGeneratedSessionText<T extends { lesson: string; example: string; clarification: string; question: string; feedback: string; hints: string[]; options: string[] }>(content: T): T {
+  return {
+    ...normalizeGeneratedQuestionText(content),
+    lesson: normalizeMathText(content.lesson),
+    example: normalizeMathText(content.example),
+    clarification: normalizeMathText(content.clarification),
+  };
 }
 
 function studyPassageMatchScore(content: string, topic: string) {
@@ -408,7 +428,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         "Never say the learner has mastered the topic based on this generated lesson.",
         "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, ...(parsed.data.method === "compare-contrast" ? { acceptedMapRelatedConcepts: contrastTopics } : {}), sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
       ].join("\n\n"), StudySessionGenerationContentSchema);
-      const content = StudySessionContentSchema.parse({ ...result.output, sourceBasis: sourceMaterial ? "course-materials" : "general-knowledge", conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(openResponse ? { options: [], answerIndex: null } : {}) });
+      const content = StudySessionContentSchema.parse({ ...normalizeGeneratedSessionText(result.output), sourceBasis: sourceMaterial ? "course-materials" : "general-knowledge", conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(openResponse ? { options: [], answerIndex: null } : {}) });
       return StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, concept.id, content));
     } catch (error) {
       if (error instanceof Error && error.name === "CodexRunError") {
@@ -485,7 +505,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           previousQuestion: session.question,
         }),
       ].join("\n\n"), questionSchema);
-      const question = questionSchema.parse(result.output);
+      const question = normalizeGeneratedQuestionText(questionSchema.parse(result.output));
       const { sessionId: _oldSessionId, createdAt: _oldCreatedAt, ...sessionContent } = session;
       const nextSession = StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, session.conceptId, {
         ...sessionContent,

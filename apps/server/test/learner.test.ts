@@ -26,9 +26,10 @@ function uploadPayload(filename: string, content: string) {
   return { payload: body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-async function createAppWithStudyModel() {
+async function createAppWithStudyModel(options: { corruptMath?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "learning-studio-learner-"));
   const prompts: string[] = [];
+  const controlCharacter = options.corruptMath ? String.fromCharCode(127) : "";
   const codex = {
     status: async () => ({ installed: true, authenticated: true, ready: true }),
     run: async (task: any, prompt: string, outputSchema: any) => {
@@ -38,18 +39,20 @@ async function createAppWithStudyModel() {
         topic: "model topic",
         method: prompt.includes("Start with unaided free recall") ? "free-recall" : "explanation",
         sourceBasis: "course-materials",
-        lesson: "## Source-grounded idea\n\nThe key operation is $H\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.",
-        example: "Apply the stated operation to the source problem.",
+        lesson: options.corruptMath
+          ? `## Source-grounded idea\n\nThe key operation is $H${controlCharacter}\\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.`
+          : "## Source-grounded idea\n\nThe key operation is $H\\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.",
+        example: options.corruptMath ? `Apply the stated operation to $${controlCharacter}\\ket{0}$.` : "Apply the stated operation to the source problem.",
         question: prompt.includes("Use a teach-back exercise")
           ? "Teach back the main idea and explain why it holds."
-          : "Which state does the source operation produce?",
+          : options.corruptMath ? `Which state $${controlCharacter}\\ket{\\psi}$ does the source operation produce?` : "Which state does the source operation produce?",
         ...(prompt.includes("Start with unaided free recall") ? {} : {
-          options: ["$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
+          options: [options.corruptMath ? `$${controlCharacter}\\lvert 0\\rangle$` : "$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
           answerIndex: 2,
         }),
-        feedback: "The source identifies the equal superposition.",
-        clarification: "The operation creates both basis components.",
-        hints: ["Check the coefficients in the source."],
+        feedback: options.corruptMath ? `The source identifies $${controlCharacter}\\ket{+}$.` : "The source identifies the equal superposition.",
+        clarification: options.corruptMath ? `The operation creates both components of $${controlCharacter}\\ket{\\psi}$.` : "The operation creates both basis components.",
+        hints: [options.corruptMath ? `Check the coefficient of $${controlCharacter}\\ket{0}$.` : "Check the coefficients in the source."],
       });
       return { task, model: "test-model", startedAt: new Date().toISOString(), durationMs: 1, output };
     },
@@ -566,7 +569,7 @@ test("study attempts from a learner exam scope update assessment and topic progr
 });
 
 test("exam topic study selects a matching class source and marks unmatched topics as general knowledge", async () => {
-  const { app, root, prompts } = await createAppWithStudyModel();
+  const { app, root, prompts } = await createAppWithStudyModel({ corruptMath: true });
   try {
     const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Quantum Information" } });
     const courseId = course.json().id as string;
@@ -593,6 +596,7 @@ test("exam topic study selects a matching class source and marks unmatched topic
       payload: { topic: "Bell states", method: "explanation", assessmentId: assessment.json().id },
     });
     assert.equal(sourceGrounded.statusCode, 200, sourceGrounded.body);
+    assert.equal(JSON.stringify(sourceGrounded.json()).includes(String.fromCharCode(127)), false, "generated math control characters must be removed before study content is persisted or returned");
     assert.equal(sourceGrounded.json().sourceMaterialId, readingUpload.json().id, "a focused reading should win a tie with the syllabus");
     assert.equal(sourceGrounded.json().sourceBasis, "course-materials");
     const groundedInput = JSON.parse(prompts.at(-1)!.split("INPUT_JSON\n\n")[1]!);
@@ -604,6 +608,7 @@ test("exam topic study selects a matching class source and marks unmatched topic
       method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${sourceGrounded.json().sessionId}/next-question`, payload: {},
     });
     assert.equal(adaptive.statusCode, 200, adaptive.body);
+    assert.equal(JSON.stringify(adaptive.json()).includes(String.fromCharCode(127)), false, "adaptive math control characters must be removed before returning the updated session");
     assert.equal(adaptive.json().sourceMaterialId, readingUpload.json().id);
     assert.equal(adaptive.json().assessmentId, assessment.json().id);
     assert.match(prompts.at(-1) ?? "", /READING_MATCH_SENTINEL/);
