@@ -201,10 +201,12 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
     reply.header("content-type", "application/json; charset=utf-8");
     reply.header("content-disposition", `attachment; filename="local-learning-studio-${courseId}-learner-data.json"`);
     reply.header("cache-control", "no-store");
+    const course = options.courses.getCourse(courseId)!;
     return {
-      exportVersion: 1,
+      exportVersion: 2,
       exportedAt: new Date().toISOString(),
       classId: courseId,
+      course: { id: course.id, title: course.title, code: course.code, term: course.term, accent: course.accent },
       profile: LearnerProfileResponseSchema.parse(options.learner.getProfile(courseId)),
       methodProgress: LearnerMethodProgressResponseSchema.parse(options.learner.getMethodProgress(courseId)),
       studySessions: options.learner.getStudySessionsForExport(courseId),

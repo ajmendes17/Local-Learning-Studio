@@ -728,9 +728,10 @@ test("learner-data export includes the full class profile, saved sessions, and r
     });
     assert.equal(material.statusCode, 201, material.body);
     const passages = await app.inject({ method: "GET", url: `/api/courses/${courseId}/materials/${material.json().id}/passages` });
+    const sourcePassageId = passages.json().passages[0].id as string;
     const annotation = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/materials/${material.json().id}/annotations`,
-      payload: { passageId: passages.json().passages[0].id, body: "Remember the relative phase." },
+      payload: { passageId: sourcePassageId, body: "Remember the relative phase." },
     });
     assert.equal(annotation.statusCode, 201, annotation.body);
     const scope = await app.inject({
@@ -750,7 +751,7 @@ test("learner-data export includes the full class profile, saved sessions, and r
         sessionId: session.json().sessionId, conceptId: session.json().conceptId,
         assessmentId: scope.json().id, activityType: "recognition", prompt: session.json().question,
         response: responseText, reasoning: "A short reasoning note.", confidence: 0.75,
-        hintCount: 1, method: "quiz", outcome: "correct", sourceRefs: [],
+        hintCount: 1, method: "quiz", outcome: "correct", sourceRefs: [{ materialId: material.json().id, passageId: sourcePassageId }],
         independence: "hinted", rationale: "Correct after using one hint.",
       },
     });
@@ -761,8 +762,9 @@ test("learner-data export includes the full class profile, saved sessions, and r
     assert.match(exported.headers["content-disposition"] ?? "", new RegExp(`attachment; filename="local-learning-studio-${courseId}-learner-data\\.json"`));
     assert.equal(exported.headers["cache-control"], "no-store");
     const data = exported.json();
-    assert.equal(data.exportVersion, 1);
+    assert.equal(data.exportVersion, 2);
     assert.equal(data.classId, courseId);
+    assert.deepEqual(data.course, { id: courseId, title: "Portable data fixture", code: "", term: "", accent: "moss" });
     assert.ok(Number.isFinite(Date.parse(data.exportedAt)));
     assert.equal(data.profile.assessments[0].title, "Final review");
     assert.equal(data.studySessions.length, 1);
@@ -770,6 +772,8 @@ test("learner-data export includes the full class profile, saved sessions, and r
     assert.equal(data.attempts.length, 1);
     assert.equal(data.attempts[0].response, responseText);
     assert.equal(data.attempts[0].independence, "hinted");
+    assert.deepEqual(data.attempts[0].sourceRefs, [{ materialId: material.json().id, passageId: sourcePassageId }]);
+    assert.deepEqual(data.attempts[0].sourceMaterialIds, [material.json().id]);
     assert.equal(data.sourceAnnotations.length, 1);
     assert.equal(data.sourceAnnotations[0].body, "Remember the relative phase.");
     assert.deepEqual(data.learningPatterns, []);

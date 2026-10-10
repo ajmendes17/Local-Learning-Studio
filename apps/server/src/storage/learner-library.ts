@@ -314,6 +314,7 @@ export class LearnerLibrary {
         reasoning: row.reasoning as string, confidence: row.confidence == null ? null : Number(row.confidence),
         hintCount: Number(row.hintCount), method: row.method as string, outcome: row.outcome as string,
         independence: row.independence as string, createdAt: row.createdAt as string,
+        sourceRefs,
         correctAnswer: Array.isArray(sessionOptions) && Number.isInteger(answerIndex) && answerIndex! >= 0
           ? (typeof sessionOptions[answerIndex!] === "string" ? sessionOptions[answerIndex!] as string : null)
           : null,
