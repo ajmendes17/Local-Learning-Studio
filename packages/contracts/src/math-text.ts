@@ -14,8 +14,41 @@ function normalizeMathDelimiters(content: string, inline: boolean) {
   }).join("");
 }
 
+const diracSymbols: Record<string, string> = {
+  "α": "\\alpha", "β": "\\beta", "δ": "\\delta", "ε": "\\epsilon", "θ": "\\theta",
+  "λ": "\\lambda", "μ": "\\mu", "ν": "\\nu", "ρ": "\\rho", "σ": "\\sigma", "φ": "\\phi", "ψ": "\\psi",
+  "Γ": "\\Gamma", "Δ": "\\Delta", "Θ": "\\Theta", "Λ": "\\Lambda", "Σ": "\\Sigma", "Φ": "\\Phi", "Ψ": "\\Psi", "Ω": "\\Omega",
+};
+
+function diracLabel(label: string) {
+  const compact = label.trim().replace(/\s+/g, "").replace(/[−–]/g, "-");
+  return compact
+    .replace(/([α-ωΑ-Ω])([+-])/gu, "$1^{$2}")
+    .replace(/[α-ωΑ-Ω]/gu, (symbol) => diracSymbols[symbol] ?? symbol);
+}
+
+function normalizeRawDiracNotation(content: string) {
+  const parts = content.split(/(```[\s\S]*?```|`[^`\n]*`|\$\$?)/g);
+  let inMath = false;
+  return parts.map((part) => {
+    if (part === "$" || part === "$$") {
+      inMath = !inMath;
+      return part;
+    }
+    if (inMath || part.startsWith("`") || !part) return part;
+    return part
+      .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|\s*([^〈⟨〉⟩]{1,32}?)\s*[〉⟩]/gu,
+        (_match, left: string, right: string) => `$\\braket{${diracLabel(left)}|${diracLabel(right)}}$`)
+      .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|/gu,
+        (_match, state: string) => `$\\bra{${diracLabel(state)}}$`)
+      .replace(/\|\s*([^|〈⟨〉⟩]{1,32}?)\s*[〉⟩]/gu,
+        (_match, state: string) => `$\\ket{${diracLabel(state)}}$`)
+      .replace(/√\s*([A-Za-z0-9]+)/gu, (_match, radicand: string) => `$\\sqrt{${radicand}}$`);
+  }).join("");
+}
+
 export function normalizeMathText(input: string, options: { inline?: boolean } = {}) {
-  const content = normalizeMathDelimiters(input, options.inline ?? false);
+  const content = normalizeRawDiracNotation(normalizeMathDelimiters(input, options.inline ?? false));
   let inMath = false;
   return content.split(/(\$\$?)/g).map((part) => {
     if (part === "$" || part === "$$") {

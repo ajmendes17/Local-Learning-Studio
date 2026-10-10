@@ -246,6 +246,15 @@ ${fencedCode}`;
   assert.equal(normalizeMathText(String.raw`\[\frac{1}{2}\]`, { inline: true }), String.raw`$\frac{1}{2}$`);
 });
 
+test("math text renders recognizable PDF Dirac notation without changing code or delimited math", () => {
+  const extracted = "Use | + 〉 = (| 0 〉 + | 1 〉)/√2 and 〈Φ + | Ψ −〉 with 〈0|, then compare `| 00 〉` literally.";
+  assert.equal(
+    normalizeMathText(extracted),
+    String.raw`Use $\ket{+}$ = ($\ket{0}$ + $\ket{1}$)/$\sqrt{2}$ and $\braket{\Phi^{+}|\Psi^{-}}$ with $\bra{0}$, then compare ` + "`| 00 〉`" + " literally.",
+  );
+  assert.equal(normalizeMathText(String.raw`Existing $|0\rangle$ and \(\lvert 1\rangle\)`), String.raw`Existing $|0\rangle$ and $\lvert 1\rangle$`);
+});
+
 test("instructor topic lists persist as class-scoped learner assessment topics", async () => {
   const { app, root } = await createAppWithStudyModel();
   const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Quantum Information" } });
