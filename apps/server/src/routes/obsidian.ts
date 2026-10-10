@@ -2,10 +2,10 @@ import { isAbsolute } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { CourseLibrary } from "../storage/course-library.js";
-import type { LearningArtifactLibrary } from "../storage/learning-artifact-library.js";
 import type { LearnerLibrary } from "../storage/learner-library.js";
 import type { SourceLibrary } from "../storage/source-library.js";
 import { ObsidianVault } from "../storage/obsidian-vault.js";
+import type { LearningWorkflowService } from "../learning/learning-workflow-service.js";
 
 const configSchema = z.object({ vaultPath: z.string().trim().min(1).max(1000), folderPath: z.string().trim().min(1).max(300).optional() });
 const courseParams = z.object({ courseId: z.string().uuid() });
@@ -13,9 +13,9 @@ const courseParams = z.object({ courseId: z.string().uuid() });
 export async function registerObsidianRoutes(app: FastifyInstance, options: {
   vault: ObsidianVault;
   courses: CourseLibrary;
-  artifacts: LearningArtifactLibrary;
   learner: LearnerLibrary;
   sources: SourceLibrary;
+  learning: LearningWorkflowService;
 }) {
   app.get("/api/obsidian/status", async () => {
     const config = await options.vault.getConfig();
@@ -41,7 +41,8 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
     if (!parsed.success) return reply.code(400).send({ error: "Class ID is invalid." });
     const course = options.courses.getCourseDetail(parsed.data.courseId);
     if (!course) return reply.code(404).send({ error: "Class not found." });
-    const acceptedMap = options.artifacts.acceptedCourseMap(course.id);
+    const acceptedMap = options.learning.getAcceptedCourseMap(course.id);
+    const currentAcceptedMap = options.learning.getCurrentAcceptedCourseMap(course.id);
     try {
       const result = await options.vault.exportCourse({
         course: {
@@ -61,6 +62,7 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
           }),
         },
         map: acceptedMap?.payload ?? null,
+        mapStatus: acceptedMap ? currentAcceptedMap?.id === acceptedMap.id ? "current" : "stale" : "none",
         profile: options.learner.getProfile(course.id),
         methodProgress: options.learner.getMethodProgress(course.id),
         studyAttempts: options.learner.getAttemptsForObsidianExport(course.id),

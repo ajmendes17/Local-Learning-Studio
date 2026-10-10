@@ -117,6 +117,13 @@ export class LearningWorkflowService {
     return this.artifacts.acceptedCourseMap(courseId);
   }
 
+  getCurrentAcceptedCourseMap(courseId: string) {
+    const current = this.getArtifacts(courseId);
+    return current.classificationCurrent && current.courseMapCurrent && current.courseMap?.status === "accepted"
+      ? current.courseMap
+      : null;
+  }
+
   async classifySources(courseId: string, regenerate = false) {
     const projection = this.projection(courseId);
     if (!regenerate) {

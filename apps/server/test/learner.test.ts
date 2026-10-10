@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -10,6 +10,7 @@ import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/storage/database.js";
 import { LearningArtifactLibrary } from "../src/storage/learning-artifact-library.js";
+import { SourceLibrary } from "../src/storage/source-library.js";
 
 function uploadPayload(filename: string, content: string) {
   const boundary = "learner-study-test-boundary";
@@ -641,9 +642,25 @@ test("compare and contrast uses accepted course-map neighbors in initial and ada
     const passageId = passages.json().passages[0].id as string;
     const database = openDatabase(join(root, "data", "studio.sqlite"));
     const artifacts = new LearningArtifactLibrary(database);
+    const sourceLibrary = new SourceLibrary(database);
+    const sourceFingerprint = createHash("sha256")
+      .update(`course-source.v1\n${courseId}\n${sourceLibrary.getCoursePassageHashes(courseId).map(({ materialId, contentHash }) => `${materialId}:${contentHash}`).join("\n")}`)
+      .digest("hex");
+    const classificationPayload = {
+      schemaVersion: "source-classification.v1" as const,
+      courseId,
+      sourceMaterialIds: [material.json().id as string],
+      sources: [{ materialId: material.json().id as string, role: "reading" as const, summary: "Quantum density operator notes.", confidence: "high" as const, evidence: [{ materialId: material.json().id as string, passageId }] }],
+      gaps: [],
+      warnings: [],
+    };
+    artifacts.saveClassification({ courseId, sourceFingerprint, model: "test-model", payload: classificationPayload });
+    const mapFingerprint = createHash("sha256")
+      .update(`course-map-input.v1\n${sourceFingerprint}\n${JSON.stringify(classificationPayload)}`)
+      .digest("hex");
     const artifact = artifacts.saveCourseMap({
       courseId,
-      sourceFingerprint: "a".repeat(64),
+      sourceFingerprint: mapFingerprint,
       model: "test-model",
       payload: {
         schemaVersion: "course-map.v1",
@@ -690,12 +707,27 @@ test("compare and contrast uses accepted course-map neighbors in initial and ada
     const methodProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
     assert.deepEqual(methodProgress.json().map((item: { method: string; attemptCount: number; correctCount: number }) => [item.method, item.attemptCount, item.correctCount]), [["compare-contrast", 1, 1]]);
 
+    const changedEvidenceDb = openDatabase(join(root, "data", "studio.sqlite"));
+    changedEvidenceDb.prepare("UPDATE source_passages SET content_hash=? WHERE course_id=? AND material_id=? AND id=?")
+      .run("f".repeat(64), courseId, material.json().id, passageId);
+    changedEvidenceDb.close();
+    const staleStatus = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learning-artifacts` });
+    assert.equal(staleStatus.json().classificationCurrent, false);
+    assert.equal(staleStatus.json().courseMapCurrent, false);
+    const staleStudy = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-session`, payload: { topic: "Partial trace", method: "compare-contrast", sourceMaterialId: material.json().id } });
+    assert.equal(staleStudy.statusCode, 200, staleStudy.body);
+    const staleInput = JSON.parse((prompts.at(-1) ?? "").split("INPUT_JSON\n\n")[1] ?? "{}");
+    assert.deepEqual(staleInput.acceptedMapRelatedConcepts, [], "stale map neighbors must not guide a new comparison lesson");
+
     const vaultPath = join(root, "vault");
     await mkdir(vaultPath, { recursive: true });
     const configured = await app.inject({ method: "POST", url: "/api/obsidian/config", payload: { vaultPath } });
     assert.equal(configured.statusCode, 200, configured.body);
     const exported = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
     assert.equal(exported.statusCode, 200, exported.body);
+    const exportedCourseNote = await readFile(join(vaultPath, exported.json().courseFolder, "Course.md"), "utf8");
+    assert.match(exportedCourseNote, /Course map:\*\* Accepted structure · stale/);
+    assert.match(exportedCourseNote, /Imported source text has changed since this structure was accepted/);
     const journal = await readFile(join(vaultPath, exported.json().courseFolder, "Study Journal.md"), "utf8");
     assert.match(journal, /Compare & contrast/);
   } finally {

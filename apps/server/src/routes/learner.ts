@@ -25,7 +25,7 @@ import type { FastifyInstance } from "fastify";
 import type { LearnerLibrary } from "../storage/learner-library.js";
 import type { CourseLibrary } from "../storage/course-library.js";
 import type { SourceLibrary } from "../storage/source-library.js";
-import type { LearningArtifactLibrary } from "../storage/learning-artifact-library.js";
+import type { LearningWorkflowService } from "../learning/learning-workflow-service.js";
 import { z } from "zod";
 
 function acceptedContrastTopics(map: CourseMapProposal | null, rawTopic: string) {
@@ -60,9 +60,9 @@ function acceptedContrastTopics(map: CourseMapProposal | null, rawTopic: string)
 
 export async function registerLearnerRoutes(app: FastifyInstance, options: {
   learner: LearnerLibrary;
-  artifacts: LearningArtifactLibrary;
   courses: CourseLibrary;
   sources: SourceLibrary;
+  learning: LearningWorkflowService;
   codex: { run<T>(task: CodexTask, prompt: string, schema: import("zod").ZodType<T>): Promise<{ output: T; model?: string }> };
 }) {
   const paramsSchema = z.object({ courseId: z.string().uuid() });
@@ -276,7 +276,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         .slice(0, 24)
       : [];
     const contrastTopics = parsed.data.method === "compare-contrast"
-      ? acceptedContrastTopics(options.artifacts.acceptedCourseMap(courseId)?.payload ?? null, parsed.data.topic)
+      ? acceptedContrastTopics(options.learning.getCurrentAcceptedCourseMap(courseId)?.payload ?? null, parsed.data.topic)
       : [];
     const concept = options.learner.ensureConcept(courseId, parsed.data.topic);
     if (reviewSession && reviewSession.conceptId !== concept.id) {
@@ -354,7 +354,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           .slice(0, 24)
         : [];
       const contrastTopics = session.method === "compare-contrast"
-        ? acceptedContrastTopics(options.artifacts.acceptedCourseMap(courseId)?.payload ?? null, session.topic)
+        ? acceptedContrastTopics(options.learning.getCurrentAcceptedCourseMap(courseId)?.payload ?? null, session.topic)
         : [];
       const openResponse = session.method === "free-recall" || session.method === "teach-back";
       const questionSchema = openResponse ? StudyFreeRecallQuestionSchema : StudyQuestionSchema;
