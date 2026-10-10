@@ -256,6 +256,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       analogy: "Choose a concrete analogy that maps the important parts of the concept, state where the analogy breaks, then connect it back to precise terms.",
       "free-recall": "Start with unaided free recall: ask one open-ended question that requires the learner to explain the core concept in their own words. Progressive in-app hints may be requested and are tracked separately. Do not make the question multiple choice. Keep the answer explanation hidden until the learner submits a short response; after submission, show a concise reference explanation they can compare against. Do not claim the response was graded.",
       "teach-back": "Use a teach-back exercise: ask the learner to explain the core idea as if teaching a curious student who has not seen it before. Prompt them to state the key relationship and explain why it holds, in their own words. Keep the reference explanation hidden until they submit. Do not make the question multiple choice or claim their response was graded.",
+      "compare-contrast": "Use contrastive learning: identify a closely related course-supported idea that learners may confuse with this topic. Explain both ideas side by side, emphasize the decisive difference, and give a concise example of when each applies. The knowledge check should test that distinction in a new case. Ground both sides in supplied course evidence when available and do not invent unsupported contrasts.",
     } satisfies Record<typeof parsed.data.method, string>;
     const openResponse = parsed.data.method === "free-recall" || parsed.data.method === "teach-back";
     try {
@@ -320,7 +321,9 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           ? session.method === "teach-back"
             ? "Use $generate-adaptive-practice to create one new teach-back prompt for this same concept. Ask the learner to explain the idea as if teaching a new student; the learner will submit text and compare it with a reference explanation, so do not make the prompt multiple choice."
             : "Use $generate-adaptive-practice to create one new open-ended free-recall prompt for this same concept. Ask the learner to explain or retrieve the idea in their own words; the learner will submit text and compare it with a reference explanation, so do not make the prompt multiple choice."
-          : "Use $generate-adaptive-practice to create exactly one new multiple-choice question for this same concept.",
+            : session.method === "compare-contrast"
+              ? "Use $generate-adaptive-practice to create one new multiple-choice question that tests the distinction between this concept and a closely related course-supported idea. Use a new case and explain the decisive difference in feedback."
+              : "Use $generate-adaptive-practice to create exactly one new multiple-choice question for this same concept.",
         "Use the attempt history to target likely uncertainty. Change the surface form or reasoning path; do not repeat any prior question or simply paraphrase its choices.",
         openResponse
           ? "Return the open-ended prompt, its concise reference explanation as feedback, and up to two progressive hints. Do not return choices or an answer key."

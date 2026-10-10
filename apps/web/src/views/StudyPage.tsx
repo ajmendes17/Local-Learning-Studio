@@ -6,7 +6,7 @@ import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTop
 import { appendInstructorTopicWording } from "../lib/instructor-topic-scope";
 import "../styles/study.css";
 
-type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall" | "teach-back";
+type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall" | "teach-back" | "compare-contrast";
 const studyMethods: Array<{ value: Method; label: string; description: string }> = [
   { value: "explanation", label: "Clear explanation", description: "Build intuition first, then connect the idea to precise terms and a short example." },
   { value: "worked-example", label: "Worked example", description: "Follow a complete solution step by step, then identify the pattern you can reuse." },
@@ -14,6 +14,7 @@ const studyMethods: Array<{ value: Method; label: string; description: string }>
   { value: "analogy", label: "Use an analogy", description: "Connect the idea to something familiar, including where that comparison stops working." },
   { value: "free-recall", label: "Free recall", description: "Try one open question from memory, then compare your response with the reference. Optional hints are tracked; your response is saved but not graded." },
   { value: "teach-back", label: "Teach it back", description: "Explain the idea as if teaching a new student. Compare your explanation with the reference; your response is saved but not graded." },
+  { value: "compare-contrast", label: "Compare & contrast", description: "Study two closely related ideas side by side, then check whether you can tell when each one applies." },
 ];
 
 function isOpenResponseMethod(method: string | undefined) {
@@ -33,6 +34,7 @@ function studyMethodLabel(method: string) {
     case "analogy": return "Use an analogy";
     case "free-recall": return "Free recall";
     case "teach-back": return "Teach it back";
+    case "compare-contrast": return "Compare & contrast";
     default: return method.trim() ? method.replaceAll("-", " ") : "Method not recorded";
   }
 }

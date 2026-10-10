@@ -543,6 +543,7 @@ test("study methods send distinct learning directions", async () => {
     ["analogy", /concrete analogy/],
     ["free-recall", /Start with unaided free recall/],
     ["teach-back", /Use a teach-back exercise/],
+    ["compare-contrast", /Use contrastive learning/],
   ] as const;
   for (const [method, direction] of methods) {
     const response = await app.inject({
@@ -554,7 +555,18 @@ test("study methods send distinct learning directions", async () => {
     assert.equal(response.json().method, method);
     assert.match(prompts.at(-1) ?? "", direction);
   }
-  assert.equal(prompts.length, methods.length);
+  const compareSession = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-session`, payload: { topic: "Method check: contrast", method: "compare-contrast" } });
+  assert.equal(compareSession.statusCode, 200, compareSession.body);
+  const reopenedContrast = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions/${compareSession.json().sessionId}` });
+  assert.equal(reopenedContrast.statusCode, 200, reopenedContrast.body);
+  assert.equal(reopenedContrast.json().method, "compare-contrast");
+  const history = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions` });
+  assert.ok(history.json().some((item: { sessionId: string; method: string }) => item.sessionId === compareSession.json().sessionId && item.method === "compare-contrast"));
+  const nextContrast = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${compareSession.json().sessionId}/next-question`, payload: {} });
+  assert.equal(nextContrast.statusCode, 200, nextContrast.body);
+  assert.equal(nextContrast.json().method, "compare-contrast");
+  assert.match(prompts.at(-1) ?? "", /tests the distinction between this concept/);
+  assert.equal(prompts.length, methods.length + 2);
   await app.close();
   await rm(root, { recursive: true });
 });
