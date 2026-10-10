@@ -203,12 +203,30 @@ test("class recommendation distinguishes lesson-only topics and suggests their f
   assert.deepEqual(recommendNextStudyTopic([{ title: "No lesson yet" }], []), { topic: { title: "No lesson yet" }, reason: "not-practiced" });
 });
 
+test("recommendations ask for an independent check after assisted-only correct attempts", () => {
+  const topics = [{ title: "Bell states" }, { title: "Partial trace" }, { title: "Untouched" }];
+  const signals = [
+    { title: "Bell states", attemptCount: 2, latestOutcome: "correct", lastPracticedAt: "2026-10-08T10:00:00.000Z" },
+    { title: "Partial trace", attemptCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-09T10:00:00.000Z" },
+  ];
+  const independence = [
+    { title: "Bell states", scoredAttemptCount: 2, independentScoredAttemptCount: 0 },
+    { title: "Partial trace", scoredAttemptCount: 1, independentScoredAttemptCount: 0 },
+  ];
+  assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), signals, independence), { topic: topics[0], reason: "needs-independent-check" });
+  assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), [
+    { ...signals[0]!, latestOutcome: "incorrect" }, signals[1]!,
+  ], independence), { topic: topics[0], reason: "needs-review" });
+  assert.deepEqual(recommendNextStudyTopic(topics, signals, independence), { topic: topics[2], reason: "not-practiced" });
+});
+
 test("cross-scope recommendations preserve review urgency and instructor priority", () => {
   const candidates = [
     { title: "Low priority, newer miss", reason: "needs-review" as const, importance: "low" as const, lastPracticedAt: "2026-10-09T10:00:00.000Z", contextPriority: 0 },
     { title: "High priority, older miss", reason: "needs-review" as const, importance: "high" as const, lastPracticedAt: "2026-10-07T10:00:00.000Z", contextPriority: 3 },
     { title: "Lesson opened, no check", reason: "lesson-only" as const, importance: "normal" as const, contextPriority: 0 },
     { title: "High priority, untouched", reason: "not-practiced" as const, importance: "high" as const, contextPriority: 0 },
+    { title: "No independent check yet", reason: "needs-independent-check" as const, importance: "high" as const, contextPriority: 0 },
     { title: "Normal priority, untouched", reason: "not-practiced" as const, importance: "normal" as const, contextPriority: 0 },
   ];
   assert.deepEqual(prioritizeStudyRecommendations(candidates).map(({ title }) => title), [
@@ -217,6 +235,7 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
     "Lesson opened, no check",
     "High priority, untouched",
     "Normal priority, untouched",
+    "No independent check yet",
   ]);
   assert.equal(candidates[0]!.title, "Low priority, newer miss", "ranking should not reorder the caller's array");
 });

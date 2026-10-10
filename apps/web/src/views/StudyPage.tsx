@@ -57,7 +57,7 @@ interface MethodProgress { method: string; attemptCount: number; scoredAttemptCo
 interface AssessmentScope { id: string; title: string; instructorText: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
 interface StudyRecommendation {
   title: string;
-  reason: "needs-review" | "lesson-only" | "not-practiced" | "least-recently-practiced";
+  reason: "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "least-recently-practiced";
   latestOutcome: string | null;
   lastPracticedAt: string | null;
   assessmentId?: string;
@@ -634,15 +634,24 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     }
   }
 
-  // Include lesson-only topics here: a learner may have studied one already
-  // without saving a knowledge check, which is a useful next retrieval prompt.
-  const classNextTopic = recommendNextStudyTopic(progress, progress);
+  const independenceByTitle = new Map<string, { title: string; scoredAttemptCount: number; independentScoredAttemptCount: number }>();
+  for (const method of methodProgress) for (const topic of method.topicProgress) {
+    const key = topic.title.trim().normalize("NFKC").toLocaleLowerCase();
+    const current = independenceByTitle.get(key) ?? { title: topic.title, scoredAttemptCount: 0, independentScoredAttemptCount: 0 };
+    current.scoredAttemptCount += topic.scoredAttemptCount;
+    current.independentScoredAttemptCount += topic.independentScoredAttemptCount;
+    independenceByTitle.set(key, current);
+  }
+  const independenceSignals = [...independenceByTitle.values()];
+  // Include lesson-only topics and topics with only assisted checks: both need
+  // a retrieval attempt that adds a new kind of evidence.
+  const classNextTopic = recommendNextStudyTopic(progress, progress, independenceSignals);
   const mappedNextTopic = acceptedCourseMap
-    ? recommendNextStudyTopic(acceptedCourseMap.payload.concepts, progress)
+    ? recommendNextStudyTopic(acceptedCourseMap.payload.concepts, progress, independenceSignals)
     : null;
   const recommendations: StudyRecommendation[] = [
     ...assessmentScopes.flatMap((assessment) => {
-      const next = recommendNextStudyTopic(assessment.topics, assessment.topics);
+      const next = recommendNextStudyTopic(assessment.topics, assessment.topics, independenceSignals);
       return next ? [{
         title: next.topic.title,
         reason: next.reason,
@@ -654,7 +663,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       }] : [];
     }),
     ...sourceProgress.flatMap((source) => {
-      const next = recommendNextStudyTopic(source.topics, source.topics);
+      const next = recommendNextStudyTopic(source.topics, source.topics, independenceSignals);
       return next ? [{
         title: next.topic.title,
         reason: next.reason,
@@ -695,12 +704,22 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       ? "You’ve opened this lesson; a first knowledge check can show what you recall."
     : nextRecommendation?.reason === "not-practiced"
       ? "No lesson or check activity is recorded for this topic yet."
+    : nextRecommendation?.reason === "needs-independent-check"
+      ? "You have saved scored checks for this topic, but none were recorded as independent. Try it without hints or outside help for a clearer recall signal."
       : nextRecommendation?.lastPracticedAt
         ? `Last practiced ${new Date(nextRecommendation.lastPracticedAt).toLocaleDateString()}.`
         : "No recent practice is recorded.";
   const recommendationMethod: Method = nextRecommendation?.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect"
     ? "error-analysis"
+    : nextRecommendation?.reason === "needs-independent-check"
+      ? "quiz"
     : method;
+  const topicIndependenceSummary = (title: string) => {
+    const signal = independenceByTitle.get(title.trim().normalize("NFKC").toLocaleLowerCase());
+    return signal?.scoredAttemptCount
+      ? ` · ${signal.independentScoredAttemptCount} of ${signal.scoredAttemptCount} scored checks independent`
+      : "";
+  };
   const sessionSourceTitle = content?.sourceMaterialId
     ? sourceProgress.find(({ materialId }) => materialId === content.sourceMaterialId)?.title
     : undefined;
@@ -802,7 +821,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         {budget ? <div className="budget-result"><p className="budget-result__total">{budget.reduce((sum, item) => sum + item.minutes, 0)} minutes suggested · saved to {budgetTitle}</p>{budget.map((item) => <p key={item.topic}><strong>{item.topic}</strong><span>{item.minutes} min</span></p>)}</div> : null}
       </form>
     </section> : null}
-    <section className="study-memory"><div className="study-memory__head"><div><p className="section-kicker">This class</p><h2>Your learning trail</h2></div><span>Evidence builds over time; one correct answer does not establish mastery.</span></div>{nextRecommendation ? <div className="next-review-card"><div><p className="section-kicker">{nextRecommendation.reason === "lesson-only" ? "First knowledge check" : nextRecommendation.reason === "not-practiced" ? "A useful next study" : "A useful next review"}</p><strong>{nextRecommendation.title}</strong><span>{nextRecommendation.importance === "high" ? "High-priority topic · " : ""}{recommendationStatus}{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? " We’ll use first-mistake analysis to unpack it." : ""}{nextRecommendation.assessmentTitle ? ` · ${nextRecommendation.assessmentTitle}` : nextRecommendation.sourceTitle ? ` · ${nextRecommendation.sourceTitle}` : " · Across this class"}</span></div><button type="button" className="button-secondary" disabled={busy} onClick={() => void startStudy(nextRecommendation.title, recommendationMethod, nextRecommendation.sourceMaterialId, nextRecommendation.assessmentId)}>{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? "Find the first mistake →" : nextRecommendation.reason === "lesson-only" ? "Try your first check →" : nextRecommendation.assessmentTitle ? "Practice for this scope →" : nextRecommendation.sourceTitle ? `Study with ${nextRecommendation.sourceTitle} →` : recommendationMethod === "quiz" ? "Practice with a quiz →" : `Practice with ${studyMethodLabel(recommendationMethod)} →`}</button></div> : null}<div className="study-memory__grid"><div className="study-memory__progress"><strong>Topic signals</strong>{progress.length ? progress.map((item) => <div className="progress-row" key={item.id}><span>{item.title}</span><small>{item.scoredAttemptCount ? `${item.correctCount} of ${item.scoredAttemptCount} scored checks correct${item.attemptCount > item.scoredAttemptCount ? ` · ${item.attemptCount - item.scoredAttemptCount} unscored` : ""}${item.latestOutcome ? ` · latest ${item.latestOutcome}` : ""}${item.lastPracticedAt ? ` · last checked ${new Date(item.lastPracticedAt).toLocaleDateString()}` : ""}` : item.attemptCount ? `${item.attemptCount} unscored attempt${item.attemptCount === 1 ? "" : "s"}${item.latestOutcome ? ` · latest ${item.latestOutcome}` : ""}` : item.sessionCount ? `${item.sessionCount} lesson session${item.sessionCount === 1 ? "" : "s"} · no checks saved${item.lastSessionAt ? ` · last lesson ${new Date(item.lastSessionAt).toLocaleDateString()}` : ""}` : "No lesson or check activity yet"}</small></div>) : <p>Saved class progress will appear here as you study.</p>}</div><div className="study-memory__history"><strong>Recent lessons</strong>{history.length ? history.slice(0,5).map((item) => <button type="button" key={item.sessionId} onClick={() => void reopenSession(item.sessionId)}><span>{item.topic}</span><small>{studyMethodLabel(item.method)} · {item.attemptCount} checks · {new Date(item.createdAt).toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></button>) : <p>Your generated lessons will be saved here for later.</p>}</div></div><div className="study-method-progress"><div><strong>Practice by approach</strong><p>Confidence gap averages the distance between your rated confidence and each scored outcome; lower is closer to outcomes. Small samples and different topics make method comparisons uncertain.</p></div>{methodProgress.length ? <ul>{methodProgress.map((item) => {
+    <section className="study-memory"><div className="study-memory__head"><div><p className="section-kicker">This class</p><h2>Your learning trail</h2></div><span>Evidence builds over time; one correct answer does not establish mastery.</span></div>{nextRecommendation ? <div className="next-review-card"><div><p className="section-kicker">{nextRecommendation.reason === "lesson-only" ? "First knowledge check" : nextRecommendation.reason === "not-practiced" ? "A useful next study" : nextRecommendation.reason === "needs-independent-check" ? "Check solo recall" : "A useful next review"}</p><strong>{nextRecommendation.title}</strong><span>{nextRecommendation.importance === "high" ? "High-priority topic · " : ""}{recommendationStatus}{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? " We’ll use first-mistake analysis to unpack it." : ""}{nextRecommendation.assessmentTitle ? ` · ${nextRecommendation.assessmentTitle}` : nextRecommendation.sourceTitle ? ` · ${nextRecommendation.sourceTitle}` : " · Across this class"}</span></div><button type="button" className="button-secondary" disabled={busy} onClick={() => void startStudy(nextRecommendation.title, recommendationMethod, nextRecommendation.sourceMaterialId, nextRecommendation.assessmentId)}>{nextRecommendation.reason === "needs-review" && nextRecommendation.latestOutcome === "incorrect" ? "Find the first mistake →" : nextRecommendation.reason === "lesson-only" ? "Try your first check →" : nextRecommendation.reason === "needs-independent-check" ? "Try it without hints →" : nextRecommendation.assessmentTitle ? "Practice for this scope →" : nextRecommendation.sourceTitle ? `Study with ${nextRecommendation.sourceTitle} →` : recommendationMethod === "quiz" ? "Practice with a quiz →" : `Practice with ${studyMethodLabel(recommendationMethod)} →`}</button></div> : null}<div className="study-memory__grid"><div className="study-memory__progress"><strong>Topic signals</strong>{progress.length ? progress.map((item) => <div className="progress-row" key={item.id}><span>{item.title}</span><small>{item.scoredAttemptCount ? `${item.correctCount} of ${item.scoredAttemptCount} scored checks correct${item.attemptCount > item.scoredAttemptCount ? ` · ${item.attemptCount - item.scoredAttemptCount} unscored` : ""}${item.latestOutcome ? ` · latest ${item.latestOutcome}` : ""}${item.lastPracticedAt ? ` · last checked ${new Date(item.lastPracticedAt).toLocaleDateString()}` : ""}` : item.attemptCount ? `${item.attemptCount} unscored attempt${item.attemptCount === 1 ? "" : "s"}${item.latestOutcome ? ` · latest ${item.latestOutcome}` : ""}` : item.sessionCount ? `${item.sessionCount} lesson session${item.sessionCount === 1 ? "" : "s"} · no checks saved${item.lastSessionAt ? ` · last lesson ${new Date(item.lastSessionAt).toLocaleDateString()}` : ""}` : "No lesson or check activity yet"}{topicIndependenceSummary(item.title)}</small></div>) : <p>Saved class progress will appear here as you study.</p>}</div><div className="study-memory__history"><strong>Recent lessons</strong>{history.length ? history.slice(0,5).map((item) => <button type="button" key={item.sessionId} onClick={() => void reopenSession(item.sessionId)}><span>{item.topic}</span><small>{studyMethodLabel(item.method)} · {item.attemptCount} checks · {new Date(item.createdAt).toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></button>) : <p>Your generated lessons will be saved here for later.</p>}</div></div><div className="study-method-progress"><div><strong>Practice by approach</strong><p>Confidence gap averages the distance between your rated confidence and each scored outcome; lower is closer to outcomes. Small samples and different topics make method comparisons uncertain.</p></div>{methodProgress.length ? <ul>{methodProgress.map((item) => {
       const score = item.scoredAttemptCount ? Math.round(item.correctCount / item.scoredAttemptCount * 100) : 0;
       const independentScore = item.independentScoredAttemptCount ? Math.round(item.independentCorrectCount / item.independentScoredAttemptCount * 100) : 0;
       const label = studyMethodLabel(item.method);
