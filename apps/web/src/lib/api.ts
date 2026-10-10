@@ -78,6 +78,11 @@ export async function getLearningArtifacts(courseId: string) {
   );
 }
 
+export async function getAcceptedCourseMap(courseId: string) {
+  const response = await fetch(`/api/courses/${courseId}/course-map/accepted`);
+  return CourseMapArtifactSchema.nullable().parse(await readResponse(response));
+}
+
 export async function classifyCourseSources(
   courseId: string,
   regenerate = false,

@@ -272,12 +272,25 @@ test("course sources flow through cached classification, map review, and accepta
   assert.equal(instructorScopeResponse.statusCode, 201, instructorScopeResponse.body);
   const instructorScopeId = instructorScopeResponse.json().id as string;
 
+  const acceptedMapBeforeAcceptance = await app.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/course-map/accepted`,
+  });
+  assert.equal(acceptedMapBeforeAcceptance.statusCode, 200, acceptedMapBeforeAcceptance.body);
+  assert.equal(acceptedMapBeforeAcceptance.json(), null);
+
   const acceptResponse = await app.inject({
     method: "POST",
     url: `/api/courses/${course.id}/course-map/${refreshedMap.id}/accept`,
   });
   assert.equal(acceptResponse.statusCode, 200);
   assert.equal(CourseMapArtifactSchema.parse(acceptResponse.json()).status, "accepted");
+  const acceptedMapResponse = await app.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/course-map/accepted`,
+  });
+  assert.equal(acceptedMapResponse.statusCode, 200, acceptedMapResponse.body);
+  assert.equal(CourseMapArtifactSchema.parse(acceptedMapResponse.json()).id, refreshedMap.id);
 
   const detailResponse = await app.inject({
     method: "GET",

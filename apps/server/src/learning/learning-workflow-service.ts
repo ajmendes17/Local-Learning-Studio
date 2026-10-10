@@ -112,6 +112,11 @@ export class LearningWorkflowService {
     });
   }
 
+  getAcceptedCourseMap(courseId: string) {
+    this.requireCourse(courseId);
+    return this.artifacts.acceptedCourseMap(courseId);
+  }
+
   async classifySources(courseId: string, regenerate = false) {
     const projection = this.projection(courseId);
     if (!regenerate) {

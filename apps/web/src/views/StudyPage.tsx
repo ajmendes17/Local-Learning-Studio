@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, summarizeStudyCoverage } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, summarizeStudyCoverage, type CourseMapArtifact } from "@local-learning-studio/contracts";
 import { MathText } from "../components/MathText";
+import { getAcceptedCourseMap } from "../lib/api";
 import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTopicDraft } from "../lib/instructor-topic-draft";
 import { appendInstructorTopicWording } from "../lib/instructor-topic-scope";
 import "../styles/study.css";
@@ -50,6 +51,7 @@ interface StudyRecommendation {
   sourceMaterialId?: string;
   sourceTitle?: string;
   importance?: "low" | "normal" | "high";
+  mapTopic?: boolean;
 }
 interface ChatAnswer { answer: string; followUp: string; sourceBasis: "general-knowledge" | "course-materials" }
 interface PatternEvidence { id: string; conceptTitle: string; response: string; outcome: string; confidence: number | null; hintCount: number; method: string; createdAt: string }
@@ -157,6 +159,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [methodProgress, setMethodProgress] = useState<MethodProgress[]>([]);
   const [assessmentScopes, setAssessmentScopes] = useState<AssessmentScope[]>([]);
   const [sourceProgress, setSourceProgress] = useState<SourceProgress[]>([]);
+  const [acceptedCourseMap, setAcceptedCourseMap] = useState<CourseMapArtifact | null>(null);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [patternBusy, setPatternBusy] = useState(false);
   const [studyTab, setStudyTab] = useState<"lesson" | "check">("lesson");
@@ -187,11 +190,12 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   async function refreshClassData() {
-    const [historyResponse, profileResponse, patternResponse, methodProgressResponse] = await Promise.all([
+    const [historyResponse, profileResponse, patternResponse, methodProgressResponse, acceptedMapResult] = await Promise.all([
       fetch(`/api/courses/${courseId}/learner/study-sessions`),
       fetch(`/api/courses/${courseId}/learner/profile`),
       fetch(`/api/courses/${courseId}/learner/patterns`),
       fetch(`/api/courses/${courseId}/learner/method-progress`),
+      getAcceptedCourseMap(courseId).then((courseMap) => ({ ok: true, courseMap })).catch(() => ({ ok: false, courseMap: null })),
     ]);
     if (historyResponse.ok) setHistory(await historyResponse.json());
     if (profileResponse.ok) {
@@ -202,7 +206,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     }
     if (patternResponse.ok) setPatterns((await patternResponse.json()).patterns);
     if (methodProgressResponse.ok) setMethodProgress(await methodProgressResponse.json());
-    if ([historyResponse, profileResponse, patternResponse, methodProgressResponse].some((response) => !response.ok)) {
+    if (acceptedMapResult.ok) setAcceptedCourseMap(acceptedMapResult.courseMap);
+    if ([historyResponse, profileResponse, patternResponse, methodProgressResponse].some((response) => !response.ok) || !acceptedMapResult.ok) {
       setError("Some class progress could not be loaded. Check that the local service is running, then refresh.");
     } else setError((current) => current.startsWith("Some class progress could not be loaded.") ? "" : current);
   }
@@ -613,6 +618,9 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   // Include lesson-only topics here: a learner may have studied one already
   // without saving a knowledge check, which is a useful next retrieval prompt.
   const classNextTopic = recommendNextStudyTopic(progress, progress);
+  const mappedNextTopic = acceptedCourseMap
+    ? recommendNextStudyTopic(acceptedCourseMap.payload.concepts, progress)
+    : null;
   const recommendations: StudyRecommendation[] = [
     ...assessmentScopes.flatMap((assessment) => {
       const next = recommendNextStudyTopic(assessment.topics, assessment.topics);
@@ -637,7 +645,16 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         sourceTitle: source.title,
       }] : [];
     }),
-    ...(classNextTopic ? [{
+    ...(mappedNextTopic ? [{
+      title: mappedNextTopic.topic.title,
+      reason: mappedNextTopic.reason,
+      latestOutcome: progress.find((item) => item.title.trim().normalize("NFKC").toLocaleLowerCase() === mappedNextTopic.topic.title.trim().normalize("NFKC").toLocaleLowerCase())?.latestOutcome ?? null,
+      lastPracticedAt: progress.find((item) => item.title.trim().normalize("NFKC").toLocaleLowerCase() === mappedNextTopic.topic.title.trim().normalize("NFKC").toLocaleLowerCase())?.lastPracticedAt ?? null,
+      sourceMaterialId: mappedNextTopic.topic.sourceReferences[0]?.materialId,
+      sourceTitle: sourceProgress.find((source) => source.materialId === mappedNextTopic.topic.sourceReferences[0]?.materialId)?.title,
+      mapTopic: true,
+    }] : []),
+    ...(!acceptedCourseMap && classNextTopic ? [{
       title: classNextTopic.topic.title,
       reason: classNextTopic.reason,
       latestOutcome: classNextTopic.topic.latestOutcome,
@@ -646,7 +663,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   ];
   const contextPriority = (item: StudyRecommendation) => item.assessmentId ? 0
     : item.sourceMaterialId && sourceProgress.find(({ materialId }) => materialId === item.sourceMaterialId)?.kind === "assignment" ? 1
-      : item.sourceMaterialId ? 2 : 3;
+      : item.mapTopic ? 2
+        : item.sourceMaterialId ? 3 : 4;
   const nextRecommendation = prioritizeStudyRecommendations(
     recommendations.map((item) => ({ ...item, contextPriority: contextPriority(item) })),
   )[0];

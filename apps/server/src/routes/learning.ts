@@ -63,6 +63,19 @@ export async function registerLearningRoutes(
     },
   );
 
+  app.get<{ Params: { courseId: string } }>(
+    "/api/courses/:courseId/course-map/accepted",
+    async (request, reply) => {
+      const params = routeParamsSchema.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ error: "Course ID is invalid." });
+      try {
+        return CourseMapArtifactSchema.nullable().parse(options.learning.getAcceptedCourseMap(params.data.courseId));
+      } catch (error) {
+        return sendWorkflowError(error, reply);
+      }
+    },
+  );
+
   app.post<{
     Params: { courseId: string };
   }>(
