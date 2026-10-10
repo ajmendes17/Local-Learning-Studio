@@ -691,6 +691,9 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
     const assessmentFolder = join(vaultPath, exported.json().courseFolder, "assessments");
     const assessmentNote = await readFile(join(assessmentFolder, "professor-s-bell-states-scope--" + assessment.json().id.slice(0, 8) + ".md"), "utf8");
     assert.match(assessmentNote, /Bell states .*priority: high; .*1\/1 scored checks correct/);
+    const studyJournal = await readFile(join(vaultPath, exported.json().courseFolder, "Study Journal.md"), "utf8");
+    assert.match(studyJournal, /\*\*Reference answer\*\*[\s\S]*\$\\lvert \+\\rangle\$/);
+    assert.match(studyJournal, /\*\*Reference explanation\*\*[\s\S]*The source identifies the equal superposition\./);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });

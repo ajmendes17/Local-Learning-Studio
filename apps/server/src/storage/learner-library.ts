@@ -290,6 +290,9 @@ export class LearnerLibrary {
       la.title AS assessmentTitle,a.activity_type AS activityType,a.prompt,a.response,a.reasoning,a.confidence,
       a.hint_count AS hintCount,a.method,a.outcome,COALESCE(e.independence,'unknown') AS independence,
       a.source_refs_json AS sourceRefsJson,json_extract(s.content_json,'$.sourceMaterialId') AS sessionSourceMaterialId,
+      json_extract(s.content_json,'$.feedback') AS referenceExplanation,
+      json_extract(s.content_json,'$.options') AS sessionOptionsJson,
+      json_extract(s.content_json,'$.answerIndex') AS sessionAnswerIndex,
       a.created_at AS createdAt
       FROM study_attempts a JOIN learner_concepts c ON c.id=a.concept_id AND c.course_id=a.course_id
       LEFT JOIN learner_assessments la ON la.id=a.assessment_id AND la.course_id=a.course_id
@@ -297,6 +300,8 @@ export class LearnerLibrary {
       LEFT JOIN study_sessions s ON s.id=a.session_id AND s.course_id=a.course_id
       WHERE a.course_id=? ORDER BY a.created_at DESC,a.rowid DESC`).all(courseId).map((row: any) => {
       const sourceRefs = JSON.parse(row.sourceRefsJson) as Array<{ materialId?: string }>;
+      const sessionOptions = typeof row.sessionOptionsJson === "string" ? JSON.parse(row.sessionOptionsJson) as unknown : [];
+      const answerIndex = row.sessionAnswerIndex == null ? null : Number(row.sessionAnswerIndex);
       return {
         id: row.id as string, conceptId: row.conceptId as string, topic: row.topic as string,
         assessmentId: row.assessmentId as string | null, assessmentTitle: row.assessmentTitle as string | null,
@@ -304,6 +309,10 @@ export class LearnerLibrary {
         reasoning: row.reasoning as string, confidence: row.confidence == null ? null : Number(row.confidence),
         hintCount: Number(row.hintCount), method: row.method as string, outcome: row.outcome as string,
         independence: row.independence as string, createdAt: row.createdAt as string,
+        correctAnswer: Array.isArray(sessionOptions) && Number.isInteger(answerIndex) && answerIndex! >= 0
+          ? (typeof sessionOptions[answerIndex!] === "string" ? sessionOptions[answerIndex!] as string : null)
+          : null,
+        referenceExplanation: typeof row.referenceExplanation === "string" ? row.referenceExplanation : null,
         sourceMaterialIds: [...new Set([...sourceRefs.map(({ materialId }) => materialId).filter((id): id is string => Boolean(id)), row.sessionSourceMaterialId as string | null].filter((id): id is string => Boolean(id)))],
       };
     });
