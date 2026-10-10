@@ -61,6 +61,9 @@ npm run dev
 
 Open [http://localhost:4317](http://localhost:4317). Vite proxies `/api`
 requests to the local service at `http://127.0.0.1:4318`.
+The server watcher ignores generated contract files so typechecks and builds do
+not interrupt API requests. After changing a shared contract, restart the
+server to load the rebuilt contract package.
 
 To try the hand-tracking proof of concept, open **Hand demo** in the app and
 choose **Turn camera on**. Allow camera access when prompted. The MediaPipe
