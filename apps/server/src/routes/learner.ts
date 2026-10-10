@@ -64,6 +64,13 @@ function topicTerms(value: string) {
   return value.normalize("NFKC").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+const ERROR_ANALYSIS_OPTIONS = ["Step 1", "Step 2", "Step 3", "Step 4"];
+
+function hasFourNumberedSteps(value: string) {
+  const steps = [...value.matchAll(/(?:^|\n)\s*(?:Step\s*)?([1-4])[.)]\s+/gim)].map((match) => Number(match[1]));
+  return steps.length === 4 && steps.every((step, index) => step === index + 1);
+}
+
 function normalizeGeneratedQuestionText<T extends { question: string; feedback: string; hints: string[]; options?: string[] }>(content: T): T {
   return {
     ...content,
@@ -428,7 +435,17 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         "Never say the learner has mastered the topic based on this generated lesson.",
         "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, ...(parsed.data.method === "compare-contrast" ? { acceptedMapRelatedConcepts: contrastTopics } : {}), sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
       ].join("\n\n"), StudySessionGenerationContentSchema);
-      const content = StudySessionContentSchema.parse({ ...normalizeGeneratedSessionText(result.output), sourceBasis: sourceMaterial ? "course-materials" : "general-knowledge", conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(openResponse ? { options: [], answerIndex: null } : {}) });
+      if (parsed.data.method === "error-analysis" && !hasFourNumberedSteps(result.output.example)) {
+        return reply.code(502).send({
+          error: "The generated error-analysis exercise was incomplete.",
+          detail: "It must include four numbered solution steps. Try again or choose another study method.",
+          diagnostics: { task: "compose-study-lesson", code: "invalid_method_structure" },
+        });
+      }
+      const generatedContent = parsed.data.method === "error-analysis"
+        ? { ...result.output, options: ERROR_ANALYSIS_OPTIONS }
+        : result.output;
+      const content = StudySessionContentSchema.parse({ ...normalizeGeneratedSessionText(generatedContent), sourceBasis: sourceMaterial ? "course-materials" : "general-knowledge", conceptId: concept.id, assessmentId: assessment?.id ?? null, sourceMaterialId: sourceMaterial?.id ?? null, topic: parsed.data.topic, method: parsed.data.method, ...(openResponse ? { options: [], answerIndex: null } : {}) });
       return StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, concept.id, content));
     } catch (error) {
       if (error instanceof Error && error.name === "CodexRunError") {
@@ -513,7 +530,17 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           previousQuestion: session.question,
         }),
       ].join("\n\n"), questionSchema);
-      const question = normalizeGeneratedQuestionText(questionSchema.parse(result.output));
+      const generatedQuestion = questionSchema.parse(result.output);
+      if (session.method === "error-analysis" && !hasFourNumberedSteps(generatedQuestion.question)) {
+        return reply.code(502).send({
+          error: "The generated error-analysis follow-up was incomplete.",
+          detail: "It must include four numbered solution steps. Try again to generate a different exercise.",
+          diagnostics: { task: "generate-adaptive-practice", code: "invalid_method_structure" },
+        });
+      }
+      const question = normalizeGeneratedQuestionText(session.method === "error-analysis"
+        ? { ...generatedQuestion, options: ERROR_ANALYSIS_OPTIONS }
+        : generatedQuestion);
       const { sessionId: _oldSessionId, createdAt: _oldCreatedAt, ...sessionContent } = session;
       const nextSession = StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, session.conceptId, {
         ...sessionContent,

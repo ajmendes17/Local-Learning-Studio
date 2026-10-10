@@ -45,7 +45,7 @@ function uploadPayload(filename: string, content: string) {
   return { payload: body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-async function createAppWithStudyModel(options: { corruptMath?: boolean; failure?: boolean } = {}) {
+async function createAppWithStudyModel(options: { corruptMath?: boolean; failure?: boolean; invalidErrorAnalysis?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "learning-studio-learner-"));
   const prompts: string[] = [];
   const controlCharacter = options.corruptMath ? String.fromCharCode(127) : "";
@@ -58,8 +58,12 @@ async function createAppWithStudyModel(options: { corruptMath?: boolean; failure
         lesson: options.corruptMath
           ? `## Source-grounded idea\n\nThe key operation is $H${controlCharacter}\\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.`
           : "## Source-grounded idea\n\nThe key operation is $H\\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.",
-        example: options.corruptMath ? `Apply the stated operation to $${controlCharacter}\\ket{0}$.` : "Apply the stated operation to the source problem.",
-        question: prompt.includes("Use a teach-back exercise")
+        example: /Teach through error analysis|four-step numbered worked solution/.test(prompt)
+          ? options.invalidErrorAnalysis ? "Inspect this solution and find the issue." : "1. State the given values.\n2. Substitute into the relation.\n3. Reverse the relation incorrectly.\n4. Simplify the result."
+          : options.corruptMath ? `Apply the stated operation to $${controlCharacter}\\ket{0}$.` : "Apply the stated operation to the source problem.",
+        question: /Teach through error analysis|four-step numbered worked solution/.test(prompt)
+          ? "1. State the given values.\n2. Substitute into the relation.\n3. Reverse the relation incorrectly.\n4. Simplify the result.\n\nWhich step first becomes invalid?"
+          : prompt.includes("Use a teach-back exercise")
           ? "Teach back the main idea and explain why it holds."
           : options.corruptMath ? `Which state $${controlCharacter}\\ket{\\psi}$ does the source operation produce?` : "Which state does the source operation produce?",
         options: prompt.includes("Start with unaided free recall") || prompt.includes("Use a teach-back exercise") ? [] : [options.corruptMath ? `$${controlCharacter}\\lvert 0\\rangle$` : "$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
@@ -747,11 +751,14 @@ test("study methods send distinct learning directions", async () => {
   const errorSession = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-session`, payload: { topic: "Method check: error analysis", method: "error-analysis" } });
   assert.equal(errorSession.statusCode, 200, errorSession.body);
   assert.equal(errorSession.json().method, "error-analysis");
+  assert.deepEqual(errorSession.json().options, ["Step 1", "Step 2", "Step 3", "Step 4"]);
+  assert.match(errorSession.json().example, /^1\.[\s\S]*\n2\.[\s\S]*\n3\.[\s\S]*\n4\./);
   assert.equal(StudySessionContentSchema.safeParse({ ...(errorSession.json() as Record<string, unknown>), example: "" }).success, false, "error-analysis sessions must keep a visible flawed solution");
   assert.match(prompts.at(-1) ?? "", /four-step numbered example containing exactly one invalid reasoning step/);
   const nextError = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/study-sessions/${errorSession.json().sessionId}/next-question`, payload: {} });
   assert.equal(nextError.statusCode, 200, nextError.body);
   assert.equal(nextError.json().method, "error-analysis");
+  assert.deepEqual(nextError.json().options, ["Step 1", "Step 2", "Step 3", "Step 4"]);
   assert.match(prompts.at(-1) ?? "", /fresh four-step numbered worked solution with exactly one subtle invalid step/);
   const errorAttempt = await app.inject({
     method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
@@ -767,6 +774,22 @@ test("study methods send distinct learning directions", async () => {
   const methodProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
   assert.ok(methodProgress.json().some((item: { method: string; attemptCount: number }) => item.method === "error-analysis" && item.attemptCount === 1));
   assert.equal(prompts.length, methods.length + 4);
+  await app.close();
+  await rm(root, { recursive: true });
+});
+
+test("error-analysis refuses generated work without four numbered steps", async () => {
+  const { app, root } = await createAppWithStudyModel({ invalidErrorAnalysis: true });
+  const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Invalid error-analysis fixture" } });
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.json().id}/learner/study-session`,
+    payload: { topic: "A method with a strict structure", method: "error-analysis" },
+  });
+
+  assert.equal(response.statusCode, 502);
+  assert.equal(response.json().diagnostics.code, "invalid_method_structure");
+  assert.equal((await app.inject({ method: "GET", url: `/api/courses/${course.json().id}/learner/study-sessions` })).json().length, 0);
   await app.close();
   await rm(root, { recursive: true });
 });
