@@ -41,6 +41,7 @@
 .topic-scope-preview__priority select { width:auto !important; min-height:28px; padding:3px 5px !important; font-size:.6rem !important; }
 .topic-scope-panel__success { margin:0; color:#4c7653; font-size:.7rem; }
 .topic-scope-panel__target { margin:0; padding:9px 11px; border-left:3px solid #87a181; background:#f1f5ed; color:#627065; font-size:.68rem; line-height:1.5; }
+.topic-scope-panel__draft-note { margin:0; padding:8px 10px; border-radius:6px; color:#64725f; background:#edf2e9; font-size:.65rem; line-height:1.45; }
 .topic-scope-panel__target strong { color:#425846; }
 .topic-scope-panel__form-actions { display:flex; align-items:center; gap:8px; }
 .topic-scope-panel__saved { display:grid; gap:10px; padding-top:12px; border-top:1px solid #e4e7de; }

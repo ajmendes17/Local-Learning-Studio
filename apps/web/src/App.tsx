@@ -263,7 +263,7 @@ export function App() {
       />
       <Suspense fallback={<div className="page-chunk-loading" role="status">Loading your workspace…</div>}>
       {route.kind === "course-study" ? (
-        <StudyPage courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} initialTopic={route.topic} initialSourceMaterialId={route.sourceMaterialId} initialAssessmentId={route.assessmentId} initialSessionId={route.sessionId} onBack={() => navigate(`/courses/${route.courseId}`)} />
+        <StudyPage key={route.courseId} courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} initialTopic={route.topic} initialSourceMaterialId={route.sourceMaterialId} initialAssessmentId={route.assessmentId} initialSessionId={route.sessionId} onBack={() => navigate(`/courses/${route.courseId}`)} />
       ) : route.kind === "course" ? (
       <CoursePage
           course={selectedCourse}

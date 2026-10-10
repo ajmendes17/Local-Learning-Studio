@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, summarizeStudyCoverage } from "@local-learning-studio/contracts";
 import { MathText } from "../components/MathText";
+import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTopicDraft } from "../lib/instructor-topic-draft";
 import "../styles/study.css";
 
 type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall";
@@ -83,6 +84,10 @@ function clearAttemptDraft(courseId: string, sessionId: string) {
   try { window.sessionStorage.removeItem(attemptDraftKey(courseId, sessionId)); } catch { /* Storage may be unavailable. */ }
 }
 
+function browserSessionStorage() {
+  try { return window.sessionStorage; } catch { return null; }
+}
+
 class StudyRequestError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -98,6 +103,10 @@ async function postJson<T>(path: string, body: unknown, method: "POST" | "PATCH"
 }
 
 export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMaterialId, initialAssessmentId, initialSessionId, onBack }: { courseId: string; courseTitle: string; initialTopic?: string; initialSourceMaterialId?: string; initialAssessmentId?: string; initialSessionId?: string; onBack: () => void }) {
+  const [initialTopicScopeDraft] = useState(() => {
+    const storage = typeof window === "undefined" ? null : browserSessionStorage();
+    return storage ? readInstructorTopicDraft(storage, courseId) : null;
+  });
   const [topic, setTopic] = useState(initialTopic ?? "");
   const [studySourceMaterialId, setStudySourceMaterialId] = useState(initialSourceMaterialId);
   const [studyAssessmentId, setStudyAssessmentId] = useState(initialAssessmentId);
@@ -120,15 +129,15 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [chatAnswer, setChatAnswer] = useState<ChatAnswer | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
-  const [topicScopeOpen, setTopicScopeOpen] = useState(false);
-  const [topicScopeTargetAssessmentId, setTopicScopeTargetAssessmentId] = useState<string | null>(null);
-  const [topicScopeTitle, setTopicScopeTitle] = useState("");
-  const [topicScopeScheduledAt, setTopicScopeScheduledAt] = useState("");
-  const [topicScopeAvailableMinutes, setTopicScopeAvailableMinutes] = useState("");
-  const [topicScopeDailyMinutes, setTopicScopeDailyMinutes] = useState("45");
-  const [topicScopeText, setTopicScopeText] = useState("");
-  const [topicScopeNotes, setTopicScopeNotes] = useState("");
-  const [topicScopeImportance, setTopicScopeImportance] = useState<Record<string, "low" | "normal" | "high">>({});
+  const [topicScopeOpen, setTopicScopeOpen] = useState(Boolean(initialTopicScopeDraft));
+  const [topicScopeTargetAssessmentId, setTopicScopeTargetAssessmentId] = useState<string | null>(initialTopicScopeDraft?.assessmentId ?? null);
+  const [topicScopeTitle, setTopicScopeTitle] = useState(initialTopicScopeDraft?.title ?? "");
+  const [topicScopeScheduledAt, setTopicScopeScheduledAt] = useState(initialTopicScopeDraft?.scheduledAt ?? "");
+  const [topicScopeAvailableMinutes, setTopicScopeAvailableMinutes] = useState(initialTopicScopeDraft?.availableMinutes ?? "");
+  const [topicScopeDailyMinutes, setTopicScopeDailyMinutes] = useState(initialTopicScopeDraft?.dailyMinutes ?? "45");
+  const [topicScopeText, setTopicScopeText] = useState(initialTopicScopeDraft?.topics ?? "");
+  const [topicScopeNotes, setTopicScopeNotes] = useState(initialTopicScopeDraft?.notes ?? "");
+  const [topicScopeImportance, setTopicScopeImportance] = useState<Record<string, "low" | "normal" | "high">>(initialTopicScopeDraft?.importance ?? {});
   const [topicScopeMessage, setTopicScopeMessage] = useState("");
   const [topicScopeSaving, setTopicScopeSaving] = useState(false);
   const [editingInstructorScopeId, setEditingInstructorScopeId] = useState<string | null>(null);
@@ -151,6 +160,21 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [patternBusy, setPatternBusy] = useState(false);
   const [studyTab, setStudyTab] = useState<"lesson" | "check">("lesson");
   const autoStartedTopic = useRef<string | null>(null);
+
+  useEffect(() => {
+    const storage = browserSessionStorage();
+    if (!storage) return;
+    writeInstructorTopicDraft(storage, courseId, {
+      assessmentId: topicScopeTargetAssessmentId,
+      title: topicScopeTitle,
+      scheduledAt: topicScopeScheduledAt,
+      availableMinutes: topicScopeAvailableMinutes,
+      dailyMinutes: topicScopeDailyMinutes,
+      topics: topicScopeText,
+      notes: topicScopeNotes,
+      importance: topicScopeImportance,
+    });
+  }, [courseId, topicScopeTargetAssessmentId, topicScopeTitle, topicScopeScheduledAt, topicScopeAvailableMinutes, topicScopeDailyMinutes, topicScopeText, topicScopeNotes, topicScopeImportance]);
 
   function setActiveSessionInUrl(sessionId: string) {
     const query = new URLSearchParams(window.location.search);
@@ -528,6 +552,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       setTopicScopeNotes("");
       setTopicScopeImportance({});
       setTopicScopeOpen(false);
+      const storage = browserSessionStorage();
+      if (storage) clearInstructorTopicDraft(storage, courseId);
       await refreshClassData();
     } catch (err) {
       setError((err as Error).message);
@@ -553,6 +579,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const normalizedTopicScopeTitle = topicScopeTitle.trim() || "Instructor topic list";
   const topicScopeTitleKey = normalizedTopicScopeTitle.normalize("NFKC").toLocaleLowerCase();
   const duplicateTopicScope = topicScopeTargetAssessmentId ? undefined : assessmentScopes.find((assessment) => assessment.title.trim().normalize("NFKC").toLocaleLowerCase() === topicScopeTitleKey);
+  const topicScopeHasDraft = Boolean(topicScopeTargetAssessmentId || topicScopeTitle.trim() || topicScopeScheduledAt || topicScopeAvailableMinutes || topicScopeText.trim() || topicScopeNotes.trim());
 
   function appendTopicsToAssessment(assessment: AssessmentScope) {
     setTopicScopeTargetAssessmentId(assessment.id);
@@ -672,16 +699,17 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       <div className="topic-scope-panel__heading"><div><p className="section-kicker">Instructor guidance</p><h2>Paste an exam topic list</h2><p>Save the professor’s wording as this class’s learner-provided exam scope.</p></div><button className="button-secondary" type="button" aria-expanded={topicScopeOpen} onClick={() => setTopicScopeOpen((open) => !open)}>{topicScopeOpen ? "Close topic list" : "Add topic list"}</button></div>
       {topicScopeMessage ? <p className="topic-scope-panel__success" role="status">{topicScopeMessage}</p> : null}
       {topicScopeOpen ? <form id="topic-scope-editor" onSubmit={(event) => void saveInstructorTopicList(event)}>
+        {topicScopeHasDraft ? <p className="topic-scope-panel__draft-note" role="status">Draft saved in this browser tab. It will be here if you leave this page and return.</p> : null}
         {topicScopeTargetAssessmentId ? <p className="topic-scope-panel__target">Adding the professor’s new topics to <strong>{assessmentScopes.find(({ id }) => id === topicScopeTargetAssessmentId)?.title ?? topicScopeTitle}</strong>. Existing topics and their study history stay in place.</p> : <>
-          <label>Exam or assessment name<input value={topicScopeTitle} onChange={(event) => { setTopicScopeTitle(event.target.value); setTopicScopeMessage(""); }} placeholder="e.g. Midterm 2" /></label>
+          <label>Exam or assessment name<input maxLength={200} value={topicScopeTitle} onChange={(event) => { setTopicScopeTitle(event.target.value); setTopicScopeMessage(""); }} placeholder="e.g. Midterm 2" /></label>
           <div className="topic-scope-schedule">
             <label>When is it? <span>(optional)</span><input type="datetime-local" value={topicScopeScheduledAt} onChange={(event) => setTopicScopeScheduledAt(event.target.value)} /></label>
             <label>Study time available <span>(optional)</span><div className="topic-scope-minutes"><input type="number" min="5" max="1440" step="5" value={topicScopeAvailableMinutes} onChange={(event) => setTopicScopeAvailableMinutes(event.target.value)} placeholder="120" /><span>minutes</span></div></label>
             <label>Target minutes per study day<div className="topic-scope-minutes"><input type="number" min="15" max="240" step="5" value={topicScopeDailyMinutes} onChange={(event) => setTopicScopeDailyMinutes(event.target.value)} /><span>minutes max</span></div></label>
           </div>
         </>}
-        <label>{topicScopeTargetAssessmentId ? "Additional topics from the instructor" : "Topics from the instructor"}<textarea required value={topicScopeText} onChange={(event) => { setTopicScopeText(event.target.value); setTopicScopeMessage(""); }} placeholder={topicScopeTargetAssessmentId ? "Paste the new topics; topics already saved to this scope will be skipped" : "Paste one per line; numbering, bullets, commas, and semicolons are okay"} /></label>
-        <label>Other instructions or context <span>(optional)</span><textarea value={topicScopeNotes} onChange={(event) => { setTopicScopeNotes(event.target.value); setTopicScopeMessage(""); }} placeholder="For example: You should be able to compute reduced density matrices. No proofs required." /></label>
+        <label>{topicScopeTargetAssessmentId ? "Additional topics from the instructor" : "Topics from the instructor"}<textarea required maxLength={20000} value={topicScopeText} onChange={(event) => { setTopicScopeText(event.target.value); setTopicScopeMessage(""); }} placeholder={topicScopeTargetAssessmentId ? "Paste the new topics; topics already saved to this scope will be skipped" : "Paste one per line; numbering, bullets, commas, and semicolons are okay"} /></label>
+        <label>Other instructions or context <span>(optional)</span><textarea maxLength={12000} value={topicScopeNotes} onChange={(event) => { setTopicScopeNotes(event.target.value); setTopicScopeMessage(""); }} placeholder="For example: You should be able to compute reduced density matrices. No proofs required." /></label>
         {topicScopeText.trim() ? <div className="topic-scope-preview" aria-live="polite"><strong>{parsedTopicScope.length ? `${parsedTopicScope.length} cleaned ${parsedTopicScope.length === 1 ? "topic" : "topics"} ready to ${topicScopeTargetAssessmentId ? "add" : "save"}` : "No topics found yet"}</strong>{providedTopicCount > parsedTopicScope.length ? <small>{providedTopicCount - parsedTopicScope.length} duplicate or empty {providedTopicCount - parsedTopicScope.length === 1 ? "entry was" : "entries were"} removed.</small> : null}{duplicateTopicScope ? <p role="alert">A scope named “{duplicateTopicScope.title}” already exists. Use its “Add topics” action to extend it and keep its progress.</p> : null}{topicScopeTargetAssessmentId ? <p>Topics already in this scope will be skipped; their saved study history remains unchanged.</p> : null}{parsedTopicScope.length ? <ol>{parsedTopicScope.map((item, index) => <li key={`${item}-${index}`}><span><MathText inline content={item} /></span><label className="topic-scope-preview__priority">Priority<select aria-label={`Priority for ${item}`} value={topicScopeImportance[item.trim().normalize("NFKC").toLocaleLowerCase()] ?? "normal"} onChange={(event) => setTopicScopeImportance((current) => ({ ...current, [item.trim().normalize("NFKC").toLocaleLowerCase()]: event.target.value as "low" | "normal" | "high" }))}><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></li>)}</ol> : <p>Try one topic per line or separate topics with commas.</p>}</div> : null}
         <div className="topic-scope-panel__form-actions"><button className="button-primary" disabled={topicScopeSaving || !parsedTopicScope.length}>{topicScopeSaving ? "Saving…" : topicScopeTargetAssessmentId ? "Add topics to this list" : "Save topic scope"}</button>{topicScopeTargetAssessmentId ? <button className="button-secondary" type="button" onClick={() => { setTopicScopeTargetAssessmentId(null); setTopicScopeTitle(""); setTopicScopeScheduledAt(""); setTopicScopeAvailableMinutes(""); setTopicScopeDailyMinutes("45"); setTopicScopeText(""); setTopicScopeNotes(""); setTopicScopeImportance({}); setTopicScopeMessage(""); }}>Cancel</button> : null}</div></form> : null}
       {assessmentScopes.length ? <div className="topic-scope-panel__saved"><strong>Saved class scopes · checks are practice activity, not mastery estimates</strong>{assessmentScopes.map((assessment) => {
