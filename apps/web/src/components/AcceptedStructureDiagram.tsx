@@ -244,7 +244,7 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
               }}
               type="button"
             >
-              <span>{assessment.kind.replaceAll("-", " ")}</span><h5><MathText inline content={assessment.title} /></h5>
+              <span>{isAssignment ? "assignment" : isExam ? "major exam" : assessment.kind.replaceAll("-", " ")}</span><h5><MathText inline content={assessment.title} /></h5>
               {assessment.dueAt ? <small>{assessment.dueAt}</small> : null}
               {citedSources.length ? <small>Evidence: {citedSources.join(", ")}</small> : null}
               {linkedModules.length ? <p>Connected to {linkedModules.map((link, moduleIndex) => {
