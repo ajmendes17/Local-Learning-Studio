@@ -11,6 +11,12 @@ interface FractionReplacement {
   tex: string;
 }
 
+function normalizeFractionDiracNotation(expression: string) {
+  return expression
+    .replace(/\|\s*([^|〈⟨〉⟩]{1,32}?)\s*[〉⟩]/gu, (_match, state: string) => `\\ket{${state.trim().replace(/\s+/g, "")}}`)
+    .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|/gu, (_match, state: string) => `\\bra{${state.trim().replace(/\s+/g, "")}}`);
+}
+
 function textAt(items: PositionedPdfTextItem[], index: number) {
   return items[index]?.str.trim() ?? "";
 }
@@ -60,7 +66,7 @@ export function reconstructStackedSquareRootFractions(items: PositionedPdfTextIt
 
     replacements.set(firstNumeratorIndex, {
       endIndex: radicandIndex,
-      tex: `$\\frac{${numerator}}{\\sqrt{${radicandText}}}$`,
+      tex: `$\\frac{${normalizeFractionDiracNotation(numerator)}}{\\sqrt{${radicandText}}}$`,
     });
   }
 

@@ -327,7 +327,7 @@ test("PDF math layout reconstructs a stacked numerator over a square-root denomi
     item("|0〉", 24, 108, 16), item("+", 40, 108, 8), item("|1〉", 48, 108, 16, true),
     item("√", 37, 101, 9), item("2", 46, 92, 6),
   ]);
-  assert.ok(text.includes(String.raw`$\frac{|0〉+|1〉}{\sqrt{2}}$`), text);
+  assert.ok(text.includes(String.raw`$\frac{\ket{0}+\ket{1}}{\sqrt{2}}$`), text);
 
   const inlineRoot = reconstructStackedSquareRootFractions([
     item("x", 0, 100, 8), item("√", 9, 100, 9), item("2", 18, 100, 6),

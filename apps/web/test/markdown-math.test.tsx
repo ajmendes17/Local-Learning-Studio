@@ -37,6 +37,15 @@ test("inline ket-bra products render as a single valid math expression", () => {
   assert.doesNotMatch(html, /katex-error|ParseError/);
 });
 
+test("PDF-style reconstructed Dirac fractions render as math", () => {
+  const html = renderToStaticMarkup(createElement(MarkdownMath, {
+    content: String.raw`Bell state: $\frac{\ket{0}+\ket{1}}{\sqrt{2}}$`,
+  }));
+
+  assert.match(html, /class="katex"/);
+  assert.doesNotMatch(html, /katex-error|\|0〉|\|1〉/);
+});
+
 test("imported Markdown keeps links and images inert while rendering text", () => {
   const html = renderToStaticMarkup(createElement(MarkdownMath, {
     content: "![diagram](https://example.invalid/image.png)\n\n[external reference](https://example.invalid/page)",
