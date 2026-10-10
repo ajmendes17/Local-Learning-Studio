@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type {
   CodexStatusResponse,
   CourseDetail,
@@ -24,11 +24,12 @@ import {
   uploadMaterial,
   type ApiErrorInfo,
 } from "./lib/api";
-import { CoursePage } from "./views/CoursePage";
-import { HomePage } from "./views/HomePage";
-import { InfoPage } from "./views/InfoPage";
-import { HandTrackingPage } from "./views/HandTrackingPage";
-import { StudyPage } from "./views/StudyPage";
+
+const CoursePage = lazy(() => import("./views/CoursePage").then(({ CoursePage }) => ({ default: CoursePage })));
+const HomePage = lazy(() => import("./views/HomePage").then(({ HomePage }) => ({ default: HomePage })));
+const InfoPage = lazy(() => import("./views/InfoPage").then(({ InfoPage }) => ({ default: InfoPage })));
+const HandTrackingPage = lazy(() => import("./views/HandTrackingPage").then(({ HandTrackingPage }) => ({ default: HandTrackingPage })));
+const StudyPage = lazy(() => import("./views/StudyPage").then(({ StudyPage }) => ({ default: StudyPage })));
 
 type AppRoute =
   | { kind: "library" }
@@ -260,6 +261,7 @@ export function App() {
         onHandTracking={() => navigate("/hand-tracking")}
         onInfo={() => navigate("/how-it-works")}
       />
+      <Suspense fallback={<div className="page-chunk-loading" role="status">Loading your workspace…</div>}>
       {route.kind === "course-study" ? (
         <StudyPage courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} initialTopic={route.topic} initialSourceMaterialId={route.sourceMaterialId} initialAssessmentId={route.assessmentId} initialSessionId={route.sessionId} onBack={() => navigate(`/courses/${route.courseId}`)} />
       ) : route.kind === "course" ? (
@@ -296,6 +298,7 @@ export function App() {
           onOpen={(courseId) => navigate(`/courses/${courseId}`)}
         />
       )}
+      </Suspense>
     </div>
   );
 }

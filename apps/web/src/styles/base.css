@@ -49,6 +49,13 @@ select:focus-visible {
   min-height: 100vh;
 }
 
+.page-chunk-loading {
+  width: min(1180px, calc(100% - 48px));
+  margin: 8rem auto;
+  color: var(--muted);
+  text-align: center;
+}
+
 .site-header,
 .library-hero,
 .library-content,
