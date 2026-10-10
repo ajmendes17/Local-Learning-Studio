@@ -598,6 +598,9 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   );
   const providedTopicCount = topicScopeText.split(/[\n,;]+/).filter((part) => part.trim()).length;
   const parsedBudgetTopics = parseInstructorTopicList(budgetTopics);
+  const practicedMaterials = sourceProgress.filter((source) =>
+    (source.kind === "assignment" || source.kind === "study-guide") && source.topics.length > 0,
+  );
   const matchingBudgetAssessment = assessmentScopes.find((assessment) => assessment.title.trim().normalize("NFKC").toLocaleLowerCase() === budgetTitle.trim().normalize("NFKC").toLocaleLowerCase());
   const normalizedTopicScopeTitle = topicScopeTitle.trim() || "Instructor topic list";
   const topicScopeTitleKey = normalizedTopicScopeTitle.normalize("NFKC").toLocaleLowerCase();
@@ -813,6 +816,22 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         </article>;
       })}</div> : null}
     </section>
+    {practicedMaterials.length ? <section className="material-progress-panel">
+      <div className="study-memory__head"><div><p className="section-kicker">Progress by course material</p><h2>Assignments and study guides</h2></div><span>Each topic opens with its source attached, so new lessons and checks stay grounded in the material you selected.</span></div>
+      <div className="material-progress-panel__list">{practicedMaterials.map((source) => {
+        const coverage = summarizeStudyCoverage(source.topics.map(({ title }) => title), source.topics);
+        const lessonCoveragePercent = coverage.topicCount ? Math.round(coverage.lessonTopicCount / coverage.topicCount * 100) : 0;
+        const checkCoveragePercent = coverage.topicCount ? Math.round(coverage.checkedTopicCount / coverage.topicCount * 100) : 0;
+        return <article key={source.materialId}>
+          <div className="scope-assessment-head"><div><h3>{source.title}</h3><small>{source.kind === "assignment" ? "Assignment" : "Study guide"}</small></div><small>{source.scoredAttemptCount ? `${source.correctCount} of ${source.scoredAttemptCount} scored checks correct${source.attemptCount > source.scoredAttemptCount ? ` · ${source.attemptCount - source.scoredAttemptCount} unscored` : ""}` : source.attemptCount ? `${source.attemptCount} unscored attempts` : "No checks recorded yet"}</small></div>
+          <div className="scope-coverage"><span>{coverage.lessonTopicCount}/{coverage.topicCount} topics studied · {coverage.checkedTopicCount}/{coverage.topicCount} checked · {source.sessionCount} lesson session{source.sessionCount === 1 ? "" : "s"}</span><div className="scope-coverage__tracks"><div><small>Lesson</small><span className="scope-coverage__track" role="progressbar" aria-label={`${source.title} lesson coverage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={lessonCoveragePercent}><span style={{ width: `${lessonCoveragePercent}%` }} /></span></div><div><small>Knowledge checks</small><span className="scope-coverage__track scope-coverage__track--checked" role="progressbar" aria-label={`${source.title} knowledge check coverage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={checkCoveragePercent}><span style={{ width: `${checkCoveragePercent}%` }} /></span></div></div></div>
+          <ul>{source.topics.map((item) => <li className="scope-topic-row" key={item.conceptId}>
+            <div className="scope-topic-row__info"><strong>{item.title}</strong><div className="scope-topic-signals"><span className={item.sessionCount ? "scope-topic-signal scope-topic-signal--studied" : "scope-topic-signal"}>{item.sessionCount ? `${item.sessionCount} lesson session${item.sessionCount === 1 ? "" : "s"}` : "Not studied"}</span><span className={item.scoredAttemptCount ? "scope-topic-signal scope-topic-signal--checked" : "scope-topic-signal"}>{item.scoredAttemptCount ? `${item.correctCount}/${item.scoredAttemptCount} scored checks correct` : item.attemptCount ? `${item.attemptCount} unscored attempt${item.attemptCount === 1 ? "" : "s"}` : "No checks"}</span>{item.latestOutcome ? <span className={item.latestOutcome === "incorrect" || item.latestOutcome === "incomplete" ? "scope-topic-signal scope-topic-signal--review" : "scope-topic-signal"}>Latest: {item.latestOutcome}</span> : null}</div></div>
+            <div className="scope-topic-row__actions"><button type="button" disabled={busy} onClick={() => void startStudy(item.title, "explanation", source.materialId)}>Study lesson</button><button type="button" disabled={busy} onClick={() => void startStudy(item.title, "quiz", source.materialId)}>Practice check</button></div>
+          </li>)}</ul>
+        </article>;
+      })}</div>
+    </section> : null}
     {notice ? <div className="study-notice" role="status">{notice}</div> : null}
     {error ? <div className="error-banner">{error}{error.startsWith("Some class progress could not be loaded.") ? <button className="button-secondary" type="button" onClick={() => void refreshClassData()}>Retry loading progress</button> : null}</div> : null}
     {budgetOpen ? <section className="budget-panel">

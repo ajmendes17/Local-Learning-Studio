@@ -119,6 +119,13 @@
 .pattern-evidence { margin-top:11px; padding-top:8px; border-top:1px solid #efede6; color:#627066; font-size:.68rem; }.pattern-evidence summary { cursor:pointer; font-weight:700; }.pattern-evidence>div { margin-top:9px; }.pattern-evidence>div>strong { display:block; margin-bottom:5px; color:#536158; }.pattern-evidence p { padding:8px; border-radius:5px; background:#f7f5ed; }.pattern-evidence p b { color:#536158; }.pattern-evidence p small { display:block; margin-top:4px; }
 @media(max-width:620px) { .study-start__scope { align-items:flex-start; flex-direction:column; } .study-start__scope button { align-self:flex-start; }.topic-scope-panel__heading { align-items:flex-start; flex-direction:column; }.topic-scope-panel__heading>button { align-self:flex-start; white-space:nowrap; }.topic-scope-schedule { grid-template-columns:1fr; }.topic-scope-panel__form-actions { align-items:stretch; flex-direction:column; }.scope-assessment-head { align-items:flex-start; flex-direction:column; } }
 .scope-instructor-text { margin: 0.7rem 0 1rem; padding: 0.7rem 0.85rem; border: 1px solid var(--line, #d8dce3); border-radius: 0.7rem; background: var(--surface-subtle, #f7f8fa); }
+.material-progress-panel { margin-top:16px; padding:20px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+.material-progress-panel__list { display:grid; gap:10px; margin-top:14px; }
+.material-progress-panel__list>article { min-width:0; padding:13px; border:1px solid #e7e9e1; border-radius:7px; background:#fffefa; }
+.material-progress-panel__list .scope-assessment-head>div>small { display:block; margin-top:4px; color:#7a857a; font-size:.61rem; }
+.material-progress-panel__list ul { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:8px; margin:9px 0 0; padding:0; list-style:none; }
+.material-progress-panel__list li { min-width:0; }
+@media(max-width:620px) { .material-progress-panel { padding:14px; }.material-progress-panel__list ul { grid-template-columns:1fr; } }
 .scope-instructor-text summary { cursor: pointer; font-weight: 650; }
 .scope-instructor-text__copy { margin: 0.7rem 0; overflow-wrap: anywhere; font: inherit; line-height: 1.7; }
 .pattern-card__rationale .math-text p { margin: 0 0 0.6em; }.pattern-card__rationale .math-text p:last-child { margin-bottom: 0; }.pattern-evidence__response { margin: 0.25rem 0; padding: 0.45rem 0.6rem; border-left: 2px solid #d9dfd2; color: #627066; background: #fbfbf7; font-size: 0.92em; }

@@ -94,27 +94,37 @@ export function App() {
   }, []);
 
   const loadCourse = useCallback(async (courseId: string) => {
+    let lastRequestError: unknown;
     try {
       setError(null);
       setLoading(true);
-      const [course, learningArtifacts, codexStatus, profile] = await Promise.all([
-        getCourse(courseId),
-        getLearningArtifacts(courseId),
-        getCodexStatus().catch(
-          (): CodexStatusResponse => ({
-            installed: false,
-            authenticated: false,
-            ready: false,
-            version: null,
-            detail: "The local Codex status check failed.",
-          }),
-        ),
-        fetch(`/api/courses/${courseId}/learner/profile`).then(async (response) => response.ok ? await response.json() as LearnerProfileResponse : null).catch(() => null),
-      ]);
-      setSelectedCourse(course);
-      setArtifacts(learningArtifacts);
-      setCodex(codexStatus);
-      setLearnerProfile(profile);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const [course, learningArtifacts, codexStatus, profile] = await Promise.all([
+            getCourse(courseId),
+            getLearningArtifacts(courseId),
+            getCodexStatus().catch(
+              (): CodexStatusResponse => ({
+                installed: false,
+                authenticated: false,
+                ready: false,
+                version: null,
+                detail: "The local Codex status check failed.",
+              }),
+            ),
+            fetch(`/api/courses/${courseId}/learner/profile`).then(async (response) => response.ok ? await response.json() as LearnerProfileResponse : null).catch(() => null),
+          ]);
+          setSelectedCourse(course);
+          setArtifacts(learningArtifacts);
+          setCodex(codexStatus);
+          setLearnerProfile(profile);
+          return;
+        } catch (requestError) {
+          lastRequestError = requestError;
+          if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)));
+        }
+      }
+      throw lastRequestError;
     } catch (requestError) {
       setError((requestError as Error).message);
       setSelectedCourse(null);
@@ -126,15 +136,30 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    void fetch("/api/health")
-      .then(async (response) => {
+    let active = true;
+    let checking = false;
+    const checkHealth = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const response = await fetch("/api/health");
         if (!response.ok) throw new Error("Service unavailable");
-        return (await response.json()) as HealthResponse;
-      })
-      .then((health) => setService(health.status === "ok" ? "ready" : "offline"))
-      .catch(() => setService("offline"));
+        const health = await response.json() as HealthResponse;
+        if (active) setService(health.status === "ok" ? "ready" : "offline");
+      } catch {
+        if (active) setService("offline");
+      } finally {
+        checking = false;
+      }
+    };
+    void checkHealth();
+    const interval = window.setInterval(() => void checkHealth(), 5000);
 
     void loadLibrary();
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, [loadLibrary]);
 
   useEffect(() => {
