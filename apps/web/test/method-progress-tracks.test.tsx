@@ -53,7 +53,8 @@ test("observed scored and independent results render separate measured bars", ()
 
 test("one or two scored checks are marked as an early signal", () => {
   const html = renderTracks({ correctCount: 1, scoredAttemptCount: 1 });
-  assert.match(html, /Early signal/);
+  assert.match(html, /Early signal · at least 3 scored checks give a steadier signal\./);
+  assert.doesNotMatch(html, /topic-level signal/);
   assert.match(html, /at least 3 scored checks/);
 });
 

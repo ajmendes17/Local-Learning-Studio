@@ -29,7 +29,7 @@ export function MethodProgressTracks({
       {score == null
         ? <span className="method-progress__unmeasured">Ungraded recall and teach-back are tracked separately.</span>
         : <div className="method-progress__meter"><span className="method-progress__track" role="progressbar" aria-label={`${methodLabel} scored check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}><span style={{ width: `${score}%` }} /></span><strong>{score}%</strong></div>}
-      {needsMoreEvidence ? <span className="method-progress__sample-note">Early signal · at least 3 scored checks give a steadier topic-level signal.</span> : null}
+      {needsMoreEvidence ? <span className="method-progress__sample-note">Early signal · at least 3 scored checks give a steadier signal.</span> : null}
     </div>
     <div className={independentScore == null ? "method-progress__row method-progress__row--empty" : "method-progress__row"}>
       <small><span>Independent checks</span><strong>{safeIndependentScoredAttemptCount ? `${safeIndependentCorrectCount}/${safeIndependentScoredAttemptCount}` : "Not measured"}</strong></small>

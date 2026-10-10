@@ -889,7 +889,7 @@ export class ObsidianVault {
         }).join(" | ")}`] : []),
         `${item.highConfidenceMissCount} confident miss${item.highConfidenceMissCount === 1 ? "" : "es"}`,
         `${item.lowConfidenceCorrectCount} low-confidence correct`,
-        ...(scored > 0 && scored < 3 ? ["Early signal · at least 3 scored checks give a steadier topic-level signal"] : []),
+        ...(scored > 0 && scored < 3 ? ["Early signal · at least 3 scored checks give a steadier signal"] : []),
         ...(item.lastPracticedAt ? [`last used ${item.lastPracticedAt}`] : []),
       ];
       return `- **${studyMethodLabel(item.method)}:** ${signals.join("; ")}`;

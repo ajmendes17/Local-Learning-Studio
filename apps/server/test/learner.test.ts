@@ -1304,7 +1304,7 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
     const courseNote = await readFile(join(vaultPath, exported.json().courseFolder, "Course.md"), "utf8");
     assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 1\/1 scored checks correct; 1\/1 correct independently; confidence gap 50% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
     assert.match(courseNote, /Clear explanation:\*\* 1\/1 scored checks correct; No independent scored checks; 1\/1 correct with outside help; confidence gap 50% across 1 rated check/);
-    assert.match(courseNote, /Quiz first:[^\n]*Early signal · at least 3 scored checks give a steadier topic-level signal/);
+    assert.match(courseNote, /Quiz first:[^\n]*Early signal · at least 3 scored checks give a steadier signal/);
     assert.match(courseNote, /Clear explanation:[^\n]*Bell states \(1\/1 scored correct; no independent scored checks; 1\/1 correct with outside help; 50% confidence gap across 1 rated; early signal · at least 3 scored checks give a steadier topic-level signal/);
     assert.match(courseNote, /across 1 topic; topics: Bell states/);
     assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; 1\/1 independently correct; 50% confidence gap across 1 rated; early signal · at least 3 scored checks give a steadier topic-level signal; last practiced 2026-\d\d-\d\dT/);
