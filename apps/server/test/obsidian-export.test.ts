@@ -95,7 +95,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(courseNote, /<!-- LLS:GENERATED:START -->/);
     assert.match(courseNote, /Notes last exported:/);
     assert.match(courseNote, /sources\/bell-states-reading--/);
-    assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 0\/1 scored checks correct; No independent scored checks; 1 hinted scored check; confidence gap 50% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
+    assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 0\/1 scored checks correct; No independent scored checks; 0\/1 correct with hints; confidence gap 50% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
     assert.match(courseNote, /Clear explanation:\*\* No scored checks; No independent scored checks; confidence alignment not available; 1 total attempt; across 1 topic; topics: Bell states; 1 unscored/);
     assert.match(courseNote, /Different topics and small samples make method comparisons uncertain/);
     const professorAssessmentNote = await readFile(join(vaultPath, firstExport.json().courseFolder, "assessments", `midterm-2-professor-scope--${assessmentResponse.json().id.slice(0, 8)}.md`), "utf8");
