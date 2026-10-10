@@ -251,7 +251,7 @@ export class ObsidianVault {
       const extracted = material.passages.map((passage) => {
         const comments = (material.annotations ?? []).filter((annotation) => annotation.isCurrent && annotation.passageId === passage.id);
         return [
-          `### Passage ${passage.ordinal + 1}`,
+          `<a id="passage-${passage.ordinal + 1}"></a>\n\n### Passage ${passage.ordinal + 1}`,
           `_${passageLocation(passage.location)}_`,
           escapeImportedWikilinks(passage.content).replaceAll(START, "&lt;!-- LLS:GENERATED:START --&gt;").replaceAll(END, "&lt;!-- LLS:GENERATED:END --&gt;"),
           ...comments.flatMap((annotation) => [
@@ -268,6 +268,10 @@ export class ObsidianVault {
         `**Comment · updated ${annotation.updatedAt}**`,
         fencedVerbatim(annotation.body),
       ].join("\n\n")).join("\n\n");
+      const currentComments = (material.annotations ?? []).filter((annotation) => annotation.isCurrent);
+      const reviewNotes = currentComments.length
+        ? `**Passages with comments:** ${new Set(currentComments.map((annotation) => annotation.passageId)).size}/${material.passages.length}\n\n${currentComments.map((annotation) => `- [Passage ${annotation.ordinal + 1} · ${passageLocation(annotation.location)}](#passage-${annotation.ordinal + 1}) — ${escapeImportedWikilinks(annotation.body.split(/\\r?\\n/)[0] ?? "Comment").replaceAll("[", "&#91;").replaceAll("]", "&#93;")}`).join("\n")}`
+        : "No passage comments yet. Add exam emphasis, questions, or personal notes from Review & comment in the course.";
       const generated = [
           `**Course:** ${wikilink("Course.md", data.course.title)}`,
         `**Original file:** ${material.originalName}`,
@@ -282,6 +286,7 @@ export class ObsidianVault {
         "", "## Related course topics", relatedTopics,
         "", "## Related assessments", relatedAssessments,
         "", "## Practice by topic", practiceTopics,
+        "", "## Review notes", reviewNotes,
         ...(olderComments ? ["", "## Comments from older source versions", olderComments] : []),
         "", "## Extracted source text", extracted,
         "", "_Practice activity is evidence of study, not mastery. This note mirrors locally extracted text; the original upload remains stored in Local Learning Studio. Passage numbers and locators preserve source provenance._",
