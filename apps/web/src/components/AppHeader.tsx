@@ -1,10 +1,11 @@
 export type ServiceState = "checking" | "ready" | "offline";
-export type ActivePage = "library" | "study" | "hand-tracking" | "info" | "course";
+export type ActivePage = "library" | "study" | "knowledge" | "hand-tracking" | "info" | "course";
 
 interface AppHeaderProps {
   service: ServiceState;
   activePage: ActivePage;
   onHome: () => void;
+  onKnowledge: () => void;
   onHandTracking: () => void;
   onInfo: () => void;
 }
@@ -19,6 +20,7 @@ export function AppHeader({
   service,
   activePage,
   onHome,
+  onKnowledge,
   onHandTracking,
   onInfo,
 }: AppHeaderProps) {
@@ -51,6 +53,13 @@ export function AppHeader({
           onClick={onHome}
         >
           Library
+        </button>
+        <button
+          type="button"
+          className={activePage === "knowledge" ? "nav-link nav-link--active" : "nav-link"}
+          onClick={onKnowledge}
+        >
+          Knowledge
         </button>
         <button
           type="button"

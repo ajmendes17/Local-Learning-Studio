@@ -7,6 +7,8 @@ import type {
   CreateCourseRequest,
   HealthResponse,
   LearnerProfileResponse,
+  LearnerMethodProgressResponse,
+  CourseMapArtifact,
   MaterialKind,
 } from "@local-learning-studio/contracts";
 import { AppHeader, type ServiceState } from "./components/AppHeader";
@@ -30,11 +32,13 @@ const HomePage = lazy(() => import("./views/HomePage").then(({ HomePage }) => ({
 const InfoPage = lazy(() => import("./views/InfoPage").then(({ InfoPage }) => ({ default: InfoPage })));
 const HandTrackingPage = lazy(() => import("./views/HandTrackingPage").then(({ HandTrackingPage }) => ({ default: HandTrackingPage })));
 const StudyPage = lazy(() => import("./views/StudyPage").then(({ StudyPage }) => ({ default: StudyPage })));
+const KnowledgePage = lazy(() => import("./views/KnowledgePage").then(({ KnowledgePage }) => ({ default: KnowledgePage })));
 
 type AppRoute =
   | { kind: "library" }
   | { kind: "course-study"; courseId: string; topic?: string; sourceMaterialId?: string; assessmentId?: string; sessionId?: string }
   | { kind: "hand-tracking" }
+  | { kind: "knowledge" }
   | { kind: "info" }
   | { kind: "course"; courseId: string };
 
@@ -58,6 +62,7 @@ function routeFromPath(): AppRoute {
     return { kind: "course-study", courseId: studyMatch[1], topic: query.get("topic") ?? undefined, sourceMaterialId: query.get("sourceMaterialId") ?? undefined, assessmentId: query.get("assessmentId") ?? undefined, sessionId: query.get("sessionId") ?? undefined };
   }
   if (window.location.pathname === "/hand-tracking") return { kind: "hand-tracking" };
+  if (window.location.pathname === "/knowledge") return { kind: "knowledge" };
   if (window.location.pathname === "/how-it-works") return { kind: "info" };
   const match = window.location.pathname.match(/^\/courses\/([^/]+)$/);
   return match?.[1]
@@ -73,6 +78,9 @@ export function App() {
   const [artifacts, setArtifacts] =
     useState<CourseLearningArtifactsResponse | null>(null);
   const [learnerProfile, setLearnerProfile] = useState<LearnerProfileResponse | null>(null);
+  const [knowledgeProfiles, setKnowledgeProfiles] = useState<Array<{ course: CourseSummary; profile: LearnerProfileResponse; methods: LearnerMethodProgressResponse; courseMap: CourseMapArtifact | null }>>([]);
+  const [knowledgeLoading, setKnowledgeLoading] = useState(false);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
   const [codex, setCodex] = useState<CodexStatusResponse | null>(null);
   const [learningAction, setLearningAction] = useState<LearningAction>(null);
   const [learningRun, setLearningRun] = useState<LearningRunInfo | null>(null);
@@ -199,6 +207,34 @@ export function App() {
   }, [loadCourse, route]);
 
   useEffect(() => {
+    if (route.kind !== "knowledge") return;
+    let active = true;
+    setKnowledgeLoading(true);
+    setKnowledgeError(null);
+    void Promise.all(courses.map(async (course) => {
+      const [profileResponse, methodResponse, mapResponse] = await Promise.all([
+        fetch(`/api/courses/${course.id}/learner/profile`),
+        fetch(`/api/courses/${course.id}/learner/method-progress`),
+        fetch(`/api/courses/${course.id}/course-map/accepted`),
+      ]);
+      if (!profileResponse.ok || !methodResponse.ok || !mapResponse.ok) throw new Error(`Could not load learning evidence for ${course.title}.`);
+      const [profile, methods, courseMap] = await Promise.all([
+        profileResponse.json() as Promise<LearnerProfileResponse>,
+        methodResponse.json() as Promise<LearnerMethodProgressResponse>,
+        mapResponse.json() as Promise<CourseMapArtifact | null>,
+      ]);
+      return { course, profile, methods, courseMap };
+    })).then((profiles) => {
+      if (active) setKnowledgeProfiles(profiles);
+    }).catch((requestError) => {
+      if (active) setKnowledgeError((requestError as Error).message);
+    }).finally(() => {
+      if (active) setKnowledgeLoading(false);
+    });
+    return () => { active = false; };
+  }, [route, courses]);
+
+  useEffect(() => {
     const handlePopState = () => setRoute(routeFromPath());
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -275,6 +311,7 @@ export function App() {
 
   const activePage = route.kind === "course-study" ? "study" :
     route.kind === "hand-tracking" ? "hand-tracking" :
+    route.kind === "knowledge" ? "knowledge" :
     route.kind === "course" ? "course" : route.kind === "info" ? "info" : "library";
 
   return (
@@ -283,6 +320,7 @@ export function App() {
         service={service}
         activePage={activePage}
         onHome={() => navigate("/")}
+        onKnowledge={() => navigate("/knowledge")}
         onHandTracking={() => navigate("/hand-tracking")}
         onInfo={() => navigate("/how-it-works")}
       />
@@ -315,6 +353,8 @@ export function App() {
         <HandTrackingPage />
       ) : route.kind === "info" ? (
         <InfoPage onStart={() => navigate("/")} />
+      ) : route.kind === "knowledge" ? (
+        <KnowledgePage profiles={knowledgeProfiles} loading={knowledgeLoading} error={knowledgeError} onOpenCourse={(courseId) => navigate(`/courses/${courseId}`)} onStudyTopic={(courseId, topic, assessmentId) => navigate(`/courses/${courseId}/study?topic=${encodeURIComponent(topic)}${assessmentId ? `&assessmentId=${encodeURIComponent(assessmentId)}` : ""}`)} />
       ) : (
         <HomePage
           courses={courses}
