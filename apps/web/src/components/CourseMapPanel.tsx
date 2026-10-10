@@ -4,7 +4,7 @@ import type {
   CourseLearningArtifactsResponse,
   LearnerProfileResponse,
 } from "@local-learning-studio/contracts";
-import type { LearningRunInfo } from "../App";
+import type { LearningRunInfo } from "../lib/learning-run-history";
 import { AcceptedStructureDiagram } from "./AcceptedStructureDiagram";
 import { MathText } from "./MathText";
 import type { ApiErrorInfo } from "../lib/api";
@@ -21,6 +21,7 @@ interface CourseMapPanelProps {
   materials: CourseMaterial[];
   action: LearningAction;
   run: LearningRunInfo | null;
+  runHistory?: LearningRunInfo[];
   error: ApiErrorInfo | null;
   onAnalyze: (regenerate: boolean) => Promise<void>;
   onBuildMap: (regenerate: boolean) => Promise<void>;
@@ -82,6 +83,7 @@ export function CourseMapPanel({
   materials,
   action,
   run,
+  runHistory = [],
   error,
   onAnalyze,
   onBuildMap,
@@ -172,6 +174,7 @@ export function CourseMapPanel({
           {run.promptCharacters != null && run.sourceStats ? <p>Prompt: {run.promptCharacters.toLocaleString()} characters · {run.sourceStats.passageCount} passages / {run.sourceStats.materialCount} materials · {run.sourceStats.characterCount.toLocaleString()} source characters · {run.omittedPassageCount ?? 0} omitted</p> : null}
         </div>
       ) : null}
+      {runHistory.length ? <details className="learning-run-history"><summary>Recent analysis runs ({runHistory.length})</summary><ol>{runHistory.map((item) => <li key={item.operationId}><div><strong>{item.phase === "classification" ? "Source analysis" : "Course map"}</strong><span>{item.status === "running" ? "Interrupted or still running" : item.status} · {item.model ?? "Model not reported"} · {new Date(item.startedAt).toLocaleString()}</span></div><p>{item.usage ? `${item.usage.inputTokens.toLocaleString()} input · ${item.usage.cachedInputTokens.toLocaleString()} cached · ${item.usage.outputTokens.toLocaleString()} output tokens` : "No token usage reported"}{item.durationMs != null ? ` · ${(item.durationMs / 1000).toFixed(1)}s` : ""}</p>{item.promptCharacters != null && item.sourceStats ? <small>Prompt {item.promptCharacters.toLocaleString()} chars · {item.sourceStats.materialCount} sources · {item.sourceStats.passageCount} passages · {item.sourceStats.characterCount.toLocaleString()} source chars · {item.omittedPassageCount ?? 0} omitted</small> : null}</li>)}</ol></details> : null}
 
       {error ? <div className="map-error" role="alert"><p>{error.error}</p>{error.diagnostics ? <details className="map-error__diagnostics" open><summary>Inspect validation details</summary><p>These checks compare the generated response with the supported structure and the exact course evidence supplied for this run.</p><dl>{Object.entries(error.diagnostics).map(([key, value]) => <div key={key}><dt>{key.replaceAll(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())}</dt><dd>{diagnosticText(value)}</dd></div>)}</dl></details> : null}</div> : null}
       {!codexReady && codex ? (

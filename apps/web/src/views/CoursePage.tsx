@@ -16,7 +16,7 @@ import {
 import { MaterialUpload } from "../components/MaterialUpload";
 import { ObsidianExportPanel } from "../components/ObsidianExportPanel";
 import { MathText } from "../components/MathText";
-import type { LearningRunInfo } from "../App";
+import type { LearningRunInfo } from "../lib/learning-run-history";
 import type { ApiErrorInfo } from "../lib/api";
 import { summarizeSourceAnnotations } from "../lib/source-annotation-summary";
 import { clearSourceCommentDraft, readSourceCommentDraft, writeSourceCommentDraft } from "../lib/source-comment-draft";
@@ -33,6 +33,7 @@ interface CoursePageProps {
   codex: CodexStatusResponse | null;
   learningAction: LearningAction;
   learningRun: LearningRunInfo | null;
+  learningRunHistory: LearningRunInfo[];
   learningError: ApiErrorInfo | null;
   onBack: () => void;
   onUpload: (file: File, kind: MaterialKind) => Promise<void>;
@@ -264,6 +265,7 @@ export function CoursePage({
   codex,
   learningAction,
   learningRun,
+  learningRunHistory,
   learningError,
   onBack,
   onUpload,
@@ -415,6 +417,7 @@ export function CoursePage({
         materials={course.materials}
         action={learningAction}
         run={learningRun}
+        runHistory={learningRunHistory}
         error={learningError}
         onAnalyze={onAnalyze}
         onBuildMap={onBuildMap}

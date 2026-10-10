@@ -418,6 +418,15 @@
 .codex-run-status strong { font-size: .78rem; }
 .codex-run-status span,.codex-run-status p { color: #758074; font-size: .68rem; }
 .codex-run-status p { margin: 6px 0 0; }
+.learning-run-history { margin: 0 0 16px; border: 1px solid #e2e7dc; border-radius: 8px; background: #fafbf8; color: #465449; }
+.learning-run-history summary { padding: 10px 13px; color: #657263; cursor: pointer; font-size: .72rem; font-weight: 700; }
+.learning-run-history ol { display: grid; gap: 8px; margin: 0; padding: 0 13px 12px; list-style: none; }
+.learning-run-history li { padding: 9px 10px; border-radius: 6px; background: #f0f3ed; }
+.learning-run-history li > div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.learning-run-history li strong { font-size: .73rem; }
+.learning-run-history li span,.learning-run-history li p,.learning-run-history li small { color: #748073; font-size: .66rem; }
+.learning-run-history li p { margin: 5px 0 0; }
+.learning-run-history li small { display: block; margin-top: 4px; }
 
 .map-step {
   display: flex;

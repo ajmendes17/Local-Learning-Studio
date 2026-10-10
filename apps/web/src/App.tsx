@@ -27,6 +27,7 @@ import {
   type ApiErrorInfo,
 } from "./lib/api";
 import { studyTopicPath, suggestedStudyMethod } from "./lib/study-navigation";
+import { readLearningRunHistory, recordLearningRun, updateLearningRun, type LearningRunInfo } from "./lib/learning-run-history";
 
 const CoursePage = lazy(() => import("./views/CoursePage").then(({ CoursePage }) => ({ default: CoursePage })));
 const HomePage = lazy(() => import("./views/HomePage").then(({ HomePage }) => ({ default: HomePage })));
@@ -42,19 +43,6 @@ type AppRoute =
   | { kind: "knowledge" }
   | { kind: "info" }
   | { kind: "course"; courseId: string };
-
-export interface LearningRunInfo {
-  operationId: string;
-  phase: "classification" | "course-map";
-  startedAt: number;
-  status: "running" | "complete" | "failed";
-  model?: string;
-  promptCharacters?: number;
-  sourceStats?: { materialCount: number; passageCount: number; characterCount: number };
-  omittedPassageCount?: number;
-  durationMs?: number;
-  usage?: { inputTokens: number; cachedInputTokens: number; outputTokens: number; reasoningOutputTokens: number } | null;
-}
 
 function routeFromPath(): AppRoute {
   const studyMatch = window.location.pathname.match(/^\/courses\/([^/]+)\/study$/);
@@ -85,6 +73,7 @@ export function App() {
   const [codex, setCodex] = useState<CodexStatusResponse | null>(null);
   const [learningAction, setLearningAction] = useState<LearningAction>(null);
   const [learningRun, setLearningRun] = useState<LearningRunInfo | null>(null);
+  const [learningRunHistory, setLearningRunHistory] = useState<LearningRunInfo[]>([]);
   const [, setClockTick] = useState(0);
   const [learningError, setLearningError] = useState<ApiErrorInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -173,16 +162,24 @@ export function App() {
 
   useEffect(() => {
     if (route.kind !== "course") return;
+    setLearningRun(null);
+    setLearningRunHistory(readLearningRunHistory(route.courseId));
     const events = new EventSource(`/api/courses/${route.courseId}/learning-operations`);
     events.onmessage = (message) => {
       const event = JSON.parse(message.data) as Record<string, unknown>;
       if (event.type === "started") {
-        setLearningRun({ operationId: String(event.operationId), phase: event.phase as LearningRunInfo["phase"], startedAt: Date.parse(String(event.startedAt)), status: "running", model: String(event.model), promptCharacters: Number(event.promptCharacters), sourceStats: event.sourceStats as LearningRunInfo["sourceStats"], omittedPassageCount: Number(event.omittedPassageCount) });
+        const run = { operationId: String(event.operationId), phase: event.phase as LearningRunInfo["phase"], startedAt: Date.parse(String(event.startedAt)), status: "running" as const, model: String(event.model), promptCharacters: Number(event.promptCharacters), sourceStats: event.sourceStats as LearningRunInfo["sourceStats"], omittedPassageCount: Number(event.omittedPassageCount) };
+        setLearningRun(run);
+        setLearningRunHistory(recordLearningRun(route.courseId, run));
       } else if (event.type === "cached") {
-        setLearningRun({ operationId: `cached-${String(event.phase)}`, phase: event.phase as LearningRunInfo["phase"], startedAt: Date.now(), status: "complete", model: "Cached result", durationMs: 0, usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 } });
+        const run = { operationId: `cached-${String(event.phase)}-${Date.now()}`, phase: event.phase as LearningRunInfo["phase"], startedAt: Date.now(), status: "complete" as const, model: "Cached result", durationMs: 0, usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 } };
+        setLearningRun(run);
       } else if (event.type === "completed") {
-        setLearningRun((current) => current && current.operationId === event.operationId ? { ...current, status: "complete", model: String(event.model), durationMs: Number(event.durationMs), usage: event.usage as LearningRunInfo["usage"] } : current);
+        const update = (run: LearningRunInfo) => ({ ...run, status: "complete" as const, model: String(event.model), durationMs: Number(event.durationMs), usage: event.usage as LearningRunInfo["usage"] });
+        setLearningRun((current) => current && current.operationId === event.operationId ? update(current) : current);
+        setLearningRunHistory(updateLearningRun(route.courseId, String(event.operationId), update));
       } else if (event.type === "failed") {
+        setLearningRunHistory(updateLearningRun(route.courseId, String(event.operationId), (run) => ({ ...run, status: "failed" })));
         setLearningRun((current) => current && current.operationId === event.operationId ? { ...current, status: "failed" } : current);
       }
     };
@@ -340,6 +337,7 @@ export function App() {
           codex={codex}
           learningAction={learningAction}
           learningRun={learningRun}
+          learningRunHistory={learningRunHistory}
           learningError={learningError}
           onBack={() => navigate("/")}
           onUpload={handleUpload}
