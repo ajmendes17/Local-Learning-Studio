@@ -285,6 +285,15 @@ test("PDF extraction preserves page-level provenance", async () => {
   assert.equal(material.status, "ready");
   assert.equal(material.passageCount, 2);
 
+  const originalResponse = await app.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/materials/${material.id}/file#page=2`,
+  });
+  assert.equal(originalResponse.statusCode, 200);
+  assert.equal(originalResponse.headers["content-type"], "application/pdf");
+  assert.match(originalResponse.headers["content-disposition"] ?? "", /inline/);
+  assert.deepEqual(originalResponse.rawPayload, Buffer.from(await pdf.save()));
+
   const response = await app.inject({
     method: "GET",
     url: `/api/courses/${course.id}/materials/${material.id}/passages`,
@@ -303,6 +312,33 @@ test("PDF extraction preserves page-level provenance", async () => {
       },
     ],
   );
+
+  await app.close();
+  await rm(root, { recursive: true });
+});
+
+test("original source route refuses non-PDF materials", async () => {
+  const { app, root } = await createTestApp();
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/courses",
+    payload: { title: "Text Sources" },
+  });
+  const course = CourseSummarySchema.parse(createResponse.json());
+  const upload = multipartFile("notes.txt", "A short source passage.", "text/plain");
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/courses/${course.id}/materials?kind=reading`,
+    headers: { "content-type": upload.contentType },
+    payload: upload.payload,
+  });
+  const material = CourseMaterialSchema.parse(uploadResponse.json());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/courses/${course.id}/materials/${material.id}/file`,
+  });
+  assert.equal(response.statusCode, 415);
 
   await app.close();
   await rm(root, { recursive: true });

@@ -148,6 +148,13 @@ export class CourseLibrary {
     return { ...course, materials, modules, assessments };
   }
 
+  getStoredMaterialFile(courseId: string, materialId: string) {
+    return this.database.prepare(`SELECT original_name AS originalName,stored_name AS storedName,media_type AS mediaType
+      FROM materials WHERE course_id=? AND id=?`).get(courseId, materialId) as
+      | { originalName: string; storedName: string; mediaType: string }
+      | undefined;
+  }
+
   createMaterial(record: NewMaterialRecord): CourseMaterial {
     const now = new Date().toISOString();
     const status = record.initialStatus ?? "stored";

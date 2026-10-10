@@ -364,7 +364,7 @@ export class LearnerLibrary {
   }
 
   getProfile(courseId: string): LearnerProfileResponse {
-    const sources = this.database.prepare(`SELECT m.id AS materialId,m.original_name AS title,m.kind,
+    const sources = this.database.prepare(`SELECT m.id AS materialId,m.original_name AS title,m.kind,m.media_type AS mediaType,
       COUNT(DISTINCT a.id) AS attemptCount,
       COUNT(DISTINCT CASE WHEN a.outcome IN ('correct','incorrect') THEN a.id END) AS scoredAttemptCount,
       COUNT(DISTINCT CASE WHEN a.outcome='correct' THEN a.id END) AS correctCount,

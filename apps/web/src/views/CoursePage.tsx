@@ -15,6 +15,7 @@ import {
 } from "../components/CourseMapPanel";
 import { MaterialUpload } from "../components/MaterialUpload";
 import { ObsidianExportPanel } from "../components/ObsidianExportPanel";
+import { MathText } from "../components/MathText";
 import type { LearningRunInfo } from "../App";
 import type { ApiErrorInfo } from "../lib/api";
 
@@ -197,9 +198,11 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
     {error ? <p className="error-banner" role="alert">{error}</p> : null}
     {!loading && passages.map((passage) => {
       const passageComments = annotations.filter((annotation) => annotation.isCurrent && annotation.passageId === passage.id);
+      const originalPdfPage = material.mediaType === "application/pdf" && passage.location.kind === "page" ? passage.location.pageStart : null;
       return <article className="material-review__passage" key={passage.id}>
         <h4>Passage {passage.ordinal + 1} <span>{sourceLocationLabel(passage.location)}</span></h4>
-        <details><summary>Read extracted text</summary><blockquote>{passage.content}</blockquote></details>
+        {originalPdfPage ? <a className="material-review__original-pdf" href={`/api/courses/${courseId}/materials/${material.id}/file#page=${originalPdfPage}`} target="_blank" rel="noreferrer">Open original PDF · page {originalPdfPage} →</a> : null}
+        <details><summary>Read extracted text</summary><blockquote><MathText content={passage.content} inertLinksAndImages /></blockquote></details>
         {passageComments.map((annotation) => <div className="material-comment" key={annotation.id}>
           {editingId === annotation.id ? <><textarea aria-label="Edit source comment" maxLength={8000} value={editBody} onChange={(event) => setEditBody(event.target.value)} /><div className="material-comment__actions"><button type="button" className="button-primary" disabled={busy || !editBody.trim()} onClick={() => void saveEdit(annotation)}>Save edit</button><button type="button" className="button-secondary" onClick={() => setEditingId(null)}>Cancel</button></div></> : <><p>{annotation.body}</p><small>Commented {new Date(annotation.updatedAt).toLocaleString()}</small><div className="material-comment__actions"><button type="button" className="button-secondary" onClick={() => { setEditingId(annotation.id); setEditBody(annotation.body); }}>Edit</button><button type="button" className="button-secondary" disabled={busy} onClick={() => void remove(annotation)}>Delete</button></div></>}
         </div>)}

@@ -411,7 +411,7 @@ export const StudyClarificationResponseSchema = z.object({
 
 export const LearnerProfileResponseSchema = z.object({
   sources: z.array(z.object({
-    materialId: z.string().uuid(), title: z.string(), kind: z.string(),
+    materialId: z.string().uuid(), title: z.string(), kind: z.string(), mediaType: z.string(),
     attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(),
     sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
     topicCount: z.number().int().nonnegative(), practicedTopicCount: z.number().int().nonnegative(),

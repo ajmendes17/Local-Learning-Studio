@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import { extname } from "node:path";
 import {
   CourseDetailSchema,
@@ -72,6 +74,35 @@ export async function registerCourseRoutes(
       }
 
       return CourseDetailSchema.parse(course);
+    },
+  );
+
+  app.get<{ Params: { courseId: string; materialId: string } }>(
+    "/api/courses/:courseId/materials/:materialId/file",
+    async (request, reply) => {
+      const courseId = courseIdSchema.safeParse(request.params.courseId);
+      const materialId = courseIdSchema.safeParse(request.params.materialId);
+      if (!courseId.success || !materialId.success) return reply.code(400).send({ error: "Source ID is invalid." });
+      const stored = library.getStoredMaterialFile(courseId.data, materialId.data);
+      if (!stored) return reply.code(404).send({ error: "Course material not found." });
+      if (stored.mediaType !== "application/pdf" || !stored.originalName.toLowerCase().endsWith(".pdf")) {
+        return reply.code(415).send({ error: "Original-page viewing is available for PDF sources." });
+      }
+      const path = materialStorage.pathFor(courseId.data, stored.storedName);
+      try {
+        const info = await stat(path);
+        if (!info.isFile()) return reply.code(404).send({ error: "Course material file not found." });
+        return reply
+          .type("application/pdf")
+          .header("Content-Disposition", 'inline; filename="course-material.pdf"')
+          .header("Content-Length", info.size)
+          .header("Cache-Control", "no-store")
+          .header("X-Content-Type-Options", "nosniff")
+          .send(createReadStream(path));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return reply.code(404).send({ error: "Course material file not found." });
+        throw error;
+      }
     },
   );
 
