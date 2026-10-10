@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, summarizeStudyCoverage } from "@local-learning-studio/contracts";
 import { MathText } from "../components/MathText";
 import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTopicDraft } from "../lib/instructor-topic-draft";
+import { appendInstructorTopicWording } from "../lib/instructor-topic-scope";
 import "../styles/study.css";
 
 type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall";
@@ -520,12 +521,10 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           topics,
         }, "PATCH");
         addedTopicCount = result.addedTopicCount;
-        if (addedTopicCount) {
-          const currentText = assessmentScopes.find(({ id }) => id === topicScopeTargetAssessmentId)?.instructorText ?? "";
-          await postJson(`/api/courses/${courseId}/learner/assessments/${topicScopeTargetAssessmentId}`, {
-            instructorText: currentText ? `${currentText.trimEnd()}\n\nAdditional instructor topics (${new Date().toLocaleDateString()}):\n${instructorText}` : instructorText,
-          }, "PATCH");
-        }
+        const currentText = assessmentScopes.find(({ id }) => id === topicScopeTargetAssessmentId)?.instructorText ?? "";
+        await postJson(`/api/courses/${courseId}/learner/assessments/${topicScopeTargetAssessmentId}`, {
+          instructorText: appendInstructorTopicWording(currentText, instructorText, new Date().toLocaleDateString()),
+        }, "PATCH");
       } else {
         await postJson(`/api/courses/${courseId}/learner/assessments`, {
           title: normalizedTopicScopeTitle,
@@ -541,7 +540,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       setTopicScopeMessage(topicScopeTargetAssessmentId
         ? addedTopicCount
           ? `Added ${addedTopicCount} new ${addedTopicCount === 1 ? "topic" : "topics"} to ${targetTitle ?? "this scope"}. Existing topic history was kept.`
-          : `Those topics are already in ${targetTitle ?? "this scope"}; nothing new was added.`
+          : `Those topics are already in ${targetTitle ?? "this scope"}; no duplicates were added, and the professor’s wording was saved.`
         : `Saved ${addedTopicCount} ${addedTopicCount === 1 ? "topic" : "topics"} to this class.`);
       setTopicScopeTargetAssessmentId(null);
       setTopicScopeTitle("");
