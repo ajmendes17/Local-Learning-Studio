@@ -632,3 +632,223 @@ dist/assets/HandTrackingPage-kUjubWox.js              170.34 kB │ gzip:  51.00
 dist/assets/index-Dl7ihLjR.js                         195.42 kB │ gzip:  61.61 kB
 dist/assets/study-progress-HYFWFq93.js                397.27 kB │ gzip: 120.25 kB
 ✓ built in 216ms passed all workspace typechecks, 63 server tests, 37 web tests, and production builds;  passed. |
+
+| 2026-10-10 | Make low-accuracy Obsidian notes actionable | Obsidian topic notes now add a suggested next step to take another quiz when repeated scored checks show low accuracy, matching the Study page recommendation. Disposable export coverage asserts the note text. > npm run typecheck && npm test && npm run build
+> npm run typecheck --workspaces --if-present
+> tsc -p tsconfig.json --noEmit
+> tsc -p tsconfig.json --noEmit
+> tsc -b --pretty false
+> tsc -p tsconfig.json
+> npm run test --workspaces --if-present
+> tsx --test test/**/*.test.ts
+(node:46885) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ GET /api/health reports the shared API version (354.228542ms)
+✔ course library persists a course and its uploaded material (263.775709ms)
+✔ PDF extraction preserves page-level provenance (605.561ms)
+✔ PDF math layout reconstructs a stacked numerator over a square-root denominator (0.7ms)
+Warning: Indexing all PDF objects
+✔ source reprocessing keeps the previous passages when extraction fails (107.308958ms)
+✔ original source route refuses non-PDF materials (81.99025ms)
+✔ empty extractable sources fail visibly without losing the upload (39.388291ms)
+✔ DOCX extraction preserves paragraph provenance and headings (31.42925ms)
+✔ PPTX extraction preserves slide provenance (27.581167ms)
+✔ invalid Office packages fail visibly without losing the upload (24.466625ms)
+✔ legacy passage locators migrate to canonical JSON (15.287417ms)
+✔ startup turns interrupted extraction into an explicit failure (21.799625ms)
+✔ course creation rejects an empty title (18.817291ms)
+✔ unsupported uploads do not create material records (19.944333ms)
+(node:46886) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ model router keeps narrow tasks on Luna and synthesis on Terra (2.729625ms)
+✔ study generation JSON schema uses only required model-authored fields (9.009542ms)
+✔ Codex runner reports local installation and authentication (440.419917ms)
+✔ Codex runner selects a model and validates structured output (172.342708ms)
+✔ Codex runner rejects execution failures and invalid output (393.209584ms)
+✔ Codex runner stops a timed-out run explicitly (33.486375ms)
+✔ Codex runner serializes model calls (476.63675ms)
+✔ GET /api/codex/status exposes setup readiness (141.400042ms)
+✔ course-map.v1 accepts internally consistent source-grounded structure (7.298875ms)
+✔ course-map.v1 rejects dangling course and source references (5.715291ms)
+✔ source-classification.v1 requires unique, internally grounded sources (0.630208ms)
+(node:46888) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ study recommendations prefer nearer upcoming assessments when signals tie (22.269ms)
+✔ study generation exposes a safe CLI diagnostic for troubleshooting (344.573375ms)
+✔ professor topic-list parser removes common numbering and bullets and deduplicates case-insensitively (5.938083ms)
+✔ professor topic-list parser removes common copied scope headings (2.530541ms)
+✔ study budget allocates exactly the available minutes and favors weak topics (0.892417ms)
+✔ assessment study plan weights saved evidence and reports deadline timing (1.401333ms)
+✔ assessment schedule spreads sessions before the deadline and flags over-capacity time (2.149ms)
+✔ category progress counts only the displayed topics and ignores duplicate titles (0.535542ms)
+✔ study coverage distinguishes lesson sessions from saved knowledge checks (0.824625ms)
+✔ homework next-topic recommendation prioritizes review, untouched topics, then stale topics (2.780041ms)
+✔ spaced recall uses shorter intervals for uncertain evidence and extends after independent success (0.247ms)
+✔ recommendations surface due spaced recall and show the next date before it is due (0.52125ms)
+✔ class recommendation distinguishes lesson-only topics and suggests their first knowledge check (0.178959ms)
+✔ recommendations ask for an independent check after assisted-only correct attempts (0.70675ms)
+✔ cross-scope recommendations preserve review urgency and instructor priority (0.238958ms)
+✔ math text preserves TeX and repairs JSON-decoded control characters inside math (1.681333ms)
+✔ math text renders recognizable PDF Dirac notation without changing code or delimited math (2.157916ms)
+✔ instructor topic lists persist as class-scoped learner assessment topics (161.412292ms)
+✔ adding a topic already in an assessment can link its existing class progress (166.83975ms)
+✔ study attempts from a learner exam scope update assessment and topic progress (154.914208ms)
+✔ learner-data export includes the full class profile, saved sessions, and responses (134.60625ms)
+✔ exam topic study selects a matching class source and marks unmatched topics as general knowledge (138.074041ms)
+✔ study methods send distinct learning directions (139.943083ms)
+✔ error-analysis refuses generated work without four numbered steps (75.095208ms)
+✔ error-analysis refuses adaptive work without four numbered steps (72.163667ms)
+✔ compare and contrast uses accepted course-map neighbors in initial and adaptive study (59.357417ms)
+✔ free recall saves the learner response as ungraded and keeps the method in history (28.985ms)
+✔ teach-back is a distinct open response that persists independently and exports its reference (28.828125ms)
+✔ quiz study, saved answer, method progress, and Obsidian export work together in a disposable class (43.487959ms)
+✔ assignment study sessions retrieve only the selected course material and return course-grounded content (39.664083ms)
+✔ adaptive questions preserve homework and assessment grounding (50.766292ms)
+(node:46889) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ learning artifacts preserve drafts, fingerprints, and accepted history (26.514084ms)
+(node:46890) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ course sources flow through cached classification, map review, and acceptance (672.018125ms)
+(node:46891) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Obsidian export creates linked class notes and preserves learner-owned text on refresh (682.983708ms)
+✔ Obsidian configuration rejects a non-folder vault path (80.248542ms)
+✔ Obsidian export refuses a symlinked notes folder without writing outside the vault (6.880042ms)
+✔ Obsidian export refuses a class-folder symlink even when it points inside the vault (4.301542ms)
+✔ Obsidian source notes link assignments to their accepted topics and assessments (41.770708ms)
+ℹ tests 63
+ℹ suites 0
+ℹ pass 63
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5700.33425
+> tsx --test test/**/*.test.ts test/**/*.test.tsx
+✔ assignment and exam topic summaries show due and upcoming spaced recall (16.263208ms)
+✔ unscored and missed topics are not mislabeled as scheduled spaced recall (0.229083ms)
+✔ low scored accuracy starts quiz-first practice from topic actions (0.107667ms)
+✔ instructor topic drafts survive navigation in the same tab and remain class-scoped (4.088459ms)
+✔ empty instructor topic forms remove their saved draft (0.367166ms)
+✔ malformed draft data cannot break the study page (0.212208ms)
+✔ scope append preview separates already-listed topics without changing their order (3.73725ms)
+✔ appending duplicate topics can still preserve new professor wording (0.351709ms)
+✔ first professor wording does not gain an unnecessary append heading (0.221ms)
+✔ retrying the same append does not duplicate professor wording (0.122375ms)
+✔ knowledge dashboard keeps mapped, learner-created, and instructor-scope topics distinct (165.742ms)
+✔ knowledge dashboard recommends revisiting incomplete and unsupported checks (2.022583ms)
+✔ knowledge dashboard prioritizes a difficult check and explains its suggestion (2.57725ms)
+✔ knowledge topic profile shows independent check evidence separately from overall accuracy (1.571208ms)
+✔ learner-data cleanup clears only the selected class drafts in every storage (1.51525ms)
+✔ learner-data cleanup tolerates blocked storage writes/removals (0.149ms)
+✔ math content repairs damaged TeX and renders with KaTeX (17.155542ms)
+✔ inline professor topics and multi-line formulas use KaTeX (14.333958ms)
+✔ inline ket-bra products render as a single valid math expression (2.263375ms)
+✔ PDF-style reconstructed Dirac fractions render as math (6.092041ms)
+✔ Unicode subscript and superscript ket labels render through KaTeX (5.097458ms)
+✔ imported Markdown keeps links and images inert while rendering text (1.936208ms)
+✔ ungraded methods show unmeasured states instead of zero-percent score bars (6.380917ms)
+✔ scored but supported attempts do not imply independent accuracy is zero (0.624875ms)
+✔ observed scored and independent results render separate measured bars (2.990042ms)
+✔ source comment summary counts annotated passages separately from comments and stale notes (2.69875ms)
+✔ knowledge-check drafts resume across browser restarts and stay course scoped (4.206833ms)
+✔ expired knowledge-check drafts are removed from every available storage (0.157584ms)
+✔ draft restoration bounds the selected answer, hint count, and response size (0.340375ms)
+✔ malformed or non-object saved drafts are ignored without breaking study (0.320541ms)
+✔ saving an attempt clears its local and session draft copies (0.2485ms)
+✔ due-review topic links preserve homework scope and open quiz-first practice (4.414333ms)
+✔ unsupported method query values cannot choose a generated study method (0.101291ms)
+✔ topic score uses scored checks and keeps ungraded attempts separate (1.912334ms)
+✔ topic score is unmeasured until a scored check exists (0.08125ms)
+✔ topic score bounds inconsistent server counts (0.068583ms)
+✔ topic evidence labels reflect repeated independent results and setbacks (0.161708ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1170.118875
+> tsc -p tsconfig.json
+> tsc -p tsconfig.json
+> tsc -b && vite build
+vite v8.1.5 building client environment for production...
+[2Ktransforming...✓ 330 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                         0.81 kB │ gzip:   0.41 kB
+dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff           4.42 kB
+dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2          4.92 kB
+dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2          5.20 kB
+dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2          5.46 kB
+dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff           5.98 kB
+dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff           6.18 kB
+dist/assets/KaTeX_Size1-Regular-C195tn64.woff           6.49 kB
+dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2    6.90 kB
+dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2       6.91 kB
+dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf            7.58 kB
+dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff     7.65 kB
+dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff        7.71 kB
+dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2         9.64 kB
+dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2     10.34 kB
+dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf           10.36 kB
+dist/assets/KaTeX_Script-Regular-D5yQViql.woff         10.58 kB
+dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2       11.31 kB
+dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2          11.34 kB
+dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf           11.50 kB
+dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2      12.02 kB
+dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2        12.21 kB
+dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf           12.22 kB
+dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff      12.31 kB
+dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf     12.34 kB
+dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf        12.36 kB
+dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff        13.20 kB
+dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff           13.29 kB
+dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2    13.56 kB
+dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff       14.11 kB
+dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff         14.40 kB
+dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff     16.02 kB
+dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2       16.40 kB
+dist/assets/KaTeX_Math-Italic-t53AETM-.woff2           16.44 kB
+dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf          16.64 kB
+dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2       16.78 kB
+dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2           16.98 kB
+dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff        18.66 kB
+dist/assets/KaTeX_Math-Italic-DA0__PXp.woff            18.74 kB
+dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff        19.41 kB
+dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf       19.43 kB
+dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf         19.57 kB
+dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf            19.58 kB
+dist/assets/KaTeX_Main-Italic-BMLOBm91.woff            19.67 kB
+dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf        22.36 kB
+dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf          24.50 kB
+dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2             25.32 kB
+dist/assets/KaTeX_Main-Regular-B22Nviop.woff2          26.27 kB
+dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf      27.55 kB
+dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2           28.07 kB
+dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff              29.91 kB
+dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff           30.77 kB
+dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf         31.19 kB
+dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf             31.30 kB
+dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf         32.96 kB
+dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff            33.51 kB
+dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf             33.58 kB
+dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf               51.33 kB
+dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf            53.58 kB
+dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf             63.63 kB
+dist/assets/study-progress-Ngnvt50Q.css                29.80 kB │ gzip:   7.97 kB
+dist/assets/index-hIIiIlPL.css                         98.30 kB │ gzip:  19.56 kB
+dist/assets/jsx-runtime-DUAcabCT.js                     1.06 kB │ gzip:   0.60 kB
+dist/assets/HomePage-BCfXuw81.js                        5.43 kB │ gzip:   1.70 kB
+dist/assets/react-DEX2qfRi.js                           7.52 kB │ gzip:   2.87 kB
+dist/assets/InfoPage-DQ63Qrs6.js                        7.66 kB │ gzip:   2.59 kB
+dist/assets/KnowledgePage-CCfh1Efc.js                  14.86 kB │ gzip:   4.14 kB
+dist/assets/CoursePage-BMri9YJY.js                     51.15 kB │ gzip:  13.36 kB
+dist/assets/StudyPage-BTl2irwa.js                      69.33 kB │ gzip:  17.95 kB
+dist/assets/dist-B07zVGNr.js                          100.42 kB │ gzip:  25.82 kB
+dist/assets/HandTrackingPage-kUjubWox.js              170.34 kB │ gzip:  51.00 kB
+dist/assets/index-Dl7ihLjR.js                         195.42 kB │ gzip:  61.61 kB
+dist/assets/study-progress-HYFWFq93.js                397.27 kB │ gzip: 120.25 kB
+✓ built in 833ms passed all workspace typechecks, 63 server tests, 37 web tests, and production builds;  passed. |
