@@ -27,6 +27,16 @@ $$`,
   assert.match(display, /class="katex"/);
 });
 
+test("inline ket-bra products render as a single valid math expression", () => {
+  const html = renderToStaticMarkup(createElement(MarkdownMath, {
+    inline: true,
+    content: "|+⟩⟨+|",
+  }));
+
+  assert.match(html, /class="katex"/);
+  assert.doesNotMatch(html, /katex-error|ParseError/);
+});
+
 test("imported Markdown keeps links and images inert while rendering text", () => {
   const html = renderToStaticMarkup(createElement(MarkdownMath, {
     content: "![diagram](https://example.invalid/image.png)\n\n[external reference](https://example.invalid/page)",

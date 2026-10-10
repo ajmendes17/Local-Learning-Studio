@@ -339,6 +339,7 @@ test("math text renders recognizable PDF Dirac notation without changing code or
   );
   assert.equal(normalizeMathText(String.raw`Existing $|0\rangle$ and \(\lvert 1\rangle\)`), String.raw`Existing $|0\rangle$ and $\lvert 1\rangle$`);
   assert.equal(normalizeMathText("Dirac math: $| 0 〉 + | 1 〉$"), String.raw`Dirac math: $\ket{0} + \ket{1}$`);
+  assert.equal(normalizeMathText("Projector: |+⟩⟨+|", { inline: true }), String.raw`Projector: $\ket{+}\bra{+}$`);
   assert.equal(normalizeMathText("For qubits, | a 〉 A ⊗ | b 〉 B."), String.raw`For qubits, $\ket{a}_A$ $\otimes$ $\ket{b}_B$.`);
 });
 

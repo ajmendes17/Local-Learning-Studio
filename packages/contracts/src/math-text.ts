@@ -30,6 +30,8 @@ function diracLabel(label: string) {
 function normalizeDiracSegment(part: string, inMath: boolean) {
   const math = (expression: string) => inMath ? expression : `$${expression}$`;
   return part
+    .replace(/\|\s*([^|〈⟨〉⟩]{1,32}?)\s*[〉⟩]\s*[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|/gu,
+      (_match, state: string, bra: string) => math(`\\ket{${diracLabel(state)}}\\bra{${diracLabel(bra)}}`))
     .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|\s*([^〈⟨〉⟩]{1,32}?)\s*[〉⟩]/gu,
       (_match, left: string, right: string) => math(`\\braket{${diracLabel(left)}|${diracLabel(right)}}`))
     .replace(/[〈⟨]\s*([^|〈⟨〉⟩]{1,32}?)\s*\|/gu,
