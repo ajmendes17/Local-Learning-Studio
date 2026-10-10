@@ -52,6 +52,23 @@ function collisionSafePaths(keys: string[], folder: string) {
   }));
 }
 
+export function expectedObsidianNotePaths(input: {
+  materials: Array<{ id: string; originalName: string }>;
+  map: ObsidianCourseExport["map"];
+  assessments: Array<{ id: string; title: string }>;
+}) {
+  const paths = ["Course.md", "Study Journal.md"];
+  if (input.map) {
+    paths.push("Topic Progress.md");
+    paths.push(...collisionSafePaths(input.map.concepts.map(({ key }) => key), "topics").values());
+    paths.push(...collisionSafePaths(input.map.modules.map(({ key }) => key), "modules").values());
+    paths.push(...input.map.assessments.map((assessment, index) => `assessments/${slug(assessment.title)}--course-${index + 1}.md`));
+  }
+  paths.push(...input.assessments.map((assessment) => `assessments/${slug(assessment.title)}--${assessment.id.slice(0, 8)}.md`));
+  paths.push(...input.materials.map((material) => `sources/${slug(material.originalName.replace(/\.[^.]+$/, ""))}--${material.id.slice(0, 8)}.md`));
+  return paths;
+}
+
 function yaml(value: string) {
   return JSON.stringify(value);
 }
@@ -259,7 +276,7 @@ export class ObsidianVault {
     } catch { return null; }
   }
 
-  async validateCourse(courseId: string, courseTitle: string) {
+  async validateCourse(courseId: string, courseTitle: string, expectedNotePaths: string[] = []) {
     const config = await this.getConfig();
     if (!config) throw new Error("Configure an Obsidian vault before checking class notes.");
     const vaultRealPath = await realpath(config.vaultPath);
@@ -305,6 +322,10 @@ export class ObsidianVault {
       }
     };
     await walk(courseFolderRealPath);
+    const actualNotePaths = new Set(markdownFiles.map((path) => relative(courseFolderRealPath, path).split(sep).join("/")));
+    for (const expectedPath of expectedNotePaths) {
+      if (!actualNotePaths.has(expectedPath)) issues.push(`Expected class note is missing: ${expectedPath}`);
+    }
     let linksChecked = 0;
     const classPrefix = `${courseFolderRelative}/`;
     for (const path of markdownFiles) {

@@ -135,6 +135,13 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(initialValidation.json().notesChecked, 4);
     assert.ok(initialValidation.json().linksChecked >= 6);
     const courseNotePath = join(vaultPath, firstExport.json().courseFolder, "Course.md");
+    const missingSourceNotePath = join(vaultPath, firstExport.json().courseFolder, "sources", `bell-states-reading--${uploaded.json().id.slice(0, 8)}.md`);
+    const missingSourceNoteBody = await readFile(missingSourceNotePath, "utf8");
+    await rm(missingSourceNotePath);
+    const missingNoteValidation = await app.inject({ method: "GET", url: `/api/courses/${courseId}/obsidian/validate` });
+    assert.equal(missingNoteValidation.json().healthy, false);
+    assert.ok(missingNoteValidation.json().issues.some((issue: string) => issue.includes(`Expected class note is missing: sources/bell-states-reading--${uploaded.json().id.slice(0, 8)}.md`)));
+    await writeFile(missingSourceNotePath, missingSourceNoteBody);
     const courseNote = await readFile(courseNotePath, "utf8");
     assert.match(courseNote, /\[\[Codex\/Local Learning Studio\/[^\]]+\/assessments\/midterm-2-professor-scope--/);
     assert.match(courseNote, /<!-- LLS:GENERATED:START -->/);
