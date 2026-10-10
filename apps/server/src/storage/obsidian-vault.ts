@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, type SourcePassage } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, scheduleAssessmentStudyDays, type SourcePassage } from "@local-learning-studio/contracts";
 
 const START = "<!-- LLS:GENERATED:START -->";
 const END = "<!-- LLS:GENERATED:END -->";
@@ -14,7 +14,7 @@ export interface ObsidianConfig {
 export interface ObsidianCourseExport {
   course: { id: string; title: string; code: string; term: string; materials: Array<{ id: string; originalName: string; kind: string; status: string; mediaType: string; sizeBytes: number; passageCount: number; errorMessage: string | null; createdAt: string; passages: SourcePassage[] }> };
   map: { modules: Array<{ key: string; title: string; description: string; position: number; conceptKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; concepts: Array<{ key: string; title: string; description: string; learningObjectives: string[]; prerequisiteKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; assessments: Array<{ title: string; kind: string; moduleKey: string | null; dueAt: string | null; weightPercent: number | null; sourceReferences: Array<{ materialId: string; passageId: string }> }> } | null;
-  profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
+  profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
   methodProgress?: Array<{ method: string; attemptCount: number; scoredAttemptCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: Array<{ conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }>; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }>;
 }
 
@@ -317,6 +317,11 @@ export class ObsidianVault {
       const studyPlan = assessment.availableMinutes == null ? [] : allocateAssessmentStudyPlan(assessment.topics, assessment.availableMinutes);
       const plannedMinutes = new Map(studyPlan.map(({ topic, minutes }) => [topic.title.trim().normalize("NFKC").toLocaleLowerCase(), minutes]));
       const deadline = assessmentDeadlineLabel(assessment.scheduledAt);
+      const daySchedule = assessment.availableMinutes == null ? null : scheduleAssessmentStudyDays(
+        studyPlan.map(({ topic, minutes }) => ({ title: topic.title, minutes })),
+        assessment.scheduledAt,
+        assessment.dailyMinutes ?? 45,
+      );
       const scope = assessment.topics.map((topic) => {
         const matchingConcept = (data.map?.concepts ?? []).find(({ title }) => title.trim().toLocaleLowerCase() === topic.title.trim().toLocaleLowerCase());
         const noteLink = matchingConcept && topicPaths.get(matchingConcept.key) ? ` · ${wikilink(topicPaths.get(matchingConcept.key)!, "open topic")}` : "";
@@ -332,7 +337,13 @@ export class ObsidianVault {
       const studyPlanText = studyPlan.length
         ? studyPlan.map(({ topic, minutes }) => `- **${minutes} min** — ${topic.title}`).join("\n")
         : "No available study-time budget saved.";
-      managed.push({ path: join(courseFolder, assessmentPaths.get(assessment.id)!), id: `assessment:${assessment.id}`, title: assessment.title, body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Type:** ${assessment.kind}\n**Date:** ${assessment.scheduledAt ? `${assessment.scheduledAt}${deadline ? ` (${deadline})` : ""}` : "Not set"}\n**Available study time:** ${assessment.availableMinutes == null ? "Not set" : `${assessment.availableMinutes} minutes`}\n**Practice activity:** ${scoredProgress(assessment.attemptCount, assessment.scoredAttemptCount, assessment.correctCount)}\n\n## Progress summary\n**Topics checked:** ${checkedTopics}/${assessment.topics.length}\n**Topics needing review:** ${reviewTopics}\n**Topics without a saved check:** ${uncheckedTopics}\n\n## Suggested study plan\n${studyPlanText}\n\n## Topics to study\n${scope}\n\n_Practice counts are evidence of activity, not mastery. Suggested time rebalances as saved topic evidence changes._` });
+      const dayScheduleText = !daySchedule ? "No study time budget saved."
+        : daySchedule.days.length ? daySchedule.days.map((day) => `- **${day.date} · ${day.minutes} min** — ${day.topics.map((topic) => `${topic.title} (${topic.minutes} min)`).join("; ")}`).join("\n")
+          + (daySchedule.unscheduledMinutes ? `\n\n${daySchedule.unscheduledMinutes} minutes do not fit before the assessment at the current daily limit.` : "")
+        : daySchedule.status === "missing-deadline" ? "Add an assessment date in Local Learning Studio to schedule these sessions."
+          : daySchedule.status === "deadline-passed" ? "The assessment date has passed; update it to create a future schedule."
+            : "No study sessions need scheduling.";
+      managed.push({ path: join(courseFolder, assessmentPaths.get(assessment.id)!), id: `assessment:${assessment.id}`, title: assessment.title, body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Type:** ${assessment.kind}\n**Date:** ${assessment.scheduledAt ? `${assessment.scheduledAt}${deadline ? ` (${deadline})` : ""}` : "Not set"}\n**Available study time:** ${assessment.availableMinutes == null ? "Not set" : `${assessment.availableMinutes} minutes`}\n**Daily target:** ${assessment.dailyMinutes ?? 45} minutes\n**Practice activity:** ${scoredProgress(assessment.attemptCount, assessment.scoredAttemptCount, assessment.correctCount)}\n\n## Progress summary\n**Topics checked:** ${checkedTopics}/${assessment.topics.length}\n**Topics needing review:** ${reviewTopics}\n**Topics without a saved check:** ${uncheckedTopics}\n\n## Suggested study plan\n${studyPlanText}\n\n## Day-by-day schedule\n${dayScheduleText}\n\n## Topics to study\n${scope}\n\n_Practice counts are evidence of activity, not mastery. Suggested time rebalances as saved topic evidence changes._` });
     }
 
     for (const [index, assessment] of (data.map?.assessments ?? []).entries()) {

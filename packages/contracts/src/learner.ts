@@ -98,6 +98,75 @@ export function assessmentDeadlineLabel(scheduledAt: string | null | undefined, 
   return `due in ${days} days`;
 }
 
+export interface AssessmentStudyScheduleTopic { title: string; minutes: number }
+export interface AssessmentStudyDay { date: string; minutes: number; topics: AssessmentStudyScheduleTopic[] }
+
+export function scheduleAssessmentStudyDays(
+  topicPlan: AssessmentStudyScheduleTopic[],
+  scheduledAt: string | null | undefined,
+  dailyMinutes: number,
+  now = Date.now(),
+) {
+  const totalMinutes = topicPlan.reduce((sum, topic) => sum + Math.max(0, Math.floor(topic.minutes)), 0);
+  const cap = Number.isFinite(dailyMinutes) ? Math.max(1, Math.floor(dailyMinutes)) : 45;
+  const empty = { days: [] as AssessmentStudyDay[], scheduledMinutes: 0, unscheduledMinutes: totalMinutes };
+  if (!scheduledAt) return { ...empty, status: "missing-deadline" as const };
+  const deadline = Date.parse(scheduledAt);
+  if (!Number.isFinite(deadline)) return { ...empty, status: "missing-deadline" as const };
+  const localDay = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  };
+  const today = localDay(now);
+  const dueDay = localDay(deadline);
+  if (deadline <= now || dueDay < today) return { ...empty, status: "deadline-passed" as const };
+  if (!totalMinutes) return { ...empty, scheduledMinutes: 0, unscheduledMinutes: 0, status: "scheduled" as const };
+
+  const availableDayCount = Math.max(1, (dueDay - today) / 86_400_000);
+  const sessionCount = Math.min(availableDayCount, Math.ceil(totalMinutes / cap));
+  const sessionIndexes = sessionCount === 1
+    ? [0]
+    : Array.from({ length: sessionCount }, (_, index) => Math.round(index * (availableDayCount - 1) / (sessionCount - 1)));
+  const remaining = topicPlan.map((topic) => Math.max(0, Math.floor(topic.minutes)));
+  const days: AssessmentStudyDay[] = [];
+
+  for (const dayIndex of sessionIndexes) {
+    let capacity = Math.min(cap, remaining.reduce((sum, value) => sum + value, 0));
+    const daily = remaining.map(() => 0);
+    while (capacity > 0) {
+      const weightTotal = remaining.reduce((sum, value) => sum + value, 0);
+      if (!weightTotal) break;
+      const exact = remaining.map((value) => capacity * value / weightTotal);
+      const floors = exact.map((value, index) => Math.min(remaining[index]!, Math.floor(value)));
+      let assigned = floors.reduce((sum, value) => sum + value, 0);
+      floors.forEach((value, index) => { daily[index]! += value; remaining[index]! -= value; });
+      capacity -= assigned;
+      const order = exact.map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+        .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
+      for (const item of order) {
+        if (capacity <= 0) break;
+        if (remaining[item.index]! <= 0) continue;
+        daily[item.index]! += 1;
+        remaining[item.index]! -= 1;
+        capacity -= 1;
+        assigned += 1;
+      }
+      if (!assigned) break;
+    }
+    const date = new Date(today + dayIndex * 86_400_000);
+    const dateText = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+    const topics = topicPlan.flatMap((topic, index) => daily[index]! > 0 ? [{ title: topic.title, minutes: daily[index]! }] : []);
+    days.push({ date: dateText, minutes: topics.reduce((sum, topic) => sum + topic.minutes, 0), topics });
+  }
+  const scheduledMinutes = days.reduce((sum, day) => sum + day.minutes, 0);
+  return {
+    days,
+    scheduledMinutes,
+    unscheduledMinutes: Math.max(0, totalMinutes - scheduledMinutes),
+    status: scheduledMinutes === totalMinutes ? "scheduled" as const : "over-capacity" as const,
+  };
+}
+
 export function summarizeTopicProgress(
   topicTitles: string[],
   signals: Array<{ title: string; attemptCount: number; correctCount: number }>,
@@ -210,6 +279,7 @@ export const LearnerAssessmentCreateSchema = z.object({
   kind: z.enum(["exam", "quiz", "other"]).default("exam"),
   scheduledAt: z.string().datetime().nullable().optional(),
   availableMinutes: z.number().int().positive().max(1440).nullable().optional(),
+  dailyMinutes: z.number().int().min(15).max(240).default(45),
   topics: z.array(z.object({
     title: z.string().trim().min(1).max(200),
     conceptId: z.string().uuid().nullable().optional(),
@@ -223,6 +293,7 @@ export const LearnerAssessmentUpdateSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
   availableMinutes: z.number().int().positive().max(1440).nullable().optional(),
+  dailyMinutes: z.number().int().min(15).max(240).optional(),
 }).refine((value) => Object.keys(value).length > 0, { message: "At least one assessment field is required." });
 export type LearnerAssessmentUpdate = z.infer<typeof LearnerAssessmentUpdateSchema>;
 
@@ -339,7 +410,7 @@ export const LearnerProfileResponseSchema = z.object({
   })),
   assessments: z.array(z.object({
     id: z.string().uuid(), title: z.string(), kind: z.enum(["exam", "quiz", "other"]),
-    scheduledAt: z.string().nullable(), availableMinutes: z.number().int().nullable(), createdAt: z.string(),
+    scheduledAt: z.string().nullable(), availableMinutes: z.number().int().nullable(), dailyMinutes: z.number().int(), createdAt: z.string(),
     attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
     topics: z.array(z.object({ id: z.string().uuid(), conceptId: z.string().uuid().nullable(), title: z.string(), position: z.number().int(), importance: z.enum(["low", "normal", "high"]), provenance: z.enum(["learner", "model", "material"]), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
   })),

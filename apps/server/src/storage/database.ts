@@ -231,6 +231,7 @@ export function openDatabase(databasePath: string) {
       kind TEXT NOT NULL CHECK(kind IN ('exam','quiz','other')),
       scheduled_at TEXT,
       available_minutes INTEGER CHECK(available_minutes IS NULL OR available_minutes > 0),
+      daily_minutes INTEGER NOT NULL DEFAULT 45 CHECK(daily_minutes BETWEEN 15 AND 240),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -348,6 +349,7 @@ export function openDatabase(databasePath: string) {
     ensureColumn(database, table, "course_id", "TEXT REFERENCES courses(id) ON DELETE CASCADE");
   }
   ensureColumn(database, "study_attempts", "session_id", "TEXT REFERENCES study_sessions(id) ON DELETE SET NULL");
+  ensureColumn(database, "learner_assessments", "daily_minutes", "INTEGER NOT NULL DEFAULT 45 CHECK(daily_minutes BETWEEN 15 AND 240)");
   database.exec(`
     CREATE INDEX IF NOT EXISTS source_passages_course_material
       ON source_passages(course_id, material_id, ordinal);

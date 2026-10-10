@@ -23,14 +23,14 @@ export class LearnerLibrary {
     const id = randomUUID();
     const now = new Date().toISOString();
     const insert = this.database.prepare(`INSERT INTO learner_assessments
-      (id,title,kind,scheduled_at,available_minutes,created_at,updated_at,course_id)
-      VALUES (?,?,?,?,?,?,?,?)`);
+      (id,title,kind,scheduled_at,available_minutes,daily_minutes,created_at,updated_at,course_id)
+      VALUES (?,?,?,?,?,?,?,?,?)`);
     const insertTopic = this.database.prepare(`INSERT INTO learner_topics
       (id,assessment_id,concept_id,title,position,importance,provenance,created_at,course_id)
       VALUES (?,?,?,?,?,?,?,?,?)`);
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      insert.run(id, input.title, input.kind, input.scheduledAt ?? null, input.availableMinutes ?? null, now, now, courseId);
+      insert.run(id, input.title, input.kind, input.scheduledAt ?? null, input.availableMinutes ?? null, input.dailyMinutes, now, now, courseId);
       input.topics.forEach((topic, position) => insertTopic.run(
         randomUUID(), id, topic.conceptId ?? null, topic.title, position,
         topic.importance, topic.provenance, now, courseId,
@@ -44,16 +44,17 @@ export class LearnerLibrary {
   }
 
   updateAssessment(courseId: string, assessmentId: string, input: LearnerAssessmentUpdate) {
-    const current = this.database.prepare(`SELECT title,scheduled_at AS scheduledAt,available_minutes AS availableMinutes
+    const current = this.database.prepare(`SELECT title,scheduled_at AS scheduledAt,available_minutes AS availableMinutes,daily_minutes AS dailyMinutes
       FROM learner_assessments WHERE course_id=? AND id=?`).get(courseId, assessmentId) as
-      | { title: string; scheduledAt: string | null; availableMinutes: number | null }
+      | { title: string; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number }
       | undefined;
     if (!current) return null;
     const title = input.title ?? current.title;
     const scheduledAt = Object.hasOwn(input, "scheduledAt") ? input.scheduledAt ?? null : current.scheduledAt;
     const availableMinutes = Object.hasOwn(input, "availableMinutes") ? input.availableMinutes ?? null : current.availableMinutes;
-    this.database.prepare(`UPDATE learner_assessments SET title=?,scheduled_at=?,available_minutes=?,updated_at=?
-      WHERE course_id=? AND id=?`).run(title, scheduledAt, availableMinutes, new Date().toISOString(), courseId, assessmentId);
+    const dailyMinutes = input.dailyMinutes ?? current.dailyMinutes;
+    this.database.prepare(`UPDATE learner_assessments SET title=?,scheduled_at=?,available_minutes=?,daily_minutes=?,updated_at=?
+      WHERE course_id=? AND id=?`).run(title, scheduledAt, availableMinutes, dailyMinutes, new Date().toISOString(), courseId, assessmentId);
     return this.getProfile(courseId).assessments.find(({ id }) => id === assessmentId) ?? null;
   }
 
@@ -376,7 +377,7 @@ export class LearnerLibrary {
         ))
       )`).all(courseId) as any[];
     const assessmentRows = this.database.prepare(`SELECT id,title,kind,scheduled_at AS scheduledAt,
-      available_minutes AS availableMinutes,created_at AS createdAt,
+      available_minutes AS availableMinutes,daily_minutes AS dailyMinutes,created_at AS createdAt,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=learner_assessments.course_id AND a.assessment_id=learner_assessments.id) AS attemptCount,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=learner_assessments.course_id AND a.assessment_id=learner_assessments.id AND a.outcome IN ('correct','incorrect')) AS scoredAttemptCount,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=learner_assessments.course_id AND a.assessment_id=learner_assessments.id AND a.outcome='correct') AS correctCount,
@@ -411,7 +412,7 @@ export class LearnerLibrary {
         })),
       })),
       assessments: assessmentRows.map((row) => ({
-        ...row, availableMinutes: row.availableMinutes == null ? null : Number(row.availableMinutes),
+        ...row, availableMinutes: row.availableMinutes == null ? null : Number(row.availableMinutes), dailyMinutes: Number(row.dailyMinutes),
         attemptCount: Number(row.attemptCount), scoredAttemptCount: Number(row.scoredAttemptCount), correctCount: Number(row.correctCount), sessionCount: Number(row.sessionCount),
         topics: topics.filter((topic) => topic.assessmentId === row.id).map(({ assessmentId: _assessmentId, ...topic }) => ({
           ...topic, position: Number(topic.position), attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount), sessionCount: Number(topic.sessionCount),

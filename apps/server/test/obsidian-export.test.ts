@@ -48,7 +48,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(conceptResponse.statusCode, 201, conceptResponse.body);
     const assessmentResponse = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/assessments`,
-      payload: { title: "Midterm 2 professor scope", kind: "exam", scheduledAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), availableMinutes: 90, topics: [
+      payload: { title: "Midterm 2 professor scope", kind: "exam", scheduledAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), availableMinutes: 90, dailyMinutes: 30, topics: [
         { title: "Bell states", conceptId: conceptResponse.json().id, importance: "normal", provenance: "learner" },
         { title: "Partial trace", importance: "normal", provenance: "learner" },
       ] },
@@ -110,9 +110,14 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(assessmentNote, /Partial trace/);
     assert.match(assessmentNote, /\*\*Date:\*\* .+ \(due in \d+ days\)/);
     assert.match(assessmentNote, /\*\*Available study time:\*\* 90 minutes/);
+    assert.match(assessmentNote, /\*\*Daily target:\*\* 30 minutes/);
     assert.match(assessmentNote, /## Suggested study plan[\s\S]*\*\*\d+ min\*\* — Bell states[\s\S]*\*\*\d+ min\*\* — Partial trace/);
     const plannedMinutes = [...assessmentNote.matchAll(/\*\*(\d+) min\*\* —/g)].map((match) => Number(match[1]));
     assert.equal(plannedMinutes.reduce((sum, minutes) => sum + minutes, 0), 90);
+    assert.match(assessmentNote, /## Day-by-day schedule[\s\S]*Bell states/);
+    const dailyMinutes = [...assessmentNote.matchAll(/\*\*\d{4}-\d{2}-\d{2} · (\d+) min\*\*/g)].map((match) => Number(match[1]));
+    assert.equal(dailyMinutes.reduce((sum, minutes) => sum + minutes, 0), 90);
+    assert.ok(dailyMinutes.every((minutes) => minutes <= 30));
     assert.match(assessmentNote, /Practice activity:\*\* 0\/1 scored checks correct; 1 unscored/);
     assert.match(assessmentNote, /## Progress summary[\s\S]*Topics checked:\*\* 1\/2[\s\S]*Topics needing review:\*\* 1[\s\S]*Topics without a saved check:\*\* 1/);
     assert.match(assessmentNote, /Bell states .*0\/1 scored checks correct; 1 unscored; latest: not-graded/);

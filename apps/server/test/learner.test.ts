@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import test from "node:test";
-import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
 import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
 
@@ -101,6 +101,29 @@ test("assessment study plan weights saved evidence and reports deadline timing",
   assert.equal(assessmentDeadlineLabel("2026-10-10T20:00:00.000Z", now), "due today");
   assert.equal(assessmentDeadlineLabel("2026-10-11T12:00:00.000Z", now), "due tomorrow");
   assert.equal(assessmentDeadlineLabel("2026-10-09T12:00:00.000Z", now), "overdue by 1 day");
+});
+
+test("assessment schedule spreads sessions before the deadline and flags over-capacity time", () => {
+  const now = new Date(2026, 9, 10, 8).getTime();
+  const due = new Date(2026, 9, 16, 12).toISOString();
+  const plan = scheduleAssessmentStudyDays([
+    { title: "Missed topic", minutes: 80 },
+    { title: "New topic", minutes: 40 },
+  ], due, 60, now);
+  assert.equal(plan.status, "scheduled");
+  assert.equal(plan.scheduledMinutes, 120);
+  assert.equal(plan.unscheduledMinutes, 0);
+  assert.deepEqual(plan.days.map(({ date }) => date), ["2026-10-10", "2026-10-15"]);
+  assert.ok(plan.days.every((day) => day.minutes <= 60));
+  assert.ok(plan.days.every((day) => day.date < "2026-10-16"), "study sessions must happen before the assessment date");
+  assert.equal(plan.days.reduce((sum, day) => sum + day.minutes, 0), 120);
+
+  const overCapacity = scheduleAssessmentStudyDays([{ title: "Topic", minutes: 120 }], new Date(2026, 9, 11, 12).toISOString(), 45, now);
+  assert.equal(overCapacity.status, "over-capacity");
+  assert.equal(overCapacity.scheduledMinutes, 45);
+  assert.equal(overCapacity.unscheduledMinutes, 75);
+  assert.equal(scheduleAssessmentStudyDays([{ title: "Topic", minutes: 30 }], null, 45, now).status, "missing-deadline");
+  assert.equal(scheduleAssessmentStudyDays([{ title: "Topic", minutes: 30 }], new Date(2026, 9, 9, 12).toISOString(), 45, now).status, "deadline-passed");
 });
 
 test("category progress counts only the displayed topics and ignores duplicate titles", () => {
@@ -243,6 +266,7 @@ test("instructor topic lists persist as class-scoped learner assessment topics",
   assert.equal(profile.json().assessments[0].title, "Midterm 2 · professor scope");
   assert.equal(profile.json().assessments[0].scheduledAt, "2026-11-12T16:30:00.000Z");
   assert.equal(profile.json().assessments[0].availableMinutes, 180);
+  assert.equal(profile.json().assessments[0].dailyMinutes, 45, "assessment scopes should use the default daily target");
   assert.deepEqual(profile.json().assessments[0].topics.map((topic: { title: string; provenance: string }) => [topic.title, topic.provenance]), [
     ["Bell states", "learner"],
     ["Partial trace", "learner"],
@@ -250,10 +274,11 @@ test("instructor topic lists persist as class-scoped learner assessment topics",
 
   const updatedScope = await app.inject({
     method: "PATCH", url: `/api/courses/${courseId}/learner/assessments/${profile.json().assessments[0].id}`,
-    payload: { availableMinutes: 240 },
+    payload: { availableMinutes: 240, dailyMinutes: 30 },
   });
   assert.equal(updatedScope.statusCode, 200);
   assert.equal(updatedScope.json().assessment.availableMinutes, 240);
+  assert.equal(updatedScope.json().assessment.dailyMinutes, 30);
   assert.equal(updatedScope.json().assessment.scheduledAt, "2026-11-12T16:30:00.000Z", "partial plan edits should preserve the saved date");
 
   const assessment = updatedScope.json().assessment;
