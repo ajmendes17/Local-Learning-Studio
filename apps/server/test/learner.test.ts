@@ -45,7 +45,7 @@ function uploadPayload(filename: string, content: string) {
   return { payload: body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-async function createAppWithStudyModel(options: { corruptMath?: boolean; failure?: boolean; invalidErrorAnalysis?: boolean } = {}) {
+async function createAppWithStudyModel(options: { corruptMath?: boolean; failure?: boolean; invalidErrorAnalysis?: boolean; invalidAdaptiveErrorAnalysis?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "learning-studio-learner-"));
   const prompts: string[] = [];
   const controlCharacter = options.corruptMath ? String.fromCharCode(127) : "";
@@ -62,7 +62,9 @@ async function createAppWithStudyModel(options: { corruptMath?: boolean; failure
           ? options.invalidErrorAnalysis ? "Inspect this solution and find the issue." : "1. State the given values.\n2. Substitute into the relation.\n3. Reverse the relation incorrectly.\n4. Simplify the result."
           : options.corruptMath ? `Apply the stated operation to $${controlCharacter}\\ket{0}$.` : "Apply the stated operation to the source problem.",
         question: /Teach through error analysis|four-step numbered worked solution/.test(prompt)
-          ? "1. State the given values.\n2. Substitute into the relation.\n3. Reverse the relation incorrectly.\n4. Simplify the result.\n\nWhich step first becomes invalid?"
+          ? options.invalidAdaptiveErrorAnalysis && task === "generate-adaptive-practice"
+            ? "Inspect this solution and find the issue."
+            : "1. State the given values.\n2. Substitute into the relation.\n3. Reverse the relation incorrectly.\n4. Simplify the result.\n\nWhich step first becomes invalid?"
           : prompt.includes("Use a teach-back exercise")
           ? "Teach back the main idea and explain why it holds."
           : options.corruptMath ? `Which state $${controlCharacter}\\ket{\\psi}$ does the source operation produce?` : "Which state does the source operation produce?",
@@ -790,6 +792,31 @@ test("error-analysis refuses generated work without four numbered steps", async 
   assert.equal(response.statusCode, 502);
   assert.equal(response.json().diagnostics.code, "invalid_method_structure");
   assert.equal((await app.inject({ method: "GET", url: `/api/courses/${course.json().id}/learner/study-sessions` })).json().length, 0);
+  await app.close();
+  await rm(root, { recursive: true });
+});
+
+test("error-analysis refuses adaptive work without four numbered steps", async () => {
+  const { app, root } = await createAppWithStudyModel({ invalidAdaptiveErrorAnalysis: true });
+  const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Invalid adaptive error-analysis fixture" } });
+  const courseId = course.json().id as string;
+  const initial = await app.inject({
+    method: "POST",
+    url: `/api/courses/${courseId}/learner/study-session`,
+    payload: { topic: "A method with an adaptive structure", method: "error-analysis" },
+  });
+  assert.equal(initial.statusCode, 200, initial.body);
+
+  const followUp = await app.inject({
+    method: "POST",
+    url: `/api/courses/${courseId}/learner/study-sessions/${initial.json().sessionId}/next-question`,
+    payload: {},
+  });
+
+  assert.equal(followUp.statusCode, 502);
+  assert.equal(followUp.json().diagnostics.code, "invalid_method_structure");
+  const sessions = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions` });
+  assert.equal(sessions.json().length, 1, "an invalid follow-up must not be saved as a new session");
   await app.close();
   await rm(root, { recursive: true });
 });
