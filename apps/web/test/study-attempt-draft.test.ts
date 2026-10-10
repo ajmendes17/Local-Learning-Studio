@@ -26,7 +26,9 @@ test("knowledge-check drafts resume across browser restarts and stay course scop
   writeStudyAttemptDraft([firstTabStorage], "course-one", content.sessionId, draft, 1000);
 
   const reopenedBrowserStorage = memoryStorage(browserData);
-  assert.deepEqual(readStudyAttemptDraft([reopenedBrowserStorage], "course-one", content, 2000), draft);
+  const reopenedLessonFirstSession = { ...content, method: "explanation" };
+  assert.deepEqual(readStudyAttemptDraft([reopenedBrowserStorage], "course-one", reopenedLessonFirstSession, 2000), draft,
+    "the learner's selected Knowledge check tab should override the method's default Lesson tab");
   assert.equal(readStudyAttemptDraft([reopenedBrowserStorage], "course-two", content, 2000), null);
 });
 
