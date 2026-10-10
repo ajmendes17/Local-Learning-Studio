@@ -147,7 +147,7 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
   return (
     <section className="accepted-map" aria-label="Interactive accepted course map">
       <div className="accepted-map__intro">
-        <div><p className="section-kicker">Accepted learning path</p><h4>Choose a module to see its topics and assignment connections.</h4><p className="accepted-map__progress-note">Modules and exams use class-wide practice. Homework uses practice grounded in that assignment. These are study signals, not mastery estimates.</p></div>
+        <div><p className="section-kicker">Accepted learning path</p><h4>Choose a module to see its topics and assignment connections.</h4><p className="accepted-map__progress-note">Modules and exams use class-wide practice. Homework topic bars count practice tied to mapped topics; broader assignment-level practice stays separate until you choose a topic. These are study signals, not mastery estimates.</p></div>
         <div className="accepted-map__legend"><span><i className="accepted-map__line accepted-map__line--evidence" />Evidence-linked assignment</span><span><i className="accepted-map__line accepted-map__line--module" />Module association</span></div>
       </div>
       <div className="accepted-map__canvas" ref={rootRef}>
