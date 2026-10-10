@@ -78,6 +78,7 @@
 .knowledge-topic>p { margin:8px 0 12px; color:#727c74; font-size:.67rem; line-height:1.55; }
 .knowledge-topic__meter>div { display:flex; justify-content:space-between; gap:12px; color:#778078; font-size:.59rem; }
 .knowledge-topic__meter>.progress-track { height:5px; margin-top:5px; }
+.knowledge-topic__meter--independent { margin-top:7px; }.knowledge-topic__meter--independent>.progress-track>span { background:#8a719b; }
 .knowledge-topic__actions { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin-top:12px; }
 .knowledge-topic__actions .button-primary,.knowledge-topic__actions .button-secondary { min-height:32px; padding:6px 10px; font-size:.62rem; }
 .knowledge-topic__actions>small { margin-left:auto; color:#969b94; font-size:.57rem; }

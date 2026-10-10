@@ -27,6 +27,8 @@ const profile = {
     attemptCount: 1,
     scoredAttemptCount: 0,
     correctCount: 0,
+    independentScoredAttemptCount: 0,
+    independentCorrectCount: 0,
     latestOutcome: "not-graded",
     lastPracticedAt: "2026-01-02T00:00:00.000Z",
     sessionCount: 1,
@@ -91,5 +93,31 @@ test("knowledge dashboard keeps mapped, learner-created, and instructor-scope to
   assert.match(html, /Midterm 1/);
   assert.match(html, /Partial trace/);
   assert.match(html, /1 topic with saved attempts/);
+  assert.match(html, /No independent checks yet/);
   assert.doesNotMatch(html, /Bayesian inference|Recursive definitions|Quantum measurement/);
+});
+
+test("knowledge topic profile shows independent check evidence separately from overall accuracy", () => {
+  const profileWithIndependentEvidence = {
+    ...profile,
+    concepts: profile.concepts.map((concept) => ({
+      ...concept,
+      attemptCount: 3,
+      scoredAttemptCount: 3,
+      correctCount: 2,
+      independentScoredAttemptCount: 2,
+      independentCorrectCount: 1,
+    })),
+  } as LearnerProfileResponse;
+  const html = renderToStaticMarkup(createElement(KnowledgePage, {
+    profiles: [{ course, profile: profileWithIndependentEvidence, methods: [], courseMap: null }],
+    loading: false,
+    error: null,
+    onOpenCourse: () => undefined,
+    onStudyTopic: () => undefined,
+  }));
+
+  assert.match(html, /2\/3 scored correct/);
+  assert.match(html, /1\/2 independent checks correct/);
+  assert.match(html, /A learner-created topic independent check accuracy/);
 });

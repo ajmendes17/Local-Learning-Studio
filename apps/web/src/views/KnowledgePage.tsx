@@ -96,6 +96,9 @@ export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyT
                 <div className="tree-course-label"><span className="tree-course-dot" />{course.code ? `${course.code} · ` : ""}{course.title}<span>{courseConcepts.length} {courseConcepts.length === 1 ? "topic" : "topics"}</span></div>
                 {courseConcepts.length ? <div className="knowledge-topic-list">{courseConcepts.map((concept) => {
                   const percent = concept.scoredAttemptCount ? Math.round(concept.correctCount / concept.scoredAttemptCount * 100) : 0;
+                  const independentAttempts = concept.independentScoredAttemptCount ?? 0;
+                  const independentCorrect = concept.independentCorrectCount ?? 0;
+                  const independentPercent = independentAttempts ? Math.round(independentCorrect / independentAttempts * 100) : 0;
                   const evidence = concept.scoredAttemptCount
                     ? `${concept.correctCount}/${concept.scoredAttemptCount} scored correct · ${concept.attemptCount - concept.scoredAttemptCount} ungraded`
                     : concept.attemptCount ? `${concept.attemptCount} ungraded recall response${concept.attemptCount === 1 ? "" : "s"}` : activityLabel(concept.attemptCount, concept.sessionCount);
@@ -103,6 +106,7 @@ export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyT
                     <div className="knowledge-topic__heading"><div><span className="knowledge-topic__state">{topicState(concept)}</span><h3>{concept.title}</h3></div><span className="knowledge-topic__activity">{activityLabel(concept.attemptCount, concept.sessionCount)}</span></div>
                     <p>{concept.description || "This topic is in your course map. Study it to build evidence about what you can recall."}</p>
                     <div className="knowledge-topic__meter"><div><span>{evidence}</span><span>{concept.scoredAttemptCount ? `${percent}%` : "—"}</span></div><span className="progress-track" role="progressbar" aria-label={`${concept.title} scored check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></span></div>
+                    <div className="knowledge-topic__meter knowledge-topic__meter--independent"><div><span>{independentAttempts ? `${independentCorrect}/${independentAttempts} independent checks correct` : "No independent checks yet"}</span><span>{independentAttempts ? `${independentPercent}%` : "—"}</span></div><span className="progress-track" role="progressbar" aria-label={`${concept.title} independent check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={independentPercent}><span style={{ width: `${independentPercent}%` }} /></span></div>
                     <div className="knowledge-topic__actions"><button type="button" className="button-primary" onClick={() => onStudyTopic(course.id, concept.title)}>Study topic →</button><button type="button" className="button-secondary" onClick={() => onOpenCourse(course.id)}>Open class</button>{concept.lastPracticedAt ? <small>Last check {new Date(concept.lastPracticedAt).toLocaleDateString()}</small> : concept.lastSessionAt ? <small>Last lesson {new Date(concept.lastSessionAt).toLocaleDateString()}</small> : null}</div>
                   </article>;
                 })}</div> : <p className="knowledge-empty knowledge-empty--compact">No course-map topics yet. <button type="button" onClick={() => onOpenCourse(course.id)}>Open class to build its map →</button></p>}
