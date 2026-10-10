@@ -301,6 +301,11 @@ test("course sources flow through cached classification, map review, and accepta
   const staleLinkedSourceNote = await readFile(join(vaultPath, draftExport.json().courseFolder, "sources", `lecture--${secondMaterialId.slice(0, 8)}.md`), "utf8");
   assert.match(staleLinkedSourceNote, /Course map status:\*\* Accepted structure · stale/);
   assert.match(staleLinkedSourceNote, /Related course topics · stale accepted structure[\s\S]*older accepted course map/);
+  const staleTopicProgress = await readFile(join(vaultPath, draftExport.json().courseFolder, "Topic Progress.md"), "utf8");
+  assert.match(staleTopicProgress, /Course map:\*\* Accepted structure · stale/);
+  assert.match(staleTopicProgress, /stale accepted course map[\s\S]*current replacement draft is ready for review/);
+  assert.match(staleTopicProgress, /\[\[.*topics\/course-foundations\|Course foundations\]\].*Not started/);
+  assert.match(draftCourseNote, /## Topic progress[\s\S]*\[\[.*Topic Progress\]\]/);
 
   const instructorScopeResponse = await app.inject({
     method: "POST",

@@ -337,6 +337,7 @@ export class ObsidianVault {
       managed.push({ path: join(courseFolder, sourcePaths.get(material.id)!), id: `source:${material.id}`, title: material.originalName, body: generated });
     }
 
+    let topicProgressLink = "";
     if (data.map) {
       for (const concept of data.map.concepts) {
         const progress = profileByTitle.get(concept.title.trim().toLocaleLowerCase());
@@ -397,6 +398,44 @@ export class ObsidianVault {
         const evidenceLinks = module.sourceReferences.map(sourceCitation).filter((link): link is string => Boolean(link));
         managed.push({ path: join(courseFolder, modulePaths.get(module.key)!), id: `module:${module.key}`, title: module.title, body: `**Course:** ${wikilink("Course.md", data.course.title)}\n\n${module.description}\n\n## Progress\n${progress}\n\n## Topics\n${topics}\n\n## Source evidence\n${evidenceLinks.map((link) => `- ${link}`).join("\n") || "- No imported-source links available."}` });
       }
+
+      const topicRows = data.map.concepts.map((concept) => {
+        const progress = profileByTitle.get(concept.title.trim().toLocaleLowerCase());
+        const moduleLinks = data.map!.modules
+          .filter((module) => module.conceptKeys.includes(concept.key))
+          .map((module) => wikilink(modulePaths.get(module.key)!, module.title));
+        const sourceLinks = [...new Set(concept.sourceReferences.map(({ materialId }) => materialId))]
+          .map((materialId) => {
+            const material = data.course.materials.find(({ id }) => id === materialId);
+            const path = sourcePaths.get(materialId);
+            return material && path ? wikilink(path, material.originalName) : null;
+          })
+          .filter((link): link is string => Boolean(link));
+        const status = needsReview(progress?.latestOutcome)
+          ? "Needs another pass"
+          : (progress?.sessionCount ?? 0) > 0 && !(progress?.attemptCount ?? 0)
+            ? "Lesson opened · first check not saved"
+            : (progress?.attemptCount ?? 0) > 0
+              ? "Practice recorded"
+              : "Not started";
+        const evidence = progress
+          ? `${scoredProgress(progress.attemptCount, progress.scoredAttemptCount, progress.correctCount)}; latest: ${progress.latestOutcome ?? "not checked"}; ${progress.sessionCount} lesson session${progress.sessionCount === 1 ? "" : "s"}; last practice: ${progress.lastPracticedAt ?? "never"}`
+          : "No lesson or check activity yet";
+        return `- **${wikilink(topicPaths.get(concept.key)!, concept.title)}** — ${status}. ${evidence}${moduleLinks.length ? ` · Module: ${moduleLinks.join(", ")}` : ""}${sourceLinks.length ? ` · Sources: ${sourceLinks.join(", ")}` : ""}`;
+      });
+      const staleMapWarning = data.mapStatus === "stale"
+        ? data.mapDraftStatus === "current"
+          ? "> This dashboard follows a stale accepted course map. A current replacement draft is ready for review in Local Learning Studio."
+          : "> This dashboard follows a stale accepted course map. Rebuild and accept a current map before relying on these topic relationships."
+        : "";
+      const topicProgressPath = "Topic Progress.md";
+      managed.push({
+        path: join(courseFolder, topicProgressPath),
+        id: `topic-progress-${data.course.id}`,
+        title: "Topic Progress",
+        body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Mapped topics:** ${data.map.concepts.length}\n**Course map:** ${data.mapStatus === "stale" ? "Accepted structure · stale" : "Accepted structure · current"}\n${staleMapWarning ? `\n${staleMapWarning}\n` : ""}\n${topicRows.join("\n") || "No topics are listed in the accepted course map."}\n\n_Progress describes lesson and check activity, not mastery. Open a topic for objectives and source evidence._`,
+      });
+      topicProgressLink = wikilink(topicProgressPath, "Topic Progress");
     }
 
     for (const assessment of data.profile.assessments) {
@@ -564,8 +603,8 @@ export class ObsidianVault {
         ? "> A current course map draft is ready for review in Local Learning Studio."
         : "";
     managed.push({
-      path: join(courseFolder, "Course.md"), id: `course:${data.course.id}`, title: data.course.title,
-      body: `**Course code:** ${data.course.code || "Not set"}\n**Term:** ${data.course.term || "Not set"}\n**Course map:** ${data.map ? data.mapStatus === "stale" ? "Accepted structure · stale" : "Accepted structure · current" : "No accepted map"}\n**Current map draft:** ${data.mapDraftStatus === "current" ? "Ready for review" : "None"}\n**Notes last exported:** ${exportedAt}\n${courseMapNotice ? `\n${courseMapNotice}\n` : ""}\n\n## Modules\n${moduleLinks}\n\n## Syllabus assessments\n${courseAssessmentLinks}\n\n## My exam topic lists\n${learnerAssessmentLinks}\n\n## Practice by study approach\n${methodProgress}\n\n_These are descriptive study signals. Different topics and small samples make method comparisons uncertain._\n\n## Study journal\n${studyJournalLink} · ${(data.studyAttempts ?? []).length} saved attempt${(data.studyAttempts ?? []).length === 1 ? "" : "s"}\n\n## Course materials\n${materialList}\n\n_Progress counts show practice activity; they are not mastery estimates._`,
+        path: join(courseFolder, "Course.md"), id: `course:${data.course.id}`, title: data.course.title,
+      body: `**Course code:** ${data.course.code || "Not set"}\n**Term:** ${data.course.term || "Not set"}\n**Course map:** ${data.map ? data.mapStatus === "stale" ? "Accepted structure · stale" : "Accepted structure · current" : "No accepted map"}\n**Current map draft:** ${data.mapDraftStatus === "current" ? "Ready for review" : "None"}\n**Notes last exported:** ${exportedAt}\n${courseMapNotice ? `\n${courseMapNotice}\n` : ""}\n\n## Modules\n${moduleLinks}\n\n## Syllabus assessments\n${courseAssessmentLinks}\n\n## My exam topic lists\n${learnerAssessmentLinks}\n\n## Topic progress\n${topicProgressLink || "No accepted topic map yet; add one to create a linked topic progress dashboard."}\n\n## Practice by study approach\n${methodProgress}\n\n_These are descriptive study signals. Different topics and small samples make method comparisons uncertain._\n\n## Study journal\n${studyJournalLink} · ${(data.studyAttempts ?? []).length} saved attempt${(data.studyAttempts ?? []).length === 1 ? "" : "s"}\n\n## Course materials\n${materialList}\n\n_Progress counts show practice activity; they are not mastery estimates._`,
     });
 
     for (const note of managed) await ensureSafeManagedPath(courseFolderRealPath, note.path);
