@@ -82,7 +82,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     const firstPassageId = uploadedPassages.json().passages[0].id as string;
     const annotationResponse = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/materials/${uploaded.json().id}/annotations`,
-      payload: { passageId: firstPassageId, body: "Professor emphasis: know how Bell states are constructed. See [[Other Class/Exam]]." },
+      payload: { passageId: firstPassageId, body: "Professor emphasis: know how Bell states are constructed.\nSee [[Other Class/Exam]]." },
     });
     assert.equal(annotationResponse.statusCode, 201, annotationResponse.body);
     const conceptResponse = await app.inject({ method: "POST", url: `/api/courses/${courseId}/learner/concepts`, payload: { stableKey: "bell-states", title: "Bell states", description: "A topic used to verify exported practice evidence." } });
@@ -158,7 +158,7 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(sourceNote, /!&#91;&#91;private-class-note&#93;&#93;/);
     assert.doesNotMatch(sourceNote, /(?<!!)\[\[Other Class\/Exam|!\[\[private-class-note/);
     assert.match(sourceNote, /Passage 1[\s\S]*Professor emphasis: know how Bell states are constructed[\s\S]*&#91;&#91;Other Class\/Exam&#93;&#93;/);
-    assert.match(sourceNote, /## Review notes[\s\S]*Passages with comments:\*\* 1\/\d+[\s\S]*\[Passage 1 · Lines \d+–\d+[^\]]*\]\(#passage-1\) — Professor emphasis: know how Bell states are constructed/);
+    assert.match(sourceNote, /## Review notes[\s\S]*Passages with comments:\*\* 1\/\d+[\s\S]*\[Passage 1 · Lines \d+–\d+[^\]]*\]\(#passage-1\) — Professor emphasis: know how Bell states are constructed\.\n\n## Extracted source text/);
     assert.match(sourceNote, /<a id="passage-1"><\/a>[\s\S]*### Passage 1/);
     assert.doesNotMatch(sourceNote, /\[\[Other Class\/Exam\]\]/);
     assert.match(sourceNote, /\*\*Practice activity:\*\* 0\/1 scored checks correct; 1 unscored/);

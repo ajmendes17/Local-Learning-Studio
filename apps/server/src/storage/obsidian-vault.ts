@@ -303,7 +303,7 @@ export class ObsidianVault {
       ].join("\n\n")).join("\n\n");
       const currentComments = (material.annotations ?? []).filter((annotation) => annotation.isCurrent);
       const reviewNotes = currentComments.length
-        ? `**Passages with comments:** ${new Set(currentComments.map((annotation) => annotation.passageId)).size}/${material.passages.length}\n\n${currentComments.map((annotation) => `- [Passage ${annotation.ordinal + 1} · ${passageLocation(annotation.location)}](#passage-${annotation.ordinal + 1}) — ${escapeImportedWikilinks(annotation.body.split(/\\r?\\n/)[0] ?? "Comment").replaceAll("[", "&#91;").replaceAll("]", "&#93;")}`).join("\n")}`
+        ? `**Passages with comments:** ${new Set(currentComments.map((annotation) => annotation.passageId)).size}/${material.passages.length}\n\n${currentComments.map((annotation) => `- [Passage ${annotation.ordinal + 1} · ${passageLocation(annotation.location)}](#passage-${annotation.ordinal + 1}) — ${escapeImportedWikilinks(annotation.body.split(/\r?\n/)[0] ?? "Comment").replaceAll("[", "&#91;").replaceAll("]", "&#93;")}`).join("\n")}`
         : "No passage comments yet. Add exam emphasis, questions, or personal notes from Review & comment in the course.";
       const generated = [
           `**Course:** ${wikilink("Course.md", data.course.title)}`,
