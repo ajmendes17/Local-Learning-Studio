@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, assessmentScheduleOverflowMinutes, normalizeMathText, scheduleAssessmentStudyDays, studyPlanReasonLabel, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, assessmentScheduleOverflowMinutes, normalizeMathText, scheduleAssessmentStudyDays, studyPlanReasonLabel, summarizeTopicEvidence, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
 
 const START = "<!-- LLS:GENERATED:START -->";
 const END = "<!-- LLS:GENERATED:END -->";
@@ -653,15 +653,15 @@ export class ObsidianVault {
         const scoredAttemptCount = progress?.scoredAttemptCount ?? progress?.attemptCount ?? 0;
         const independentScoredAttemptCount = progress?.independentScoredAttemptCount ?? 0;
         const independentCorrectCount = progress?.independentCorrectCount ?? 0;
-        const evidenceLevel = needsReview(progress?.latestOutcome)
-          ? "needs-another-look"
-          : scoredAttemptCount === 0
-            ? (progress?.attemptCount ?? 0) > 0 ? "unscored-practice" : "no-check-yet"
-            : independentScoredAttemptCount === 0
-              ? "supported-practice"
-              : independentScoredAttemptCount >= 3 && independentCorrectCount / independentScoredAttemptCount >= 0.8
-                ? "repeated-independent-success"
-                : "some-independent-evidence";
+        const evidence = summarizeTopicEvidence({
+          attemptCount: progress?.attemptCount ?? 0,
+          scoredAttemptCount,
+          correctCount: progress?.correctCount ?? 0,
+          independentScoredAttemptCount,
+          independentCorrectCount,
+          latestOutcome: progress?.latestOutcome,
+        });
+        const evidenceLevel = evidence.level;
         const prerequisites = concept.prerequisiteKeys.map((key) => topicPaths.get(key) ? wikilink(topicPaths.get(key)!, data.map!.concepts.find((item) => item.key === key)?.title ?? key) : key);
         const objectives = concept.learningObjectives.map((objective) => `- ${objective}`).join("\n") || "- No learning objectives listed yet.";
         const evidenceLinks = concept.sourceReferences.map(sourceCitation).filter((link): link is string => Boolean(link));
@@ -669,7 +669,7 @@ export class ObsidianVault {
           `**Course:** ${wikilink("Course.md", data.course.title)}`,
           `**Modules:** ${moduleTitles.join(", ") || "Not assigned"}`,
           `**Practice evidence:** ${progress ? `${scoredProgress(progress.attemptCount, progress.scoredAttemptCount, progress.correctCount)}; latest: ${progress.latestOutcome ?? "not checked"}` : "No checks recorded yet."}`,
-          `**Evidence level:** ${evidenceLevel.replaceAll("-", " ")}`,
+          `**Evidence level:** ${evidence.label}`,
           `**Independent checks:** ${independentCorrectCount}/${independentScoredAttemptCount} correct`,
           `**Last practiced:** ${progress?.lastPracticedAt ?? "Never"}`,
           `**Lesson sessions opened:** ${progress?.sessionCount ?? 0}${progress?.lastSessionAt ? ` · last ${progress.lastSessionAt}` : ""}`,

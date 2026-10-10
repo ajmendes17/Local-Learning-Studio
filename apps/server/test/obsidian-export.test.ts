@@ -446,8 +446,8 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     const topicFiles = await readdir(join(folder, "topics"));
     const tensorTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
     assert.match(tensorTopic, /^---\nid: "topic:tensor-products"\ncourse_id: "course-id"\ncourse_code: "PHGN 519"\ntopic_key: "tensor-products"\npractice_status: "review-needed"\nattempt_count: 2\nscored_attempt_count: 1\ncorrect_count: 1\n[\s\S]*modules:[\s\S]*source_count: 1\n---/);
-    assert.match(tensorTopic, /independent_scored_attempt_count: 0\nindependent_correct_count: 0\nevidence_level: "needs-another-look"/);
-    assert.match(tensorTopic, /\*\*Evidence level:\*\* needs another look\n\*\*Independent checks:\*\* 0\/0 correct/);
+    assert.match(tensorTopic, /independent_scored_attempt_count: 0\nindependent_correct_count: 0\nevidence_level: "supported-practice"/);
+    assert.match(tensorTopic, /\*\*Evidence level:\*\* Supported practice\n\*\*Independent checks:\*\* 0\/0 correct/);
     const withLearnerProperty = tensorTopic.replace("course_id: \"course-id\"", "course_id: \"course-id\"\nlearner_tag: \"exam-focus\"");
     await writeFile(join(folder, "topics", "tensor-products.md"), withLearnerProperty);
     const syllabusTopic = await readFile(join(folder, "topics", "syllabus-only.md"), "utf8");
@@ -491,8 +491,23 @@ test("Obsidian source notes link assignments to their accepted topics and assess
     assert.match(refreshedTopic, /learner_tag: "exam-focus"/);
     assert.match(refreshedTopic, /practice_status: "checked"/);
     assert.match(refreshedTopic, /independent_scored_attempt_count: 3\nindependent_correct_count: 3\nevidence_level: "repeated-independent-success"/);
-    assert.match(refreshedTopic, /\*\*Evidence level:\*\* repeated independent success\n\*\*Independent checks:\*\* 3\/3 correct/);
+    assert.match(refreshedTopic, /\*\*Evidence level:\*\* Repeated independent success\n\*\*Independent checks:\*\* 3\/3 correct/);
     assert.match(refreshedTopic, /^---\n[\s\S]*\n---\n\n# Tensor Products\n/);
+    await vault.exportCourse({
+      course: { id: "course-id", title: "Quantum Information", code: "PHGN 519", term: "Fall 2026", materials: [] },
+      map: {
+        modules: [{ key: "composite-systems", title: "Composite Systems", description: "Composite states", position: 1, conceptKeys: ["tensor-products"], sourceReferences: [] }],
+        concepts: [{ key: "tensor-products", title: "Tensor Products", description: "Combine systems", learningObjectives: [], prerequisiteKeys: [], sourceReferences: [] }],
+        assessments: [],
+      },
+      profile: {
+        concepts: [{ title: "Tensor Products", attemptCount: 5, scoredAttemptCount: 5, correctCount: 2, independentScoredAttemptCount: 3, independentCorrectCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-10T00:00:00.000Z", sessionCount: 3, lastSessionAt: "2026-10-10T00:00:00.000Z" }],
+        assessments: [],
+      },
+    } as any);
+    const mixedOutcomeTopic = await readFile(join(folder, "topics", "tensor-products.md"), "utf8");
+    assert.match(mixedOutcomeTopic, /independent_scored_attempt_count: 3\nindependent_correct_count: 1\nevidence_level: "low-scored-accuracy"/);
+    assert.match(mixedOutcomeTopic, /\*\*Evidence level:\*\* Low scored accuracy/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

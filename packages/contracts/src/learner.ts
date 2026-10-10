@@ -254,6 +254,51 @@ export function summarizeStudyCoverage(
   };
 }
 
+export type TopicEvidenceLevel = "needs-another-look" | "low-scored-accuracy" | "no-check-yet" | "unscored-practice" | "supported-practice" | "repeated-independent-success" | "some-independent-evidence";
+
+export interface TopicEvidenceSignals {
+  attemptCount: number;
+  scoredAttemptCount: number;
+  correctCount: number;
+  independentScoredAttemptCount: number;
+  independentCorrectCount: number;
+  latestOutcome?: string | null;
+}
+
+const TOPIC_EVIDENCE_LABELS: Record<TopicEvidenceLevel, string> = {
+  "needs-another-look": "Needs another look",
+  "low-scored-accuracy": "Low scored accuracy",
+  "no-check-yet": "No check yet",
+  "unscored-practice": "Unscored practice",
+  "supported-practice": "Supported practice",
+  "repeated-independent-success": "Repeated independent success",
+  "some-independent-evidence": "Some independent evidence",
+};
+
+export function summarizeTopicEvidence(signals: TopicEvidenceSignals) {
+  const attemptCount = Number.isFinite(signals.attemptCount) ? Math.max(0, Math.floor(signals.attemptCount)) : 0;
+  const scoredAttemptCount = Number.isFinite(signals.scoredAttemptCount)
+    ? Math.max(0, Math.floor(signals.scoredAttemptCount))
+    : 0;
+  const correctCount = Number.isFinite(signals.correctCount)
+    ? Math.max(0, Math.min(scoredAttemptCount, Math.floor(signals.correctCount)))
+    : 0;
+  const independentScoredAttemptCount = Number.isFinite(signals.independentScoredAttemptCount)
+    ? Math.max(0, Math.min(scoredAttemptCount, Math.floor(signals.independentScoredAttemptCount)))
+    : 0;
+  const independentCorrectCount = Number.isFinite(signals.independentCorrectCount)
+    ? Math.max(0, Math.min(independentScoredAttemptCount, Math.floor(signals.independentCorrectCount)))
+    : 0;
+  let level: TopicEvidenceLevel;
+  if (["incorrect", "incomplete", "unsupported"].includes(signals.latestOutcome ?? "")) level = "needs-another-look";
+  else if (!scoredAttemptCount) level = attemptCount ? "unscored-practice" : "no-check-yet";
+  else if (scoredAttemptCount >= 3 && correctCount / scoredAttemptCount < 0.6) level = "low-scored-accuracy";
+  else if (!independentScoredAttemptCount) level = "supported-practice";
+  else if (independentScoredAttemptCount >= 3 && independentCorrectCount / independentScoredAttemptCount >= 0.8) level = "repeated-independent-success";
+  else level = "some-independent-evidence";
+  return { level, label: TOPIC_EVIDENCE_LABELS[level] };
+}
+
 const STUDY_DAY_MS = 86_400_000;
 
 export interface SpacedReviewInput {

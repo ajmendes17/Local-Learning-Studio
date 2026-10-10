@@ -1,4 +1,4 @@
-import { getSpacedReviewSchedule } from "@local-learning-studio/contracts";
+import { getSpacedReviewSchedule, summarizeTopicEvidence } from "@local-learning-studio/contracts";
 
 export interface PracticeSignal {
   attemptCount: number;
@@ -34,17 +34,7 @@ export type TopicEvidence = {
 };
 
 export function describeTopicEvidence(evidence: TopicEvidence) {
-  if (evidence.latestOutcome === "incorrect" || evidence.latestOutcome === "incomplete" || evidence.latestOutcome === "unsupported") {
-    return "Needs another look";
-  }
-  if (evidence.scoredAttemptCount === 0) {
-    return evidence.attemptCount > 0 ? "Unscored practice" : "No check yet";
-  }
-  if (evidence.independentScoredAttemptCount === 0) return "Supported practice";
-  if (evidence.independentScoredAttemptCount >= 3 && evidence.independentCorrectCount / evidence.independentScoredAttemptCount >= 0.8) {
-    return "Repeated independent success";
-  }
-  return "Some independent evidence";
+  return summarizeTopicEvidence(evidence).label;
 }
 
 export function practiceReviewMethod(signal: PracticeSignal | undefined, now = Date.now()) {
