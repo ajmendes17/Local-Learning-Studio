@@ -3,6 +3,7 @@ import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, parseInstructorTo
 import { MathText } from "../components/MathText";
 import { getAcceptedCourseMap } from "../lib/api";
 import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTopicDraft } from "../lib/instructor-topic-draft";
+import { clearStudyAttemptDraft, readStudyAttemptDraft, writeStudyAttemptDraft, type DraftStorage, type StudyAttemptDraft } from "../lib/study-attempt-draft";
 import { appendInstructorTopicWording, partitionInstructorTopics } from "../lib/instructor-topic-scope";
 import "../styles/study.css";
 
@@ -72,34 +73,23 @@ interface ChatAnswer { answer: string; followUp: string; sourceBasis: "general-k
 interface PatternEvidence { id: string; conceptTitle: string; response: string; outcome: string; confidence: number | null; hintCount: number; method: string; createdAt: string }
 interface Pattern { id: string; patternKey: string; kind: string; conceptIds: string[]; claim: string; status: string; confidence: number; supportingAttemptIds: string[]; counterexampleAttemptIds: string[]; supportingEvidence: PatternEvidence[]; counterexampleEvidence: PatternEvidence[]; statusRationale: string }
 interface PendingAttempt { id: string; payload: Record<string, unknown> }
-interface StudyAttemptDraft { selected: number | null; response?: string; confidence: number; hintCount: number; usedOutsideHelp?: boolean; studyTab: "lesson" | "check" }
-
-function attemptDraftKey(courseId: string, sessionId: string) {
-  return `lls-study-draft:${courseId}:${sessionId}`;
-}
-
 function readAttemptDraft(courseId: string, content: StudyContent): StudyAttemptDraft | null {
-  try {
-    const stored = window.sessionStorage.getItem(attemptDraftKey(courseId, content.sessionId));
-    if (!stored) return null;
-    const parsed = JSON.parse(stored) as Partial<StudyAttemptDraft>;
-    const selected = Number.isInteger(parsed.selected) && (parsed.selected as number) >= 0 && (parsed.selected as number) < content.options.length
-      ? parsed.selected as number : null;
-    const confidence = [0.25, 0.5, 0.75, 1].includes(parsed.confidence ?? Number.NaN) ? parsed.confidence! : 0.5;
-    const hintCount = Number.isInteger(parsed.hintCount) ? Math.max(0, Math.min(content.hints.length, parsed.hintCount!)) : 0;
-    const studyTab = parsed.studyTab === "check" || parsed.studyTab === "lesson" ? parsed.studyTab : startsWithCheck(content.method) ? "check" : "lesson";
-    return { selected, response: typeof parsed.response === "string" ? parsed.response.slice(0, 20000) : "", confidence, hintCount, usedOutsideHelp: parsed.usedOutsideHelp === true, studyTab };
-  } catch {
-    return null;
-  }
+  return readStudyAttemptDraft(browserAttemptDraftStorages(), courseId, content);
 }
 
 function writeAttemptDraft(courseId: string, sessionId: string, draft: StudyAttemptDraft) {
-  try { window.sessionStorage.setItem(attemptDraftKey(courseId, sessionId), JSON.stringify(draft)); } catch { /* Storage may be unavailable; the check remains usable in memory. */ }
+  writeStudyAttemptDraft(browserAttemptDraftStorages(), courseId, sessionId, draft);
 }
 
 function clearAttemptDraft(courseId: string, sessionId: string) {
-  try { window.sessionStorage.removeItem(attemptDraftKey(courseId, sessionId)); } catch { /* Storage may be unavailable. */ }
+  clearStudyAttemptDraft(browserAttemptDraftStorages(), courseId, sessionId);
+}
+
+function browserAttemptDraftStorages(): DraftStorage[] {
+  const storages: DraftStorage[] = [];
+  try { storages.push(window.localStorage); } catch { /* Private browsing may block local storage. */ }
+  try { storages.push(window.sessionStorage); } catch { /* Session storage may also be blocked. */ }
+  return storages;
 }
 
 function browserSessionStorage() {
@@ -894,7 +884,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           {method === "quiz" || isOpenResponseMethod(method) ? <p className="quiz-first-note">You started with retrieval. Review the explanation after trying the check.</p> : null}
         </section>
         <section className="check-card" role="tabpanel" id="study-panel-check" aria-labelledby="study-tab-check" hidden={studyTab !== "check"}>
-          <div><p className="section-kicker">{teachBack ? "Teach it back" : freeRecall ? "Open-response recall" : method === "error-analysis" ? "Find the first mistake" : "Quick knowledge check"}</p>{method === "error-analysis" && content.example ? <div className="worked-example error-analysis-example"><strong>Inspect this worked solution</strong><MathText content={content.example} /></div> : null}<MathText className="check-question" content={content.question} />{openResponse && !saved && !reopenedAttempt ? <small>{teachBack ? "Explain the idea to a new student from memory. Save your response to reveal the reference; it will be recorded but not graded." : "Try from memory first. Save your response to reveal the reference explanation; any hints are recorded, and this response will not be graded."}</small> : null}</div>
+          <div><p className="section-kicker">{teachBack ? "Teach it back" : freeRecall ? "Open-response recall" : method === "error-analysis" ? "Find the first mistake" : "Quick knowledge check"}</p>{method === "error-analysis" && content.example ? <div className="worked-example error-analysis-example"><strong>Inspect this worked solution</strong><MathText content={content.example} /></div> : null}<MathText className="check-question" content={content.question} />{openResponse && !saved && !reopenedAttempt ? <small>{teachBack ? "Explain the idea to a new student from memory. Save your response to reveal the reference; it will be recorded but not graded." : "Try from memory first. Save your response to reveal the reference explanation; any hints are recorded, and this response will not be graded."}</small> : null}{!saved && !reopenedAttempt ? <small className="study-draft-note">Your unfinished answer autosaves in this browser for 7 days. It is added to your progress only when you save it.</small> : null}</div>
           {!saved && !reopenedAttempt && !pendingAttempt.current && content.hints.length ? <div className="study-hints"><div><strong>Need a hint?</strong><small>Hints are counted as part of this attempt.</small></div>{content.hints.slice(0,hintCount).map((hint,index) => <p key={`${index}-${hint}`}><span>Hint {index+1}</span><MathText inline content={hint} /></p>)}{hintCount < content.hints.length ? <button type="button" className="button-secondary" onClick={revealHint}>Show hint {hintCount + 1}</button> : null}</div> : null}
           {!saved && !reopenedAttempt ? <label className="outside-help-input"><input type="checkbox" checked={usedOutsideHelp} disabled={savingAttempt || busy || Boolean(pendingAttempt.current)} onChange={(event) => updateOutsideHelp(event.target.checked)} /><span><strong>I used help outside these hints</strong><small>For example, notes, a textbook, or another person.</small></span></label> : null}
           {reopenedAttempt ? <p className="reopened-attempt-note" role="status">Showing your saved {reopenedAttempt.outcome} response from {new Date(reopenedAttempt.createdAt).toLocaleString()}. Choose “Try this exact question again” below if you want to make another attempt.</p> : null}
