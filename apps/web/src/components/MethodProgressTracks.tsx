@@ -30,7 +30,7 @@ export function MethodProgressTracks({
         : <div className="method-progress__meter"><span className="method-progress__track" role="progressbar" aria-label={`${methodLabel} scored check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}><span style={{ width: `${score}%` }} /></span><strong>{score}%</strong></div>}
     </div>
     <div className={independentScore == null ? "method-progress__row method-progress__row--empty" : "method-progress__row"}>
-      <small><span>Independent</span><strong>{safeIndependentScoredAttemptCount ? `${safeIndependentCorrectCount}/${safeIndependentScoredAttemptCount}` : "Not measured"}</strong></small>
+      <small><span>Independent checks</span><strong>{safeIndependentScoredAttemptCount ? `${safeIndependentCorrectCount}/${safeIndependentScoredAttemptCount}` : "Not measured"}</strong></small>
       {independentScore == null
         ? <span className="method-progress__unmeasured">No solo scored checks yet.</span>
         : <div className="method-progress__meter"><span className="method-progress__track method-progress__track--independent" role="progressbar" aria-label={`${methodLabel} independent check accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={independentScore}><span style={{ width: `${independentScore}%` }} /></span><strong>{independentScore}%</strong></div>}
