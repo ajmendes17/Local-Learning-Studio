@@ -783,6 +783,14 @@
 .accepted-map__assessment-detail>button.accepted-map__assessment-topic { border-color:#d9e2d5; background:#f4f7f0; color:#34493a; }
 .accepted-map__assessment-detail>button.accepted-map__assessment-topic:hover { border-color:#91ad8e; background:#edf4e9; }
 .accepted-map__assessment-detail>button.accepted-map__assessment-topic span { font-size:.68rem; }
+.accepted-map__scope-card { grid-column:1/-1; display:grid; grid-template-columns:minmax(170px,.6fr) minmax(0,2fr); gap:14px; padding:15px; border:1px solid #d9e2d5; border-radius:8px; background:#f8faf5; }
+.accepted-map__scope-card>div:first-child>span { color:#71806f; font-size:.55rem; font-weight:750; letter-spacing:.09em; }
+.accepted-map__scope-card h5 { margin:5px 0; color:#354339; font-size:.85rem; }
+.accepted-map__scope-card small { color:#778276; font-size:.6rem; line-height:1.4; }
+.accepted-map__scope-topics { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px; }
+.accepted-map__scope-topics .accepted-map__assessment-topic { display:grid; gap:4px; padding:9px; border:1px solid #d9e2d5; border-radius:6px; background:#fff; text-align:left; cursor:pointer; }
+.accepted-map__scope-topics .accepted-map__assessment-topic:hover { border-color:#91ad8e; background:#f4f7f0; }
+@media(max-width:700px) { .accepted-map__scope-card { grid-template-columns:1fr; } }
 .accepted-map__assessment-detail>button.accepted-map__assessment-topic small { color:#547352; font-size:.58rem; }
 .accepted-map__homework-group { display:grid; gap:7px; }
 .accepted-map__homework-group>button.accepted-map__homework { display:grid; gap:4px; width:100%; padding:9px; border:1px solid #d7decc; border-radius:5px; background:#fbfcf7; color:#475747; text-align:left; cursor:pointer; }

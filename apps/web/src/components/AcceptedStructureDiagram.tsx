@@ -77,6 +77,7 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
   const [selectedAssessmentIndex, setSelectedAssessmentIndex] = useState<number | null>(null);
   const [selectedHomeworkMaterialId, setSelectedHomeworkMaterialId] = useState<string | null>(null);
   const orderedModules = useMemo(() => [...proposal.modules].sort((a, b) => a.position - b.position), [proposal.modules]);
+  const unrepresentedExamScopes = learnerAssessments.filter((assessment) => assessment.kind === "exam" && assessment.topics.length > 0 && !proposal.assessments.some((item) => (item.kind === "major-exam" || /exam|midterm|final/i.test(item.title)) && item.title.trim().toLocaleLowerCase() === assessment.title.trim().toLocaleLowerCase()));
   const conceptsByKey = useMemo(() => new Map(proposal.concepts.map((concept) => [concept.key, concept])), [proposal.concepts]);
   const selectedModule = orderedModules.find(({ key }) => key === selectedModuleKey) ?? null;
   const progressByTitle = useMemo(() => new Map(learnerProgress.map((item) => [topicKey(item.title), item])), [learnerProgress]);
@@ -323,6 +324,10 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
               </div> : null}
             </div>;
           }) : <p className="accepted-map__empty">No exams or assignments linked yet.</p>}
+          {unrepresentedExamScopes.map((assessment) => <section className="accepted-map__scope-card" key={assessment.id} aria-label={`${assessment.title} instructor topic scope`}>
+            <div><span>INSTRUCTOR EXAM SCOPE</span><h5><MathText inline content={assessment.title} /></h5><small>{assessment.topics.length} supplied topics · {describePractice(assessment)}</small></div>
+            <div className="accepted-map__scope-topics">{assessment.topics.map((topic) => <button className="accepted-map__assessment-topic" key={topic.id} type="button" onClick={() => onStudyTopic(topic.title, undefined, assessment.id)}><span><MathText inline content={topic.title} /></span><small>{describePractice(topic)} · Study this exam topic →</small></button>)}</div>
+          </section>)}
         </aside>
       </div>
     </section>
