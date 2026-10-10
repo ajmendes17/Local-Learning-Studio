@@ -255,6 +255,8 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(assessmentNote, /\*\*Available study time:\*\* 90 minutes/);
     assert.match(assessmentNote, /\*\*Daily target:\*\* 30 minutes/);
     assert.match(assessmentNote, /## Suggested study plan[\s\S]*\*\*\d+ min\*\* — Bell states[\s\S]*\*\*\d+ min\*\* — Partial trace/);
+    assert.match(assessmentNote, /Bell states _\(why: latest response needs another pass/);
+    assert.match(assessmentNote, /Partial trace _\(why: not practiced yet\)/);
     const plannedMinutes = [...assessmentNote.matchAll(/\*\*(\d+) min\*\* —/g)].map((match) => Number(match[1]));
     assert.equal(plannedMinutes.reduce((sum, minutes) => sum + minutes, 0), 90);
     assert.match(assessmentNote, /## Day-by-day schedule[\s\S]*Bell states/);

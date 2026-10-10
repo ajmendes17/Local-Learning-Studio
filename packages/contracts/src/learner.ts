@@ -47,9 +47,54 @@ export interface StudyPlanTopic {
   lastPracticedAt?: string | null;
 }
 
-export function allocateAssessmentStudyPlan<T extends StudyPlanTopic>(topics: T[], availableMinutes: number) {
+export type StudyPlanReason = "high-priority" | "low-priority" | "recent-miss" | "lesson-without-check" | "not-practiced" | "low-accuracy" | "strong-recent-accuracy" | "stale-practice" | "balanced-share";
+
+export function describeStudyPlanReasons(topic: StudyPlanTopic, now = Date.now()): StudyPlanReason[] {
+  const reasons: StudyPlanReason[] = [];
+  if (topic.importance === "high") reasons.push("high-priority");
+  if (topic.importance === "low") reasons.push("low-priority");
+  if (["incorrect", "incomplete", "unsupported", "not-graded"].includes(topic.latestOutcome ?? "")) reasons.push("recent-miss");
+  const attempts = topic.attemptCount ?? 0;
+  const sessions = topic.sessionCount ?? 0;
+  if (sessions > 0 && attempts === 0) reasons.push("lesson-without-check");
+  if (attempts === 0 && sessions === 0) reasons.push("not-practiced");
+  const scored = topic.scoredAttemptCount ?? attempts;
+  if (scored >= 2) {
+    const accuracy = (topic.correctCount ?? 0) / scored;
+    if (accuracy < 0.6) reasons.push("low-accuracy");
+    else if (accuracy >= 0.85) reasons.push("strong-recent-accuracy");
+  }
+  const lastPracticed = topic.lastPracticedAt ? Date.parse(topic.lastPracticedAt) : Number.NaN;
+  if (Number.isFinite(lastPracticed) && now - lastPracticed > 7 * 86_400_000) reasons.push("stale-practice");
+  if (!reasons.length) reasons.push("balanced-share");
+  return reasons;
+}
+
+const STUDY_PLAN_REASON_LABELS: Record<StudyPlanReason, string> = {
+  "high-priority": "marked high priority",
+  "low-priority": "marked low priority",
+  "recent-miss": "latest response needs another pass",
+  "lesson-without-check": "lesson opened without a saved check",
+  "not-practiced": "not practiced yet",
+  "low-accuracy": "below 60% across at least two scored checks",
+  "strong-recent-accuracy": "at least 85% across scored checks",
+  "stale-practice": "not checked in over a week",
+  "balanced-share": "balanced share across the topic list",
+};
+
+export function studyPlanReasonLabel(reason: StudyPlanReason) {
+  return STUDY_PLAN_REASON_LABELS[reason];
+}
+
+export interface AssessmentStudyPlanAllocation<T extends StudyPlanTopic> {
+  topic: T;
+  minutes: number;
+  reasons: StudyPlanReason[];
+}
+
+export function allocateAssessmentStudyPlan<T extends StudyPlanTopic>(topics: T[], availableMinutes: number, now = Date.now()) {
   const minutes = Number.isFinite(availableMinutes) ? Math.max(0, Math.floor(availableMinutes)) : 0;
-  if (!topics.length) return [] as Array<{ topic: T; minutes: number }>;
+  if (!topics.length) return [] as AssessmentStudyPlanAllocation<T>[];
   const weights = topics.map((topic) => {
     let weight = topic.importance === "high" ? 1.5 : topic.importance === "low" ? 0.75 : 1;
     if (["incorrect", "incomplete", "unsupported", "not-graded"].includes(topic.latestOutcome ?? "")) weight *= 1.5;
@@ -62,7 +107,7 @@ export function allocateAssessmentStudyPlan<T extends StudyPlanTopic>(topics: T[
       else if (accuracy >= 0.85) weight *= 0.8;
     }
     const lastPracticed = topic.lastPracticedAt ? Date.parse(topic.lastPracticedAt) : Number.NaN;
-    if (Number.isFinite(lastPracticed) && Date.now() - lastPracticed > 7 * 86_400_000) weight *= 1.1;
+    if (Number.isFinite(lastPracticed) && now - lastPracticed > 7 * 86_400_000) weight *= 1.1;
     return weight;
   });
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
@@ -76,7 +121,7 @@ export function allocateAssessmentStudyPlan<T extends StudyPlanTopic>(topics: T[
     allocations[item.index]! += 1;
     remaining -= 1;
   }
-  return topics.map((topic, index) => ({ topic, minutes: allocations[index]! }));
+  return topics.map((topic, index) => ({ topic, minutes: allocations[index]!, reasons: describeStudyPlanReasons(topic, now) }));
 }
 
 export function assessmentDeadlineLabel(scheduledAt: string | null | undefined, now = Date.now()) {

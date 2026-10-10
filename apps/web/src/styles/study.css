@@ -51,7 +51,13 @@
 .scope-assessment-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .scope-assessment-head small { color:#6a776b; font-size:.65rem; }
 .scope-assessment-head .scope-assessment-meta { display:block; margin-top:4px; color:#7a857a; font-size:.61rem; }
-.scope-plan-note { margin:10px 0 0; color:#778174; font-size:.62rem; line-height:1.5; }
+.scope-plan-note { display:grid; gap:5px; margin:10px 0 0; padding:10px 12px; border:1px solid #e5e9df; border-radius:7px; background:#fbfcf8; color:#778174; font-size:.62rem; line-height:1.5; }
+.scope-plan-note>strong { color:#526354; font-size:.67rem; }
+.scope-plan-note>p { margin:0; }
+.scope-plan-note>ul { display:grid; gap:5px; margin:2px 0 0; padding:0; list-style:none; }
+.scope-plan-note>ul>li { display:grid; gap:1px; padding:5px 7px; border-left:2px solid #91a68a; background:#f3f6ef; }
+.scope-plan-note>ul>li>span { color:#536353; font-size:.62rem; font-weight:650; }
+.scope-plan-note>ul>li>small { color:#768174; font-size:.58rem; }
 .scope-day-plan { display:grid; gap:8px; margin-top:11px; padding:12px; border:1px solid #e5e9df; border-radius:7px; background:#fbfcf8; }
 .scope-day-plan>strong { color:#526354; font-size:.67rem; }
 .scope-day-plan>ol { display:grid; gap:7px; margin:0; padding:0; list-style:none; }

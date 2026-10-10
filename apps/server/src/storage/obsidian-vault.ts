@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, normalizeMathText, scheduleAssessmentStudyDays, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, normalizeMathText, scheduleAssessmentStudyDays, studyPlanReasonLabel, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
 
 const START = "<!-- LLS:GENERATED:START -->";
 const END = "<!-- LLS:GENERATED:END -->";
@@ -788,7 +788,7 @@ export class ObsidianVault {
       const uncheckedTopics = Math.max(0, assessment.topics.length - checkedTopics);
       const lessonTopics = assessment.topics.filter((topic) => topic.sessionCount > 0).length;
       const studyPlanText = studyPlan.length
-        ? studyPlan.map(({ topic, minutes }) => `- **${minutes} min** — ${topic.title}`).join("\n")
+        ? studyPlan.map(({ topic, minutes, reasons }) => `- **${minutes} min** — ${topic.title} _(why: ${reasons.map(studyPlanReasonLabel).join("; ")})_`).join("\n")
         : "No available study-time budget saved.";
       const dayScheduleText = !daySchedule ? "No study time budget saved."
         : daySchedule.days.length ? daySchedule.days.map((day) => `- **${day.date} · ${day.minutes} min** — ${day.topics.map((topic) => `${topic.title} (${topic.minutes} min)`).join("; ")}`).join("\n")

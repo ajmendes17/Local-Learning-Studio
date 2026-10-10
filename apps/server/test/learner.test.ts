@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import test from "node:test";
-import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, getSpacedReviewSchedule, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, allocateStudyMinutes, assessmentDeadlineLabel, getSpacedReviewSchedule, normalizeMathText, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, StudySessionContentSchema, studyPlanReasonLabel, summarizeStudyCoverage, summarizeTopicProgress } from "@local-learning-studio/contracts";
 import type { AppOptions } from "../src/app.js";
 import { buildApp } from "../src/app.js";
 import { CodexRunError } from "../src/codex/codex-runner.js";
@@ -154,15 +154,18 @@ test("study budget allocates exactly the available minutes and favors weak topic
 });
 
 test("assessment study plan weights saved evidence and reports deadline timing", () => {
+  const now = Date.parse("2026-10-10T12:00:00.000Z");
   const plan = allocateAssessmentStudyPlan([
     { id: "missed", title: "Missed high-priority topic", importance: "high" as const, attemptCount: 2, scoredAttemptCount: 2, correctCount: 0, latestOutcome: "incorrect", sessionCount: 1 },
     { id: "steady", title: "Recent steady topic", importance: "normal" as const, attemptCount: 3, scoredAttemptCount: 3, correctCount: 3, latestOutcome: "correct", sessionCount: 2, lastPracticedAt: "2026-10-10T12:00:00.000Z" },
     { id: "new", title: "Untouched topic", importance: "normal" as const, attemptCount: 0, scoredAttemptCount: 0, correctCount: 0, latestOutcome: null, sessionCount: 0 },
-  ], 90);
+  ], 90, now);
   assert.equal(plan.reduce((sum, item) => sum + item.minutes, 0), 90);
   assert.ok(plan[0]!.minutes > plan[1]!.minutes, "missed, high-priority evidence should receive more than a strong recent result");
   assert.ok(plan[2]!.minutes > 0, "untouched topics should retain some preparation time");
-  const now = Date.parse("2026-10-10T12:00:00.000Z");
+  assert.deepEqual(plan[0]!.reasons.map(studyPlanReasonLabel), ["marked high priority", "latest response needs another pass", "below 60% across at least two scored checks"]);
+  assert.deepEqual(plan[1]!.reasons.map(studyPlanReasonLabel), ["at least 85% across scored checks"]);
+  assert.deepEqual(plan[2]!.reasons.map(studyPlanReasonLabel), ["not practiced yet"]);
   assert.equal(assessmentDeadlineLabel("2026-10-10T20:00:00.000Z", now), "due today");
   assert.equal(assessmentDeadlineLabel("2026-10-11T12:00:00.000Z", now), "due tomorrow");
   assert.equal(assessmentDeadlineLabel("2026-10-09T12:00:00.000Z", now), "overdue by 1 day");
