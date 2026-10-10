@@ -394,7 +394,7 @@ test("study attempts from a learner exam scope update assessment and topic progr
   assert.deepEqual(retriedAttempt.json(), attempt.json(), "retrying the same attempt ID returns the original saved attempt");
   const reopened = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions/${session.json().sessionId}` });
   assert.equal(reopened.statusCode, 200, reopened.body);
-  assert.deepEqual(reopened.json().attempts.map((item: { outcome: string; response: string }) => [item.outcome, item.response]), [["correct", session.json().options[session.json().answerIndex]]]);
+  assert.deepEqual(reopened.json().attempts.map((item: { outcome: string; response: string; independence: string }) => [item.outcome, item.response, item.independence]), [["correct", session.json().options[session.json().answerIndex], "independent"]]);
   const profile = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/profile` });
   const updated = profile.json().assessments[0];
   assert.equal(updated.attemptCount, 1);
@@ -600,13 +600,28 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
     assert.deepEqual(methodProgress.json()[0].topicProgress.map(({ title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap }: { title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null }) => [title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap]), [
       ["Bell states", 1, 1, 1, 1, 0, 0, 0, 1, 1, 0.25],
     ]);
+    const assistedAttempt = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
+      payload: {
+        conceptId: study.json().conceptId, activityType: "application", prompt: "Explain the result in a new case.",
+        response: "A correct response reached with outside resources.", reasoning: "Checked notes during the attempt.", confidence: 0.5,
+        hintCount: 0, method: "explanation", outcome: "correct", sourceRefs: [], independence: "assisted",
+        rationale: "Disposable integration attempt with learner-reported outside help.",
+      },
+    });
+    assert.equal(assistedAttempt.statusCode, 201, assistedAttempt.body);
+    const assistedProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
+    const explanationProgress = assistedProgress.json().find((item: { method: string }) => item.method === "explanation");
+    assert.deepEqual([explanationProgress.scoredAttemptCount, explanationProgress.independentScoredAttemptCount, explanationProgress.assistedScoredAttemptCount, explanationProgress.topicProgress[0].assistedScoredAttemptCount], [1, 0, 1, 1]);
     const exported = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
     assert.equal(exported.statusCode, 200, exported.body);
     assert.equal(exported.json().notesWritten, 3);
     const courseNote = await readFile(join(vaultPath, exported.json().courseFolder, "Course.md"), "utf8");
     assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 1\/1 scored checks correct; 1\/1 correct independently; confidence gap 25% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
+    assert.match(courseNote, /Clear explanation:\*\* 1\/1 scored checks correct; No independent scored checks; 1 assisted scored check; confidence gap 50% across 1 rated check/);
     assert.match(courseNote, /across 1 topic; topics: Bell states/);
     assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; 1\/1 independently correct; 25% confidence gap across 1 rated; last practiced 2026-\d\d-\d\dT/);
+    assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; no independent scored checks; 1 assisted; 50% confidence gap across 1 rated/);
     const assessmentFolder = join(vaultPath, exported.json().courseFolder, "assessments");
     const assessmentNote = await readFile(join(assessmentFolder, "professor-s-bell-states-scope--" + assessment.json().id.slice(0, 8) + ".md"), "utf8");
     assert.match(assessmentNote, /Bell states .*priority: high; .*1\/1 scored checks correct/);

@@ -22,7 +22,7 @@ function studyMethodLabel(method: string) {
   }
 }
 
-interface StudyAttemptSummary { outcome: string; response: string; confidence: number | null; hintCount: number; createdAt: string }
+interface StudyAttemptSummary { outcome: string; response: string; confidence: number | null; hintCount: number; independence: "independent" | "hinted" | "assisted" | "unknown"; createdAt: string }
 interface StudyContent {
   sessionId: string; createdAt: string;
   conceptId: string; assessmentId?: string | null; sourceMaterialId?: string | null; topic: string; method: Method; sourceBasis: "general-knowledge" | "course-materials";
@@ -51,7 +51,7 @@ interface ChatAnswer { answer: string; followUp: string; sourceBasis: "general-k
 interface PatternEvidence { id: string; conceptTitle: string; response: string; outcome: string; confidence: number | null; hintCount: number; method: string; createdAt: string }
 interface Pattern { id: string; patternKey: string; kind: string; conceptIds: string[]; claim: string; status: string; confidence: number; supportingAttemptIds: string[]; counterexampleAttemptIds: string[]; supportingEvidence: PatternEvidence[]; counterexampleEvidence: PatternEvidence[]; statusRationale: string }
 interface PendingAttempt { id: string; payload: Record<string, unknown> }
-interface StudyAttemptDraft { selected: number | null; confidence: number; hintCount: number; studyTab: "lesson" | "check" }
+interface StudyAttemptDraft { selected: number | null; confidence: number; hintCount: number; usedOutsideHelp?: boolean; studyTab: "lesson" | "check" }
 
 function attemptDraftKey(courseId: string, sessionId: string) {
   return `lls-study-draft:${courseId}:${sessionId}`;
@@ -67,7 +67,7 @@ function readAttemptDraft(courseId: string, content: StudyContent): StudyAttempt
     const confidence = [0.25, 0.5, 0.75, 1].includes(parsed.confidence ?? Number.NaN) ? parsed.confidence! : 0.5;
     const hintCount = Number.isInteger(parsed.hintCount) ? Math.max(0, Math.min(content.hints.length, parsed.hintCount!)) : 0;
     const studyTab = parsed.studyTab === "check" || parsed.studyTab === "lesson" ? parsed.studyTab : content.method === "quiz" ? "check" : "lesson";
-    return { selected, confidence, hintCount, studyTab };
+    return { selected, confidence, hintCount, usedOutsideHelp: parsed.usedOutsideHelp === true, studyTab };
   } catch {
     return null;
   }
@@ -105,6 +105,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [reopenedAttempt, setReopenedAttempt] = useState<StudyAttemptSummary | null>(null);
   const [confidence, setConfidence] = useState(0.5);
   const [hintCount, setHintCount] = useState(0);
+  const [usedOutsideHelp, setUsedOutsideHelp] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -186,8 +187,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       clearAttemptDraft(courseId, content.sessionId);
       return;
     }
-    writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, studyTab });
-  }, [courseId, content?.sessionId, selected, confidence, hintCount, studyTab, saved, reopenedAttempt]);
+    writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, usedOutsideHelp, studyTab });
+  }, [courseId, content?.sessionId, selected, confidence, hintCount, usedOutsideHelp, studyTab, saved, reopenedAttempt]);
 
   async function beginStudy(event: React.FormEvent) {
     event.preventDefault();
@@ -199,7 +200,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     const requestStartedAt = Date.now();
     setTopic(requestedTopic.trim());
     setMethod(requestedMethod);
-    setBusy(true); setError(""); setNotice(""); setContent(null); setSelected(null); setReopenedAttempt(null); setSaved(false); setAttemptSaveError(""); pendingAttempt.current = null; setChatAnswer(null); setHintCount(0);
+    setBusy(true); setError(""); setNotice(""); setContent(null); setSelected(null); setReopenedAttempt(null); setSaved(false); setAttemptSaveError(""); pendingAttempt.current = null; setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false);
     setStudyTab(requestedMethod === "quiz" ? "check" : "lesson");
     try {
       const generated = await postJson<StudyContent>(`/api/courses/${courseId}/learner/study-session`, { topic: requestedTopic.trim(), method: requestedMethod, ...(sourceMaterialId ? { sourceMaterialId } : {}), ...(assessmentId ? { assessmentId } : {}), ...(reviewSessionId ? { reviewSessionId } : {}) });
@@ -231,6 +232,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     setSaved(Boolean(latestAttempt));
     setConfidence(latestAttempt?.confidence ?? draft?.confidence ?? 0.5);
     setHintCount(latestAttempt?.hintCount ?? draft?.hintCount ?? 0);
+    setUsedOutsideHelp(latestAttempt?.independence === "assisted" || draft?.usedOutsideHelp === true);
     setActiveSessionInUrl(reopened.sessionId);
   }
 
@@ -276,25 +278,30 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   function selectAnswer(index: number) {
     if (!saved && !reopenedAttempt && !pendingAttempt.current) {
       setSelected(index);
-      if (content) writeAttemptDraft(courseId, content.sessionId, { selected: index, confidence, hintCount, studyTab });
+      if (content) writeAttemptDraft(courseId, content.sessionId, { selected: index, confidence, hintCount, usedOutsideHelp, studyTab });
     }
   }
 
   function updateConfidence(value: number) {
     setConfidence(value);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence: value, hintCount, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence: value, hintCount, usedOutsideHelp, studyTab });
   }
 
   function revealHint() {
     const nextHintCount = Math.min(content?.hints.length ?? 0, hintCount + 1);
     setHintCount(nextHintCount);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount: nextHintCount, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount: nextHintCount, usedOutsideHelp, studyTab });
+  }
+
+  function updateOutsideHelp(value: boolean) {
+    setUsedOutsideHelp(value);
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, usedOutsideHelp: value, studyTab });
   }
 
   function selectStudyTab(nextTab: "lesson" | "check") {
     setStudyTab(nextTab);
     if (content && !saved && !reopenedAttempt) {
-      writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, studyTab: nextTab });
+      writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, usedOutsideHelp, studyTab: nextTab });
     }
   }
 
@@ -322,7 +329,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         response: content.options[selected], reasoning: "", confidence, hintCount,
         method: content.method === "quiz" ? "retrieval-practice" : content.method,
         outcome: correct ? "correct" : "incorrect", sourceRefs: content.sourceMaterialId ? [{ materialId: content.sourceMaterialId }] : [],
-        independence: hintCount > 0 ? "hinted" : "independent", rationale: `${correct ? "Selected the validated answer key" : "Answer did not match the validated key"}${hintCount ? ` after ${hintCount} hint(s)` : " independently"}; confidence ${Math.round(confidence * 100)}%.`,
+        independence: usedOutsideHelp ? "assisted" : hintCount > 0 ? "hinted" : "independent", rationale: `${correct ? "Selected the validated answer key" : "Answer did not match the validated key"}${usedOutsideHelp ? " with help outside this check" : hintCount ? ` after ${hintCount} hint(s)` : " independently"}; confidence ${Math.round(confidence * 100)}%.`,
       },
     };
     setSaved(false); setAttemptSaveError("");
@@ -367,7 +374,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     setBusy(true); setError("");
     try {
       const next = await postJson<StudyContent>(`/api/courses/${courseId}/learner/study-sessions/${content.sessionId}/next-question`, {});
-      pendingAttempt.current = null; setAttemptSaveError(""); setContent(next); setSelected(null); setReopenedAttempt(null); setSaved(false); setHintCount(0); setConfidence(0.5); setChatAnswer(null); setStudyTab("check");
+      pendingAttempt.current = null; setAttemptSaveError(""); setContent(next); setSelected(null); setReopenedAttempt(null); setSaved(false); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5); setChatAnswer(null); setStudyTab("check");
       setActiveSessionInUrl(next.sessionId);
       void refreshClassData();
     } catch (err) { setError((err as Error).message); }
@@ -381,11 +388,11 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   function retryCurrentQuestion() {
-    pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setReopenedAttempt(null); setSaved(false); setHintCount(0); setConfidence(0.5); setChatAnswer(null);
+    pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setReopenedAttempt(null); setSaved(false); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5); setChatAnswer(null);
   }
 
   async function reopenSession(sessionId: string) {
-    setBusy(true); setError(""); pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setSaved(false); setChatAnswer(null); setHintCount(0); setConfidence(0.5);
+    setBusy(true); setError(""); pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setSaved(false); setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5);
     try {
       const response = await fetch(`/api/courses/${courseId}/learner/study-sessions/${sessionId}`);
       const value = await response.json().catch(() => null);
@@ -626,12 +633,17 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const reviewedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
   const displayedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
   const displayedHintCount = reopenedAttempt ? reopenedAttempt.hintCount : hintCount;
+  const displayedIndependence = reopenedAttempt?.independence ?? (usedOutsideHelp ? "assisted" : displayedHintCount > 0 ? "hinted" : "independent");
+  const independenceSummary = displayedIndependence === "assisted" ? "outside help recorded" : displayedIndependence === "hinted" ? "in-app hints used" : displayedIndependence === "independent" ? "independent attempt" : "support not recorded";
   const confidenceSummary = displayedConfidence == null ? "confidence not recorded" : `confidence ${Math.round(displayedConfidence * 100)}%`;
+  const usedOutsideHelpForAnswer = reopenedAttempt?.independence === "assisted" || (!reopenedAttempt && usedOutsideHelp);
   const answerFollowUp = !reviewedAnswerCorrect
     ? reviewedConfidence != null && reviewedConfidence >= 0.75
       ? "You felt confident in this answer. Review the explanation and compare the key distinction with the choice you made."
       : "Review the explanation, then try a different version to reinforce the idea."
-    : reviewedConfidence != null && reviewedConfidence <= 0.5
+    : usedOutsideHelpForAnswer
+      ? "You got it right with outside help. Try another version without notes, another person, or hints to check independent recall."
+      : reviewedConfidence != null && reviewedConfidence <= 0.5
       ? "You got it right with lower confidence. Another version can check whether the reasoning holds."
       : reviewedConfidence == null
         ? "You got it right. A transfer question can check whether the idea holds in a new setting."
@@ -735,6 +747,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
         <section className="check-card" role="tabpanel" id="study-panel-check" aria-labelledby="study-tab-check" hidden={studyTab !== "check"}>
           <div><p className="section-kicker">Quick knowledge check</p><MathText className="check-question" content={content.question} /></div>
           {!saved && !reopenedAttempt && !pendingAttempt.current && content.hints.length ? <div className="study-hints"><div><strong>Need a hint?</strong><small>Hints are counted as part of this attempt.</small></div>{content.hints.slice(0,hintCount).map((hint,index) => <p key={`${index}-${hint}`}><span>Hint {index+1}</span><MathText inline content={hint} /></p>)}{hintCount < content.hints.length ? <button type="button" className="button-secondary" onClick={revealHint}>Show hint {hintCount + 1}</button> : null}</div> : null}
+          {!saved && !reopenedAttempt ? <label className="outside-help-input"><input type="checkbox" checked={usedOutsideHelp} disabled={savingAttempt || busy || Boolean(pendingAttempt.current)} onChange={(event) => updateOutsideHelp(event.target.checked)} /><span><strong>I used help outside these hints</strong><small>For example, notes, a textbook, or another person.</small></span></label> : null}
           {reopenedAttempt ? <p className="reopened-attempt-note" role="status">Showing your saved {reopenedAttempt.outcome} response from {new Date(reopenedAttempt.createdAt).toLocaleString()}. Choose “Try this exact question again” below if you want to make another attempt.</p> : null}
           <div className="answer-options" role="group" aria-label="Answer choices">{content.options.map((option,index) => {
             const isCorrect = index === content.answerIndex;
@@ -744,7 +757,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           })}</div>
           {!saved && !reopenedAttempt ? <label className="confidence-input">How confident are you?<select value={confidence} onChange={(event) => updateConfidence(Number(event.target.value))}><option value={0.25}>Low</option><option value={0.5}>Somewhat</option><option value={0.75}>Confident</option><option value={1}>Very confident</option></select></label> : null}
           {!saved && !reopenedAttempt ? <button className="button-primary check-submit" type="button" disabled={selected === null || savingAttempt || busy} onClick={() => void submitAnswer()}>{savingAttempt ? "Saving answer…" : "Check answer"}</button> : null}
-          {saved ? <><div className={reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong><MathText content={content.feedback} /><small>{`Attempt saved · ${confidenceSummary} · ${displayedHintCount} hint${displayedHintCount === 1 ? "" : "s"}.`}</small></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>Your answer was checked, but it hasn’t been saved to your progress yet: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => void nextQuestion()}>{busy ? "Preparing…" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2 ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
+          {saved ? <><div className={reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong><MathText content={content.feedback} /><small>{`Attempt saved · ${independenceSummary} · ${confidenceSummary} · ${displayedHintCount} hint${displayedHintCount === 1 ? "" : "s"}.`}</small></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>Your answer was checked, but it hasn’t been saved to your progress yet: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => void nextQuestion()}>{busy ? "Preparing…" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2 ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
           <details className="lesson-recap"><summary>Show answer explanation</summary><MathText content={content.feedback} /></details>
         </section>
       </div>

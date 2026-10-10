@@ -379,6 +379,7 @@ export const StudySessionRecordSchema = StudySessionContentSchema.safeExtend({
   attempts: z.array(z.object({
     outcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]),
     response: z.string(), confidence: z.number().min(0).max(1).nullable(), hintCount: z.number().int().nonnegative(),
+    independence: z.enum(["independent", "hinted", "assisted", "unknown"]),
     createdAt: z.string().datetime(),
   })).default([]),
 });

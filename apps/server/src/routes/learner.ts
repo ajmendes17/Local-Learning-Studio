@@ -130,7 +130,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
     const session = options.learner.getStudySession(courseId, sessionId.data);
     if (!session) return reply.code(404).send({ error: "Study session not found in this class." });
     const attempts = options.learner.getSessionAttempts(courseId, sessionId.data);
-    return StudySessionRecordSchema.parse({ ...session, attempts: attempts.map(({ outcome, response, confidence, hintCount, createdAt }) => ({ outcome, response, confidence, hintCount, createdAt })) });
+    return StudySessionRecordSchema.parse({ ...session, attempts: attempts.map(({ outcome, response, confidence, hintCount, independence, createdAt }) => ({ outcome, response, confidence, hintCount, independence, createdAt })) });
   });
 
   app.post<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/assessments", async (request, reply) => {
