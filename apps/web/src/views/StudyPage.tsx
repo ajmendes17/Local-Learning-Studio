@@ -65,6 +65,7 @@ interface StudyRecommendation {
   sourceMaterialId?: string;
   sourceTitle?: string;
   importance?: "low" | "normal" | "high";
+  scheduledAt?: string | null;
   mapTopic?: boolean;
 }
 interface ChatAnswer { answer: string; followUp: string; sourceBasis: "general-knowledge" | "course-materials" }
