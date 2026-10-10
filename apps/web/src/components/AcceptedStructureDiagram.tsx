@@ -251,6 +251,8 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                   const recommendedTopic = recommendation?.topic;
                   const recommendationAction = !recommendation ? "No study topics available yet" : recommendation.reason === "needs-review"
                     ? `Review ${recommendedTopic!.title} · needs another pass →`
+                    : recommendation.reason === "low-scored-accuracy"
+                      ? `Low scored accuracy · quiz ${recommendedTopic!.title} →`
                     : recommendation.reason === "spaced-review"
                       ? `Spaced review due · take a knowledge check on ${recommendedTopic!.title} →`
                     : recommendation.reason === "lesson-only"
@@ -259,7 +261,7 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                         ? `Start with ${recommendedTopic!.title} · not studied yet →`
                         : `Revisit ${recommendedTopic!.title} · least recently studied →`;
                   return <div className="accepted-map__homework-group" key={material.id}>
-                    <button className="accepted-map__homework" type="button" aria-label={recommendedTopic ? `Study ${studyTopic}: ${recommendedTopic.title}` : `Study ${studyTopic}, no mapped study topics yet`} disabled={material.status !== "ready" || !recommendedTopic} onClick={() => recommendedTopic && onStudyTopic(recommendedTopic.title, material.id, undefined, recommendation?.reason === "spaced-review" ? "quiz" : undefined)}>
+                    <button className="accepted-map__homework" type="button" aria-label={recommendedTopic ? `Study ${studyTopic}: ${recommendedTopic.title}` : `Study ${studyTopic}, no mapped study topics yet`} disabled={material.status !== "ready" || !recommendedTopic} onClick={() => recommendedTopic && onStudyTopic(recommendedTopic.title, material.id, undefined, recommendation?.reason === "spaced-review" || recommendation?.reason === "low-scored-accuracy" ? "quiz" : undefined)}>
                       <span>{studyTopic}<span className="accepted-map__homework-action">{recommendedTopic ? "Study this homework →" : "No study topics available"}</span></span>
                       <small>{material.status === "ready" ? `${homeworkLessonSessions} homework lesson session${homeworkLessonSessions === 1 ? "" : "s"}${homeworkLastPracticedAt ? ` · last topic check ${new Date(homeworkLastPracticedAt).toLocaleDateString()}` : ""}` : "Source extraction is not ready yet"}</small>
                       {material.status === "ready" && homeworkProgress.topicCount ? <CategoryProgress label={studyTopic} coverage={homeworkProgress} /> : null}

@@ -42,3 +42,22 @@ test("unscored and missed topics are not mislabeled as scheduled spaced recall",
   assert.match(incorrect, /Needs review · last check incorrect/);
   assert.doesNotMatch(incorrect, /spaced recall/);
 });
+
+test("low scored accuracy starts quiz-first practice from topic actions", () => {
+  assert.equal(practiceReviewMethod({
+    attemptCount: 5,
+    scoredAttemptCount: 5,
+    correctCount: 2,
+    independentScoredAttemptCount: 3,
+    independentCorrectCount: 1,
+    latestOutcome: "correct",
+  }), "quiz");
+  assert.equal(practiceReviewMethod({
+    attemptCount: 2,
+    scoredAttemptCount: 2,
+    correctCount: 0,
+    independentScoredAttemptCount: 2,
+    independentCorrectCount: 0,
+    latestOutcome: "correct",
+  }), undefined, "a small sample keeps the learner-selected method");
+});

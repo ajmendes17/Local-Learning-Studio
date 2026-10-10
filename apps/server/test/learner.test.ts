@@ -240,6 +240,17 @@ test("homework next-topic recommendation prioritizes review, untouched topics, t
   ]);
   assert.deepEqual(missedReview, { topic: topics[0], reason: "needs-review" });
 
+  const lowAccuracyTopic = { title: "Partial trace", importance: "high" as const };
+  const lowAccuracy = recommendNextStudyTopic([lowAccuracyTopic, topics[2]!], [
+    { title: "Partial trace", attemptCount: 5, scoredAttemptCount: 5, correctCount: 2, latestOutcome: "correct", lastPracticedAt: "2026-10-10T10:00:00.000Z" },
+    { title: "Teleportation", attemptCount: 3, scoredAttemptCount: 3, correctCount: 3, latestOutcome: "correct", lastPracticedAt: "2026-10-09T10:00:00.000Z" },
+  ]);
+  assert.deepEqual(lowAccuracy, { topic: lowAccuracyTopic, reason: "low-scored-accuracy" }, "a correct latest answer should not hide a repeated low score from the next-study recommendation");
+  const legacyCountOnly = recommendNextStudyTopic([lowAccuracyTopic], [
+    { title: "Partial trace", attemptCount: 5, correctCount: 1, latestOutcome: "correct" },
+  ]);
+  assert.deepEqual(legacyCountOnly, { topic: lowAccuracyTopic, reason: "least-recently-practiced" }, "missing scored denominators must not be treated as low accuracy");
+
   const untouched = recommendNextStudyTopic(topics, [
     { title: "Bell states", attemptCount: 2, latestOutcome: "correct", lastPracticedAt: "2026-10-08T10:00:00.000Z" },
     { title: "Partial trace", attemptCount: 1, latestOutcome: "correct", lastPracticedAt: "2026-10-09T10:00:00.000Z" },
@@ -370,6 +381,7 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
     { title: "Lesson opened, no check", reason: "lesson-only" as const, importance: "normal" as const, contextPriority: 0 },
     { title: "High priority, untouched", reason: "not-practiced" as const, importance: "high" as const, contextPriority: 0 },
     { title: "No independent check yet", reason: "needs-independent-check" as const, importance: "high" as const, contextPriority: 0 },
+    { title: "Low scored accuracy", reason: "low-scored-accuracy" as const, importance: "normal" as const, contextPriority: 0 },
     { title: "Correct, low confidence", reason: "low-confidence-correct" as const, importance: "high" as const, contextPriority: 0 },
     { title: "Normal priority, untouched", reason: "not-practiced" as const, importance: "normal" as const, contextPriority: 0 },
     { title: "Spaced review", reason: "spaced-review" as const, nextReviewAt: "2026-10-10T10:00:00.000Z", contextPriority: 0 },
@@ -378,6 +390,7 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
   assert.deepEqual(prioritizeStudyRecommendations(candidates).map(({ title }) => title), [
     "High priority, older miss",
     "Low priority, newer miss",
+    "Low scored accuracy",
     "No independent check yet",
     "Correct, low confidence",
     "Lesson opened, no check",

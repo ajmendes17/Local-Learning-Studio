@@ -39,6 +39,14 @@ export function describeTopicEvidence(evidence: TopicEvidence) {
 
 export function practiceReviewMethod(signal: PracticeSignal | undefined, now = Date.now()) {
   if (!signal) return undefined;
+  if (summarizeTopicEvidence({
+    attemptCount: signal.attemptCount,
+    scoredAttemptCount: signal.scoredAttemptCount ?? 0,
+    correctCount: signal.correctCount,
+    independentScoredAttemptCount: signal.independentScoredAttemptCount ?? 0,
+    independentCorrectCount: signal.independentCorrectCount ?? 0,
+    latestOutcome: signal.latestOutcome,
+  }).level === "low-scored-accuracy") return "quiz" as const;
   const schedule = getSpacedReviewSchedule({
     ...signal,
     scoredAttemptCount: signal.scoredAttemptCount ?? signal.attemptCount,

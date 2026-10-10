@@ -340,7 +340,7 @@ export function recommendNextStudyTopic<T extends { title: string }>(
   independenceSignals: Array<{ title: string; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount?: number }> = [],
   confidenceSignals: Array<{ title: string; latestOutcome: string | null; latestConfidence: number | null }> = [],
   now = Date.now(),
-): { topic: T; reason: "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced"; nextReviewAt?: string } | null {
+): { topic: T; reason: "needs-review" | "low-scored-accuracy" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced"; nextReviewAt?: string } | null {
   if (!topics.length) return null;
   const signalByTitle = new Map(signals.map((signal) => [signal.title.trim().normalize("NFKC").toLocaleLowerCase(), signal]));
   const candidates = topics.map((topic, index) => ({
@@ -363,6 +363,23 @@ export function recommendNextStudyTopic<T extends { title: string }>(
     .filter(({ signal }) => signal?.latestOutcome === "incorrect")
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(b.signal?.lastPracticedAt) - timestamp(a.signal?.lastPracticedAt) || a.index - b.index)[0];
   if (needsReview) return { topic: needsReview.topic, reason: "needs-review" };
+
+  const lowScoredAccuracy = candidates
+    .filter(({ signal, topic }) => {
+      if (!signal || signal.scoredAttemptCount == null) return false;
+      const key = topic.title.trim().normalize("NFKC").toLocaleLowerCase();
+      const independence = independenceByTitle.get(key);
+      return summarizeTopicEvidence({
+        attemptCount: signal.attemptCount,
+        scoredAttemptCount: signal.scoredAttemptCount,
+        correctCount: signal.correctCount ?? 0,
+        independentScoredAttemptCount: independence?.independentScoredAttemptCount ?? signal.independentScoredAttemptCount ?? 0,
+        independentCorrectCount: independence?.independentCorrectCount ?? signal.independentCorrectCount ?? 0,
+        latestOutcome: signal.latestOutcome,
+      }).level === "low-scored-accuracy";
+    })
+    .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0];
+  if (lowScoredAccuracy) return { topic: lowScoredAccuracy.topic, reason: "low-scored-accuracy" };
 
   const needsIndependentCheck = candidates
     .filter(({ topic }) => {
@@ -438,7 +455,7 @@ export function recommendNextStudyTopic<T extends { title: string }>(
   };
 }
 
-type StudyRecommendationReason = "needs-review" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced";
+type StudyRecommendationReason = "needs-review" | "low-scored-accuracy" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced";
 
 export function prioritizeStudyRecommendations<T extends {
   title: string;
@@ -451,13 +468,14 @@ export function prioritizeStudyRecommendations<T extends {
 }>(recommendations: T[]): T[] {
   const reasonRank: Record<StudyRecommendationReason, number> = {
     "needs-review": 0,
-    "needs-independent-check": 1,
-    "low-confidence-correct": 2,
-    "lesson-only": 3,
-    "needs-scored-check": 4,
-    "not-practiced": 5,
-    "spaced-review": 6,
-    "least-recently-practiced": 7,
+    "low-scored-accuracy": 1,
+    "needs-independent-check": 2,
+    "low-confidence-correct": 3,
+    "lesson-only": 4,
+    "needs-scored-check": 5,
+    "not-practiced": 6,
+    "spaced-review": 7,
+    "least-recently-practiced": 8,
   };
   const importanceRank = (importance?: T["importance"]) => importance === "high" ? 2 : importance === "low" ? 0 : 1;
   const timestamp = (value?: string | null) => {
