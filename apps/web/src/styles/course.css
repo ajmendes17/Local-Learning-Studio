@@ -785,6 +785,9 @@
 .accepted-map__homework-group>button.accepted-map__homework>span { color:#3f553f; font-size:.7rem; font-weight:700; }
 .accepted-map__homework-action { display:block; margin-top:2px; color:#5e795a; font-size:.6rem; font-weight:750; }
 .accepted-map__homework-group>button.accepted-map__homework>small:last-child { color:#5e795a; font-weight:700; }
+.accepted-map__unlinked-practice { display:grid; gap:4px; padding:8px 9px; border-left:2px solid #c6a568; background:#f8f4e9; color:#635941; }
+.accepted-map__unlinked-practice>strong { font-size:.6rem; }
+.accepted-map__unlinked-practice>small { font-size:.57rem; line-height:1.4; }
 .accepted-map__homework-progress { display:block; height:5px; overflow:hidden; border-radius:999px; background:#e8ece4; }
 .accepted-map__homework-progress>span { display:block; height:100%; border-radius:inherit; background:#83a482; transition:width .2s ease; }
 .accepted-map__homework-group>.accepted-map__homework-topics-toggle { justify-self:start; padding:1px 0; border:0; background:transparent; color:#547352; font-size:.59rem; font-weight:700; text-align:left; cursor:pointer; }

@@ -263,6 +263,8 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                   const sourceSignals = sourceProgress.find((item) => item.materialId === material.id);
                   const topicProgress = new Map(sourceSignals?.topics.map((item) => [topicKey(item.title), item]) ?? []);
                   const homeworkProgress = summarizeStudyCoverage(homeworkStudyTopics.map(({ title }) => title), sourceSignals?.topics ?? []);
+                  const mappedHomeworkTitles = new Set(homeworkStudyTopics.map(({ title }) => topicKey(title)));
+                  const unlinkedHomeworkPractice = (sourceSignals?.topics ?? []).filter((signal) => !mappedHomeworkTitles.has(topicKey(signal.title)) && signal.attemptCount > 0);
                   const recommendation = recommendNextStudyTopic(homeworkStudyTopics, sourceSignals?.topics ?? []);
                   const homeworkLessonSessions = sourceSignals?.sessionCount ?? 0;
                   const homeworkLastPracticedAt = homeworkStudyTopics
@@ -285,6 +287,11 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                       {material.status === "ready" && homeworkProgress.topicCount ? <CategoryProgress label={studyTopic} coverage={homeworkProgress} /> : null}
                       <small>{recommendationAction}</small>
                     </button>
+                    {unlinkedHomeworkPractice.length ? <div className="accepted-map__unlinked-practice"><strong>Assignment-level practice</strong>{unlinkedHomeworkPractice.map((signal) => {
+                      const scored = signal.scoredAttemptCount ?? signal.attemptCount;
+                      const outcome = scored ? `${signal.correctCount}/${scored} scored correct${signal.attemptCount > scored ? ` · ${signal.attemptCount - scored} unscored` : ""}` : `${signal.attemptCount} unscored checks`;
+                      return <small key={signal.conceptId}>{signal.title}: {outcome}</small>;
+                    })}<small>Not tied to a mapped topic. Choose one below to track topic progress.</small></div> : null}
                     <button className="accepted-map__homework-topics-toggle" type="button" aria-expanded={isHomeworkOpen} onClick={() => setSelectedHomeworkMaterialId((current) => current === material.id ? null : material.id)}>{isHomeworkOpen ? "Hide topic progress ↑" : "Choose a topic · view progress →"}</button>
                       {isHomeworkOpen ? <div className="accepted-map__homework-topics">
                       {material.status !== "ready" ? <p>Wait for this assignment’s source extraction before starting a grounded session.</p> : homeworkTopics.length ? <>
