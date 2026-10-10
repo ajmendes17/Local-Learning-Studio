@@ -17,10 +17,12 @@ test("learner-data cleanup clears only the selected class drafts in every storag
   local.setItem("lls-study-draft:class-a:session-1", "answer");
   local.setItem("lls-study-draft:class-a:session-2", "answer");
   local.setItem("lls-instructor-topic-draft:class-a", "exam topics");
+  local.setItem("lls-source-comment-draft:class-a:material-1:passage-1", "comment");
   local.setItem("lls-study-draft:class-b:session-1", "keep");
   local.setItem("unrelated-key", "keep");
   session.setItem("lls-study-draft:class-a:session-1", "answer");
   session.setItem("lls-instructor-topic-draft:class-a", "exam topics");
+  session.setItem("lls-source-comment-draft:class-a:material-1:passage-2", "comment");
 
   clearLearnerDrafts([local, session], "class-a");
 

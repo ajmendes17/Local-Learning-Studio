@@ -5,7 +5,7 @@ export interface LearnerDraftStorage {
 }
 
 export function clearLearnerDrafts(storages: LearnerDraftStorage[], courseId: string) {
-  const prefixes = [`lls-study-draft:${courseId}:`, `lls-instructor-topic-draft:${courseId}`];
+  const prefixes = [`lls-study-draft:${courseId}:`, `lls-instructor-topic-draft:${courseId}`, `lls-source-comment-draft:${courseId}:`];
   for (const storage of storages) {
     const keys: string[] = [];
     for (let index = 0; index < storage.length; index += 1) {

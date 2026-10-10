@@ -19,6 +19,8 @@ import { MathText } from "../components/MathText";
 import type { LearningRunInfo } from "../App";
 import type { ApiErrorInfo } from "../lib/api";
 import { summarizeSourceAnnotations } from "../lib/source-annotation-summary";
+import { clearSourceCommentDraft, readSourceCommentDraft, writeSourceCommentDraft } from "../lib/source-comment-draft";
+import type { DraftStorage } from "../lib/study-attempt-draft";
 
 interface CoursePageProps {
   course: CourseDetail | null;
@@ -147,6 +149,9 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
   const [loaded, setLoaded] = useState(false);
   const base = `/api/courses/${courseId}/materials/${material.id}`;
   const annotationSummary = summarizeSourceAnnotations(passages.map(({ id }) => id), annotations);
+  const draftStorages = (): DraftStorage[] => {
+    try { return [window.localStorage, window.sessionStorage]; } catch { return []; }
+  };
 
   async function load() {
     setLoading(true); setError("");
@@ -163,6 +168,16 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
         if (!nextPage.passages.length) break;
         allPassages.push(...nextPage.passages as SourcePassage[]);
       }
+      const storages = draftStorages();
+      setDrafts((current) => {
+        const restored = { ...current };
+        for (const passage of allPassages) {
+          if (restored[passage.id] === undefined) {
+            restored[passage.id] = readSourceCommentDraft(storages, courseId, material.id, passage.id) ?? "";
+          }
+        }
+        return restored;
+      });
       setPassages(allPassages);
       setAnnotations(annotationData as SourceAnnotation[]);
       setLoaded(true);
@@ -187,6 +202,7 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
       const created = await send(`${base}/annotations`, "POST", { passageId, body }) as SourceAnnotation;
       setAnnotations((current) => [...current, created]);
       setDrafts((current) => ({ ...current, [passageId]: "" }));
+      clearSourceCommentDraft(draftStorages(), courseId, material.id, passageId);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save comment."); }
     finally { setBusy(false); }
   }
@@ -227,7 +243,8 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
         {passageComments.map((annotation) => <div className="material-comment" key={annotation.id}>
           {editingId === annotation.id ? <><textarea aria-label="Edit source comment" maxLength={8000} value={editBody} onChange={(event) => setEditBody(event.target.value)} /><div className="material-comment__actions"><button type="button" className="button-primary" disabled={busy || !editBody.trim()} onClick={() => void saveEdit(annotation)}>Save edit</button><button type="button" className="button-secondary" onClick={() => setEditingId(null)}>Cancel</button></div></> : <><MathText content={annotation.body} inertLinksAndImages /><small>Commented {new Date(annotation.updatedAt).toLocaleString()}</small><div className="material-comment__actions"><button type="button" className="button-secondary" onClick={() => { setEditingId(annotation.id); setEditBody(annotation.body); }}>Edit</button><button type="button" className="button-secondary" disabled={busy} onClick={() => void remove(annotation)}>Delete</button></div></>}
         </div>)}
-        <label className="material-review__add">Add a comment<textarea maxLength={8000} value={drafts[passage.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [passage.id]: event.target.value }))} placeholder="Add a question, clarification, exam emphasis, or personal note for this passage." /></label>
+        <label className="material-review__add">Add a comment<textarea maxLength={8000} value={drafts[passage.id] ?? ""} onChange={(event) => { const body = event.target.value; setDrafts((current) => ({ ...current, [passage.id]: body })); writeSourceCommentDraft(draftStorages(), courseId, material.id, passage.id, body); }} placeholder="Add a question, clarification, exam emphasis, or personal note for this passage." /></label>
+        {drafts[passage.id]?.trim() ? <small role="status">Draft saved in this browser for up to 7 days.</small> : null}
         <button type="button" className="button-primary" disabled={busy || !drafts[passage.id]?.trim()} onClick={() => void addComment(passage.id)}>Save comment</button>
       </article>;
     })}
