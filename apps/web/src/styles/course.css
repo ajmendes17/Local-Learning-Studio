@@ -161,6 +161,7 @@
 .material-review__heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
 .material-review__heading h3 { margin: 0.2rem 0; }
 .material-review__heading p:last-child { max-width: 45rem; margin: 0; color: var(--muted); font-size: 0.82rem; }
+.material-review__heading .material-review__coverage { margin-top: 0.45rem; color: var(--course-color); font-size: 0.76rem; font-weight: 650; }
 .material-review__math-note { margin: 0 0 0.8rem; padding: 0.65rem 0.8rem; border-left: 3px solid #b88c4a; border-radius: 0 5px 5px 0; color: #675633; background: #f7f2e7; font-size: 0.76rem; line-height: 1.5; }
 .material-review__passage { padding: 1rem 0; border-top: 1px solid var(--line); }
 .material-review__passage h4 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.7rem; margin: 0 0 0.7rem; }

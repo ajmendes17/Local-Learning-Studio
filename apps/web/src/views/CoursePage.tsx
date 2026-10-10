@@ -18,6 +18,7 @@ import { ObsidianExportPanel } from "../components/ObsidianExportPanel";
 import { MathText } from "../components/MathText";
 import type { LearningRunInfo } from "../App";
 import type { ApiErrorInfo } from "../lib/api";
+import { summarizeSourceAnnotations } from "../lib/source-annotation-summary";
 
 interface CoursePageProps {
   course: CourseDetail | null;
@@ -145,6 +146,7 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const base = `/api/courses/${courseId}/materials/${material.id}`;
+  const annotationSummary = summarizeSourceAnnotations(passages.map(({ id }) => id), annotations);
 
   async function load() {
     setLoading(true); setError("");
@@ -211,7 +213,7 @@ function MaterialReview({ courseId, material }: { courseId: string; material: Co
   }
 
   return <section className="material-review" aria-label={`Review ${material.originalName}`}>
-    <div className="material-review__heading"><div><p className="section-kicker">Source review</p><h3>{material.originalName}</h3><p>Comments stay attached to the extracted passage and its page, slide, or line location.</p></div>{loaded ? <button type="button" className="button-secondary" disabled={loading} onClick={() => void load()}>Refresh passages</button> : null}</div>
+    <div className="material-review__heading"><div><p className="section-kicker">Source review</p><h3>{material.originalName}</h3><p>Comments stay attached to the extracted passage and its page, slide, or line location.</p>{loaded && passages.length ? <p className="material-review__coverage">{annotationSummary.commentedPassageCount} of {passages.length} passages commented · {annotationSummary.currentCommentCount} current {annotationSummary.currentCommentCount === 1 ? "comment" : "comments"}{annotationSummary.olderCommentCount ? ` · ${annotationSummary.olderCommentCount} from older extractions` : ""}</p> : null}</div>{loaded ? <button type="button" className="button-secondary" disabled={loading} onClick={() => void load()}>Refresh passages</button> : null}</div>
     {material.mediaType === "application/pdf" ? <p className="material-review__math-note" role="note">PDF text extraction can flatten equation layout or separate symbols. Use the original page link below to verify math notation.</p> : null}
     {loading ? <p>Loading extracted passages…</p> : null}
     {error ? <p className="error-banner" role="alert">{error}</p> : null}
