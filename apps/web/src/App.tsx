@@ -335,6 +335,7 @@ export function App() {
           artifacts={artifacts}
           learnerProgress={learnerProfile?.concepts ?? []}
           sourceProgress={learnerProfile?.sources ?? []}
+          learnerAssessments={learnerProfile?.assessments ?? []}
           codex={codex}
           learningAction={learningAction}
           learningRun={learningRun}

@@ -7,6 +7,7 @@ interface AcceptedStructureDiagramProps {
   materials: CourseMaterial[];
   learnerProgress: LearnerProfileResponse["concepts"];
   sourceProgress: LearnerProfileResponse["sources"];
+  learnerAssessments?: LearnerProfileResponse["assessments"];
   onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string) => void;
 }
 
@@ -69,7 +70,7 @@ function CategoryProgress({ label, coverage }: { label: string; coverage: Return
   </div>;
 }
 
-export function AcceptedStructureDiagram({ proposal, materials, learnerProgress, sourceProgress, onStudyTopic }: AcceptedStructureDiagramProps) {
+export function AcceptedStructureDiagram({ proposal, materials, learnerProgress, sourceProgress, learnerAssessments = [], onStudyTopic }: AcceptedStructureDiagramProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [paths, setPaths] = useState<Array<{ id: string; d: string; type: ModuleConnection["type"]; moduleKey: string; assessmentIndex: number }>>([]);
   const [selectedModuleKey, setSelectedModuleKey] = useState<string | null>(null);
@@ -147,7 +148,7 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
   return (
     <section className="accepted-map" aria-label="Interactive accepted course map">
       <div className="accepted-map__intro">
-        <div><p className="section-kicker">Accepted learning path</p><h4>Choose a module to see its topics and assignment connections.</h4><p className="accepted-map__progress-note">Modules and exams use class-wide practice. Homework topic bars count practice tied to mapped topics; broader assignment-level practice stays separate until you choose a topic. These are study signals, not mastery estimates.</p></div>
+        <div><p className="section-kicker">Accepted learning path</p><h4>Choose a module to see its topics and assignment connections.</h4><p className="accepted-map__progress-note">Modules use class-wide practice. Exam topic bars use a matching instructor topic list when one exists; homework bars count practice tied to that assignment’s source. These are study signals, not mastery estimates.</p></div>
         <div className="accepted-map__legend"><span><i className="accepted-map__line accepted-map__line--evidence" />Evidence-linked assignment</span><span><i className="accepted-map__line accepted-map__line--module" />Module association</span></div>
       </div>
       <div className="accepted-map__canvas" ref={rootRef}>
@@ -217,6 +218,8 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
               ? assignmentTopicKeys
               : linkedModules.flatMap(({ moduleKey }) => orderedModules.find(({ key }) => key === moduleKey)?.conceptKeys ?? []))];
             const assessmentTopics = assessmentTopicKeys.map((key) => conceptsByKey.get(key)).filter((concept) => concept !== undefined);
+            const learnerAssessment = isExam ? learnerAssessments.find((item) => item.kind === "exam" && item.title.trim().toLocaleLowerCase() === assessment.title.trim().toLocaleLowerCase()) : undefined;
+            const learnerAssessmentTopics = learnerAssessment?.topics ?? [];
             const assignmentSignals = isAssignment ? assessmentTopics.map((concept) => {
               const topicMaterialIds = new Set(concept.sourceReferences.map(({ materialId }) => materialId).filter((id) => citedMaterialIds.has(id)));
               const signals = sourceProgress.filter(({ materialId }) => topicMaterialIds.has(materialId)).flatMap(({ topics }) => topics).filter((item) => topicKey(item.title) === topicKey(concept.title));
@@ -309,7 +312,10 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                   </div>;
                 })}</> : <p>Upload the homework file as an assignment to see its topic list here.</p>}</> : null}
                 {isExam ? <><strong>Study the connected exam topics</strong>
-                  {examTopics.length ? examTopics.map((concept) => {
+                  {learnerAssessment && learnerAssessmentTopics.length ? <><p>Practice is scoped to your saved instructor list for this exam.</p>{learnerAssessmentTopics.map((topic) => {
+                    const proposalTopic = examTopics.find((concept) => topicKey(concept.title) === topicKey(topic.title));
+                    return <button className="accepted-map__assessment-topic" key={topic.id} type="button" onClick={() => onStudyTopic(topic.title, undefined, learnerAssessment.id)}><span><MathText inline content={topic.title} /></span><small>{describePractice(topic)} · Open a focused exam practice session →</small>{proposalTopic && topic.title.trim() !== proposalTopic.title.trim() ? <small>Mapped topic: {proposalTopic.title}</small> : null}</button>;
+                  })}</> : examTopics.length ? examTopics.map((concept) => {
                     const signal = progressByTitle.get(topicKey(concept.title));
                     return <button className="accepted-map__assessment-topic" key={concept.key} type="button" onClick={() => onStudyTopic(concept.title)}><span><MathText inline content={concept.title} /></span><small>{describePractice(signal)} · Open a focused study session →</small></button>;
                   }) : <p>No linked topics were identified. Open a module above to choose a topic.</p>}

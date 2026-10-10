@@ -26,6 +26,7 @@ interface CoursePageProps {
   artifacts: CourseLearningArtifactsResponse | null;
   learnerProgress: LearnerProfileResponse["concepts"];
   sourceProgress: LearnerProfileResponse["sources"];
+  learnerAssessments: LearnerProfileResponse["assessments"];
   codex: CodexStatusResponse | null;
   learningAction: LearningAction;
   learningRun: LearningRunInfo | null;
@@ -240,6 +241,7 @@ export function CoursePage({
   artifacts,
   learnerProgress,
   sourceProgress,
+  learnerAssessments,
   codex,
   learningAction,
   learningRun,
@@ -386,6 +388,7 @@ export function CoursePage({
         artifacts={artifacts}
         learnerProgress={learnerProgress}
         sourceProgress={sourceProgress}
+        learnerAssessments={learnerAssessments}
         codex={codex}
         readySourceCount={
           course.materials.filter(({ status }) => status === "ready").length

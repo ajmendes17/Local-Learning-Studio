@@ -15,6 +15,7 @@ interface CourseMapPanelProps {
   artifacts: CourseLearningArtifactsResponse | null;
   learnerProgress: LearnerProfileResponse["concepts"];
   sourceProgress: LearnerProfileResponse["sources"];
+  learnerAssessments?: LearnerProfileResponse["assessments"];
   codex: CodexStatusResponse | null;
   readySourceCount: number;
   materials: CourseMaterial[];
@@ -75,6 +76,7 @@ export function CourseMapPanel({
   artifacts,
   learnerProgress,
   sourceProgress,
+  learnerAssessments = [],
   codex,
   readySourceCount,
   materials,
@@ -274,7 +276,7 @@ export function CourseMapPanel({
             </span>
           </div>
 
-          {mapAccepted ? <AcceptedStructureDiagram proposal={courseMap.payload} materials={materials} learnerProgress={learnerProgress} sourceProgress={sourceProgress} onStudyTopic={onStudyTopic} /> : <div className="map-module-list">
+          {mapAccepted ? <AcceptedStructureDiagram proposal={courseMap.payload} materials={materials} learnerProgress={learnerProgress} sourceProgress={sourceProgress} learnerAssessments={learnerAssessments} onStudyTopic={onStudyTopic} /> : <div className="map-module-list">
             {[...courseMap.payload.modules]
               .sort((left, right) => left.position - right.position)
               .map((module, index) => (
