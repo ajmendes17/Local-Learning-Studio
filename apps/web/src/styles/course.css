@@ -111,7 +111,7 @@
 .obsidian-export__actions p,.obsidian-export__message { margin:0; color:#77747a; font-size:.67rem; line-height:1.5; }
 .obsidian-export__message { min-height:1em; }
 .obsidian-export__message:not(:empty) { color:#596a5b; }
-@media(max-width:760px) { .obsidian-export__settings { grid-template-columns:1fr; }.obsidian-export__settings button { justify-self:start; }.obsidian-export__actions { align-items:flex-start; flex-direction:column; }.obsidian-export__status { align-self:flex-start; } }
+@media(max-width:760px) { .obsidian-export__intro { display:grid; grid-template-columns:38px minmax(0,1fr); align-items:start; }.obsidian-export__intro>div { min-width:0; }.obsidian-export__status { grid-column:2; justify-self:start; margin-left:0; }.obsidian-export__settings { grid-template-columns:1fr; }.obsidian-export__settings button { justify-self:start; }.obsidian-export__actions { align-items:flex-start; flex-direction:column; } }
 
 .workspace-main,
 .structure-panel {
