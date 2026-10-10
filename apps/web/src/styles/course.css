@@ -108,10 +108,11 @@
 .obsidian-export__settings input { width:100%; min-width:0; min-height:39px; padding:8px 10px; border:1px solid #dedbd2; border-radius:6px; background:#fffefa; color:#3f4841; font-size:.7rem; }
 .obsidian-export__settings button,.obsidian-export__actions button { min-height:39px; font-size:.68rem; white-space:nowrap; }
 .obsidian-export__actions { display:flex; justify-content:space-between; align-items:center; gap:18px; padding-top:14px; border-top:1px solid #e8e3e9; }
+.obsidian-export__actions>div { display:flex; flex:none; flex-wrap:wrap; gap:8px; }
 .obsidian-export__actions p,.obsidian-export__message { margin:0; color:#77747a; font-size:.67rem; line-height:1.5; }
 .obsidian-export__message { min-height:1em; }
 .obsidian-export__message:not(:empty) { color:#596a5b; }
-@media(max-width:760px) { .obsidian-export__intro { display:grid; grid-template-columns:38px minmax(0,1fr); align-items:start; }.obsidian-export__intro>div { min-width:0; }.obsidian-export__status { grid-column:2; justify-self:start; margin-left:0; }.obsidian-export__settings { grid-template-columns:1fr; }.obsidian-export__settings button { justify-self:start; }.obsidian-export__actions { align-items:flex-start; flex-direction:column; } }
+@media(max-width:760px) { .obsidian-export__intro { display:grid; grid-template-columns:38px minmax(0,1fr); align-items:start; }.obsidian-export__intro>div { min-width:0; }.obsidian-export__status { grid-column:2; justify-self:start; margin-left:0; }.obsidian-export__settings { grid-template-columns:1fr; }.obsidian-export__settings button { justify-self:start; }.obsidian-export__actions { align-items:flex-start; flex-direction:column; }.obsidian-export__actions>div { width:100%; }.obsidian-export__actions>div button { flex:1; } }
 
 .workspace-main,
 .structure-panel {

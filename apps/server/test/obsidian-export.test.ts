@@ -129,6 +129,11 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.match(firstExport.json().courseFolder, /^Codex\/Local Learning Studio\//);
     assert.doesNotMatch(firstExport.json().courseFolder, /(^|\/)\.\.(\/|$)/);
     assert.ok(await assertInternalWikiLinksResolve(vaultPath, firstExport.json().courseFolder) >= 6);
+    const initialValidation = await app.inject({ method: "GET", url: `/api/courses/${courseId}/obsidian/validate` });
+    assert.equal(initialValidation.statusCode, 200, initialValidation.body);
+    assert.equal(initialValidation.json().healthy, true);
+    assert.equal(initialValidation.json().notesChecked, 4);
+    assert.ok(initialValidation.json().linksChecked >= 6);
     const courseNotePath = join(vaultPath, firstExport.json().courseFolder, "Course.md");
     const courseNote = await readFile(courseNotePath, "utf8");
     assert.match(courseNote, /\[\[Codex\/Local Learning Studio\/[^\]]+\/assessments\/midterm-2-professor-scope--/);
@@ -215,6 +220,11 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     const finalJournal = await readFile(studyJournalPath, "utf8");
     assert.match(finalJournal, /Review eigenstate notation next week\./);
     assert.equal(finalJournal.includes("\u007f"), false);
+    await appendFile(studyJournalPath, `\n[[${firstExport.json().courseFolder}/topics/missing-topic|Missing topic]]\n`);
+    const damagedValidation = await app.inject({ method: "GET", url: `/api/courses/${courseId}/obsidian/validate` });
+    assert.equal(damagedValidation.statusCode, 200, damagedValidation.body);
+    assert.equal(damagedValidation.json().healthy, false);
+    assert.ok(damagedValidation.json().issues.some((issue: string) => issue.includes("Unresolved class link")));
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });

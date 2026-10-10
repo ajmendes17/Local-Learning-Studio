@@ -81,4 +81,18 @@ export async function registerObsidianRoutes(app: FastifyInstance, options: {
       return reply.code(status).send({ error: message });
     }
   });
+
+  app.get<{ Params: { courseId: string } }>("/api/courses/:courseId/obsidian/validate", async (request, reply) => {
+    const parsed = courseParams.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ error: "Class ID is invalid." });
+    const course = options.courses.getCourseDetail(parsed.data.courseId);
+    if (!course) return reply.code(404).send({ error: "Class not found." });
+    try {
+      return await options.vault.validateCourse(course.id, course.title);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not check class notes.";
+      const status = message.includes("Configure an Obsidian vault") ? 409 : 422;
+      return reply.code(status).send({ error: message });
+    }
+  });
 }

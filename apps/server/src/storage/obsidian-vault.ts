@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstat, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, normalizeMathText, scheduleAssessmentStudyDays, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
 
 const START = "<!-- LLS:GENERATED:START -->";
@@ -189,6 +189,89 @@ export class ObsidianVault {
       if (typeof parsed.vaultPath !== "string" || typeof parsed.folderPath !== "string") return null;
       return parsed;
     } catch { return null; }
+  }
+
+  async validateCourse(courseId: string, courseTitle: string) {
+    const config = await this.getConfig();
+    if (!config) throw new Error("Configure an Obsidian vault before checking class notes.");
+    const vaultRealPath = await realpath(config.vaultPath);
+    const notesRoot = resolve(vaultRealPath, config.folderPath);
+    if (!pathIsInside(vaultRealPath, notesRoot)) throw new Error("The configured notes folder must stay inside the selected vault.");
+    let notesRootRealPath: string;
+    try { notesRootRealPath = await realpath(notesRoot); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return { courseFolder: `${config.folderPath}/${slug(courseTitle)}--${courseId.slice(0, 8)}`, notesChecked: 0, linksChecked: 0, issueCount: 1, issues: ["The Local Learning Studio notes folder does not exist yet."], healthy: false };
+    }
+    if (!pathIsInside(vaultRealPath, notesRootRealPath)) throw new Error("The configured notes folder resolves outside the selected vault.");
+    const courseFolder = resolve(notesRootRealPath, `${slug(courseTitle)}--${courseId.slice(0, 8)}`);
+    if (!pathIsInside(notesRootRealPath, courseFolder)) throw new Error("The class note folder must stay inside the configured notes folder.");
+    const courseFolderRelative = relative(vaultRealPath, courseFolder).split(sep).join("/");
+    const issues: string[] = [];
+    let courseFolderRealPath: string;
+    try {
+      const folderInfo = await lstat(courseFolder);
+      if (folderInfo.isSymbolicLink() || !folderInfo.isDirectory()) throw new Error("The class note folder is not a regular folder.");
+      courseFolderRealPath = await realpath(courseFolder);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { courseFolder: courseFolderRelative, notesChecked: 0, linksChecked: 0, issueCount: 1, issues: ["Class notes have not been exported yet."], healthy: false };
+      }
+      throw error;
+    }
+    if (!pathIsInside(notesRootRealPath, courseFolderRealPath)) throw new Error("The class note folder resolves outside the configured notes folder.");
+
+    const markdownFiles: string[] = [];
+    const walk = async (folder: string): Promise<void> => {
+      for (const entry of await readdir(folder, { withFileTypes: true })) {
+        const path = join(folder, entry.name);
+        const info = await lstat(path);
+        if (info.isSymbolicLink()) {
+          issues.push(`Symbolic link skipped: ${relative(courseFolderRealPath, path).split(sep).join("/")}`);
+        } else if (info.isDirectory()) {
+          if (pathIsInside(courseFolderRealPath, path)) await walk(path);
+          else issues.push("A nested folder resolves outside the class notes.");
+        } else if (info.isFile() && extname(entry.name).toLocaleLowerCase() === ".md") {
+          markdownFiles.push(path);
+        }
+      }
+    };
+    await walk(courseFolderRealPath);
+    let linksChecked = 0;
+    const classPrefix = `${courseFolderRelative}/`;
+    for (const path of markdownFiles) {
+      const notePath = relative(courseFolderRealPath, path).split(sep).join("/");
+      const body = await readFile(path, "utf8");
+      const hasExportId = /^id:\s*["'][^"']+["']\s*$/m.test(body);
+      const starts = [...body.matchAll(/<!-- LLS:GENERATED:START -->/g)].length;
+      const ends = [...body.matchAll(/<!-- LLS:GENERATED:END -->/g)].length;
+      if (hasExportId && (starts !== 1 || ends !== 1 || body.indexOf(START) > body.indexOf(END))) {
+        issues.push(`Generated section is missing or damaged: ${notePath}`);
+      } else if (!hasExportId && starts !== ends) {
+        issues.push(`Generated section markers are unbalanced: ${notePath}`);
+      }
+      for (const match of body.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
+        const target = (match[1]!.split("|", 1)[0]!.split("#", 1)[0] ?? "").trim().replaceAll("\\", "/");
+        if (!target.startsWith(classPrefix)) continue;
+        linksChecked += 1;
+        const targetPath = resolve(vaultRealPath, `${target}${extname(target) ? "" : ".md"}`);
+        if (!pathIsInside(courseFolderRealPath, targetPath)) {
+          issues.push(`Unsafe class link in ${notePath}.`);
+          continue;
+        }
+        try {
+          const targetInfo = await lstat(targetPath);
+          if (targetInfo.isSymbolicLink() || !targetInfo.isFile() || !pathIsInside(courseFolderRealPath, await realpath(targetPath))) {
+            issues.push(`Class link does not point to a regular note: ${notePath}`);
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") issues.push(`Unresolved class link in ${notePath}: ${target}`);
+          else throw error;
+        }
+      }
+    }
+    const issueCount = issues.length;
+    return { courseFolder: courseFolderRelative, notesChecked: markdownFiles.length, linksChecked, issueCount, issues: issues.slice(0, 20), healthy: issueCount === 0 && markdownFiles.length > 0 };
   }
 
   async configure(vaultPath: string, folderPath = "Codex/Local Learning Studio") {
