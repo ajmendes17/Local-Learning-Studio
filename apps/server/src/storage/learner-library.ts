@@ -202,6 +202,11 @@ export class LearnerLibrary {
       }));
   }
 
+  getStudySessionsForExport(courseId: string) {
+    const sessions = this.database.prepare("SELECT id FROM study_sessions WHERE course_id=? ORDER BY created_at,id").all(courseId) as Array<{ id: string }>;
+    return sessions.map(({ id }) => this.getStudySession(courseId, id)).filter((session): session is NonNullable<typeof session> => session !== null);
+  }
+
   recordAttempt(input: {
     courseId: string; attemptId?: string; conceptId: string; sessionId?: string | null; assessmentId?: string | null; activityType: string; prompt: string;
     response: string; reasoning: string; confidence?: number | null; hintCount: number;

@@ -195,6 +195,25 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
     return LearnerMethodProgressResponseSchema.parse(options.learner.getMethodProgress(courseId));
   });
 
+  app.get<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/export", async (request, reply) => {
+    const courseId = courseIdFor(request.params);
+    if (!courseId) return reply.code(404).send({ error: "Class not found." });
+    reply.header("content-type", "application/json; charset=utf-8");
+    reply.header("content-disposition", `attachment; filename="local-learning-studio-${courseId}-learner-data.json"`);
+    reply.header("cache-control", "no-store");
+    return {
+      exportVersion: 1,
+      exportedAt: new Date().toISOString(),
+      classId: courseId,
+      profile: LearnerProfileResponseSchema.parse(options.learner.getProfile(courseId)),
+      methodProgress: LearnerMethodProgressResponseSchema.parse(options.learner.getMethodProgress(courseId)),
+      studySessions: options.learner.getStudySessionsForExport(courseId),
+      attempts: options.learner.getAttemptsForObsidianExport(courseId),
+      learningPatterns: options.learner.getLearnerPatterns(courseId),
+      patternReviews: options.learner.listPatternReviews(courseId, Number.MAX_SAFE_INTEGER),
+    };
+  });
+
   app.get<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/patterns", async (request, reply) => {
     const courseId = courseIdFor(request.params);
     if (!courseId) return reply.code(404).send({ error: "Class not found." });

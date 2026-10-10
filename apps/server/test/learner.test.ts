@@ -709,6 +709,58 @@ test("study attempts from a learner exam scope update assessment and topic progr
   await rm(root, { recursive: true });
 });
 
+test("learner-data export includes the full class profile, saved sessions, and responses", async () => {
+  const { app, root } = await createAppWithStudyModel();
+  try {
+    const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Portable data fixture" } });
+    const courseId = course.json().id as string;
+    const scope = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/assessments`,
+      payload: { title: "Final review", kind: "exam", topics: [{ title: "Bell states", importance: "high", provenance: "learner" }] },
+    });
+    assert.equal(scope.statusCode, 201, scope.body);
+    const session = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-session`,
+      payload: { topic: "Bell states", method: "quiz", assessmentId: scope.json().id },
+    });
+    assert.equal(session.statusCode, 200, session.body);
+    const responseText = "I remembered the two amplitudes and their relative phase.";
+    const saved = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
+      payload: {
+        sessionId: session.json().sessionId, conceptId: session.json().conceptId,
+        assessmentId: scope.json().id, activityType: "recognition", prompt: session.json().question,
+        response: responseText, reasoning: "A short reasoning note.", confidence: 0.75,
+        hintCount: 1, method: "quiz", outcome: "correct", sourceRefs: [],
+        independence: "hinted", rationale: "Correct after using one hint.",
+      },
+    });
+    assert.equal(saved.statusCode, 201, saved.body);
+
+    const exported = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/export` });
+    assert.equal(exported.statusCode, 200, exported.body);
+    assert.match(exported.headers["content-disposition"] ?? "", new RegExp(`attachment; filename="local-learning-studio-${courseId}-learner-data\\.json"`));
+    assert.equal(exported.headers["cache-control"], "no-store");
+    const data = exported.json();
+    assert.equal(data.exportVersion, 1);
+    assert.equal(data.classId, courseId);
+    assert.ok(Number.isFinite(Date.parse(data.exportedAt)));
+    assert.equal(data.profile.assessments[0].title, "Final review");
+    assert.equal(data.studySessions.length, 1);
+    assert.equal(data.studySessions[0].question, session.json().question);
+    assert.equal(data.attempts.length, 1);
+    assert.equal(data.attempts[0].response, responseText);
+    assert.equal(data.attempts[0].independence, "hinted");
+    assert.deepEqual(data.learningPatterns, []);
+    assert.deepEqual(data.patternReviews, []);
+    const missing = await app.inject({ method: "GET", url: `/api/courses/${randomUUID()}/learner/export` });
+    assert.equal(missing.statusCode, 404);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true });
+  }
+});
+
 test("exam topic study selects a matching class source and marks unmatched topics as general knowledge", async () => {
   const { app, root, prompts } = await createAppWithStudyModel({ corruptMath: true });
   try {

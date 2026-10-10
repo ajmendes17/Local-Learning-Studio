@@ -47,6 +47,28 @@ export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: strin
     finally { setBusy(false); }
   }
 
+  async function exportLearnerData() {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch(`/api/courses/${courseId}/learner/export`);
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(result?.error ?? "Could not export learner data.");
+      }
+      const data = await response.blob();
+      const url = URL.createObjectURL(data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `local-learning-studio-${courseId}-learner-data.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMessage("Downloaded a JSON copy of this class’s learner profile, saved sessions, responses, and pattern reviews.");
+    } catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
+  }
+
   async function validateNotes() {
     setBusy(true); setError(""); setMessage("");
     try {
@@ -82,6 +104,7 @@ export function ObsidianExportPanel({ courseId, courseTitle }: { courseId: strin
       <button className="button-secondary" type="submit" disabled={busy || !vaultPath.trim()}>{busy ? "Saving…" : "Save vault folder"}</button>
     </form>
     <div className="obsidian-export__actions"><p>Exports {courseTitle} as editable Markdown files. To add comments from Obsidian, write <code>- [Passage 3] Your comment</code> under a source note’s <strong>My notes</strong> section, then import. Imports append; edit or delete them in the app. Re-export refreshes generated sections and keeps your notes.</p><div><button className="button-secondary" type="button" disabled={busy || !status?.configured} onClick={() => void validateNotes()}>{busy ? "Checking…" : "Check notes"}</button><button className="button-secondary" type="button" disabled={busy || !status?.configured} onClick={() => void importComments()}>{busy ? "Importing…" : "Import comments"}</button><button className="button-primary" type="button" disabled={busy || !status?.configured} onClick={() => void exportNotes()}>{busy ? "Working…" : "Export this class →"}</button></div></div>
+    <div className="learner-data-export"><div><strong>Keep a portable learner-data copy</strong><p>Download your saved learner profile, assessment topics, lesson sessions, responses, study patterns, and evidence as JSON.</p></div><button className="button-secondary" type="button" disabled={busy} onClick={() => void exportLearnerData()}>{busy ? "Preparing…" : "Download learner data →"}</button></div>
     <p className="obsidian-export__message" role="status">{error || message || (status?.configured ? `Local file export · ${status.folderPath}. Obsidian Sync is managed separately by Obsidian.` : "Enter your vault’s full folder path to connect it. The app writes local Markdown files and does not change Obsidian Sync settings.")}</p>
   </section>;
 }

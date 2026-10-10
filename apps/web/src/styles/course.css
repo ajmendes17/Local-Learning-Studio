@@ -112,7 +112,9 @@
 .obsidian-export__actions p,.obsidian-export__message { margin:0; color:#77747a; font-size:.67rem; line-height:1.5; }
 .obsidian-export__message { min-height:1em; }
 .obsidian-export__message:not(:empty) { color:#596a5b; }
+.learner-data-export { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:14px 0 0; border-top:1px solid #e8e3e9; }.learner-data-export strong { color:#544b58; font-size:.7rem; }.learner-data-export p { margin:4px 0 0; color:#77747a; font-size:.64rem; line-height:1.5; }.learner-data-export button { flex:none; min-height:38px; font-size:.66rem; }
 @media(max-width:760px) { .obsidian-export__intro { display:grid; grid-template-columns:38px minmax(0,1fr); align-items:start; }.obsidian-export__intro>div { min-width:0; }.obsidian-export__status { grid-column:2; justify-self:start; margin-left:0; }.obsidian-export__settings { grid-template-columns:1fr; }.obsidian-export__settings button { justify-self:start; }.obsidian-export__actions { align-items:flex-start; flex-direction:column; }.obsidian-export__actions>div { width:100%; }.obsidian-export__actions>div button { flex:1; } }
+@media(max-width:760px) { .learner-data-export { align-items:flex-start; flex-direction:column; }.learner-data-export button { width:100%; } }
 
 .workspace-main,
 .structure-panel {

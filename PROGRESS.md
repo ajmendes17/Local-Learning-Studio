@@ -215,7 +215,12 @@ Acceptance:
     separate lesson coverage from saved scored checks per topic, show spaced
     recall timing, and offer direct lesson and practice actions. Calibrated
     weak-point summaries remain.
-- [ ] Provide export and deletion for learner data.
+- [~] Provide export and deletion for learner data.
+  - Evidence: each class now has a versioned JSON download containing its
+    learner profile, assessment scopes, complete saved study sessions and
+    attempts, method summaries, patterns, and pattern reviews. The download
+    endpoint validates the class, returns an attachment, and disables caching.
+    Permanent learner-data deletion remains to be designed and implemented.
 
 Acceptance:
 
@@ -391,3 +396,5 @@ u`). Live browser review reopened a saved Homework 3 lesson and confirmed bra/ke
 | 2026-10-10 | Schedule evidence-based spaced review | Correct checks now receive deterministic 1-, 3-, or 7-day recall intervals based on accuracy, confidence, and independent results; misses and ungraded responses retain their existing remediation paths. Due dates appear in class recommendations and homework/exam topic summaries, and due actions start Quiz first while preserving the course and assessment/material scope. Contract, service, progress-summary, and navigation tests cover interval selection, priorities, due labels, and scoped method routing. `rtk npm run check` passed all workspace typechecks, 62 server tests, 30 web tests, and production builds; `rtk git diff --check` passed. Browser review was not run because the local app ports were already occupied. |
 
 | 2026-10-10 | Add scored topic progress and explainable evidence labels | The class learning trail now shows an accessible accuracy bar for topics with scored checks and keeps ungraded recall/teach-back and lesson-only activity explicitly unmeasured. Counts and percentages use scored attempts only, with inconsistent counts bounded. Cautious evidence labels distinguish no check, unscored or supported practice, some independent evidence, a recent setback, and repeated independent success (at least 3 independent scored checks and 80% accuracy); these are study signals, not mastery claims. Obsidian topic notes export matching `evidence_level` and independent-check YAML fields and show the readable label/counts. Disposable repeat-export coverage verifies progression from a setback to repeated independent success and preservation of a learner-added property. Focused tests cover measured, unmeasured, mixed scored/unscored, out-of-range data, and evidence-label boundaries. `rtk npm run check` passed all workspace typechecks, 62 server tests, 34 web tests, and production builds; `rtk git diff --check` passed. Browser visual review remains pending because the app preview ports are already occupied. |
+
+| 2026-10-10 | Add portable class learner-data export | Added a versioned per-class JSON attachment with learner profile and assessment scopes, all saved lesson artifacts and attempts, method progress, learner patterns, and pattern reviews. The endpoint rejects unknown classes and sets `no-store`; the course page provides a direct download beside Obsidian export. A disposable API regression verifies attachment/cache headers, assessment and session records, the complete saved response and support label, empty review collections, and class scoping. `rtk npm run check` passed all workspace typechecks, 63 server tests, 34 web tests, and production builds; `rtk git diff --check` passed. Permanent deletion remains unimplemented. |
