@@ -67,6 +67,7 @@ function MaterialRow({ courseId, material, onRefresh }: { courseId: string; mate
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not refresh extracted source text.");
       setReprocessMessage("Extraction refreshed. Comments tied to changed passages may need review.");
+      setOpen(false);
       await onRefresh();
     } catch (error) { setReprocessMessage((error as Error).message); }
     finally { setReprocessing(false); }
