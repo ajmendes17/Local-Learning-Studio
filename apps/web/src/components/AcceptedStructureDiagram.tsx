@@ -61,11 +61,13 @@ function describePractice(signal: PracticeSignal | undefined) {
 function CategoryProgress({ label, coverage }: { label: string; coverage: ReturnType<typeof summarizeStudyCoverage> }) {
   const lessonPercent = coverage.topicCount ? Math.round(coverage.lessonTopicCount / coverage.topicCount * 100) : 0;
   const checkPercent = coverage.topicCount ? Math.round(coverage.checkedTopicCount / coverage.topicCount * 100) : 0;
+  const independentPercent = coverage.topicCount ? Math.round(coverage.independentlyCheckedTopicCount / coverage.topicCount * 100) : 0;
   const accuracyPercent = coverage.scoredAttemptCount ? Math.round(coverage.correctCount / coverage.scoredAttemptCount * 100) : 0;
   return <div className="accepted-map__category-progress" aria-label={`${label} progress`}>
     <p className="accepted-map__category-focus">{coverage.reviewTopicCount ? `${coverage.reviewTopicCount} need review` : "No topics flagged for review"} · {coverage.uncheckedTopicCount} without a check</p>
     <div><span className="accepted-map__category-progress-heading"><small>Lessons</small><small>{coverage.lessonTopicCount}/{coverage.topicCount} topics</small></span><span className="accepted-map__progress-track" role="progressbar" aria-label={`${label} lesson coverage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={lessonPercent}><span style={{ width: `${lessonPercent}%` }} /></span></div>
     <div><span className="accepted-map__category-progress-heading"><small>Knowledge checks</small><small>{coverage.checkedTopicCount}/{coverage.topicCount} topics · {coverage.scoredAttemptCount ? `${coverage.correctCount}/${coverage.scoredAttemptCount} scored correct` : "no scored checks yet"}{coverage.attemptCount > coverage.scoredAttemptCount ? ` · ${coverage.attemptCount - coverage.scoredAttemptCount} unscored` : ""}</small></span><span className="accepted-map__progress-track accepted-map__progress-track--checked" role="progressbar" aria-label={`${label} knowledge check coverage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={checkPercent}><span style={{ width: `${checkPercent}%` }} /></span></div>
+    <div><span className="accepted-map__category-progress-heading"><small>Independent checks</small><small>{coverage.independentlyCheckedTopicCount}/{coverage.topicCount} topics · {coverage.independentScoredAttemptCount ? `${coverage.independentCorrectCount}/${coverage.independentScoredAttemptCount} correct independently` : "no independent checks yet"}</small></span><span className="accepted-map__progress-track accepted-map__progress-track--independent" role="progressbar" aria-label={`${label} independent check coverage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={independentPercent}><span style={{ width: `${independentPercent}%` }} /></span></div>
     {coverage.scoredAttemptCount ? <div><span className="accepted-map__category-progress-heading"><small>Recorded answer accuracy</small><small>{accuracyPercent}% · {coverage.correctCount}/{coverage.scoredAttemptCount} scored</small></span><span className="accepted-map__progress-track accepted-map__progress-track--accuracy" role="progressbar" aria-label={`${label} recorded answer accuracy`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={accuracyPercent}><span style={{ width: `${accuracyPercent}%` }} /></span></div> : null}
   </div>;
 }
@@ -229,10 +231,12 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                 attemptCount: signals.reduce((sum, item) => sum + item.attemptCount, 0),
                 scoredAttemptCount: signals.reduce((sum, item) => sum + item.scoredAttemptCount, 0),
                 correctCount: signals.reduce((sum, item) => sum + item.correctCount, 0),
+                independentScoredAttemptCount: signals.reduce((sum, item) => sum + item.independentScoredAttemptCount, 0),
+                independentCorrectCount: signals.reduce((sum, item) => sum + item.independentCorrectCount, 0),
                 sessionCount: signals.reduce((sum, item) => sum + item.sessionCount, 0),
                 latestOutcome: [...signals].sort((left, right) => (right.lastPracticedAt ?? "").localeCompare(left.lastPracticedAt ?? ""))[0]?.latestOutcome ?? null,
               };
-            }) : learnerProgress;
+            }) : isExam && learnerAssessmentTopics.length ? learnerAssessmentTopics : learnerProgress;
             const assessmentProgress = summarizeStudyCoverage(assessmentTopics.map(({ title }) => title), assignmentSignals);
             const examTopics = isExam ? assessmentTopics : [];
             return <div className="accepted-map__assessment-group" key={`${assessment.title}-${index}`}>

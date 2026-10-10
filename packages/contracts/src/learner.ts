@@ -184,7 +184,7 @@ export function summarizeTopicProgress(
 
 export function summarizeStudyCoverage(
   topicTitles: string[],
-  signals: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; latestOutcome?: string | null }>,
+  signals: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; independentScoredAttemptCount?: number; independentCorrectCount?: number; correctCount: number; sessionCount: number; latestOutcome?: string | null }>,
 ) {
   const signalByTitle = new Map(signals.map((signal) => [signal.title.trim().normalize("NFKC").toLocaleLowerCase(), signal]));
   const uniqueTopicTitles = [...new Set(topicTitles.map((title) => title.trim().normalize("NFKC").toLocaleLowerCase()).filter(Boolean))];
@@ -193,11 +193,14 @@ export function summarizeStudyCoverage(
     topicCount: uniqueTopicTitles.length,
     lessonTopicCount: topics.filter((item) => (item?.sessionCount ?? 0) > 0).length,
     checkedTopicCount: topics.filter((item) => (item?.attemptCount ?? 0) > 0).length,
+    independentlyCheckedTopicCount: topics.filter((item) => (item?.independentScoredAttemptCount ?? 0) > 0).length,
     uncheckedTopicCount: topics.filter((item) => (item?.attemptCount ?? 0) === 0).length,
     reviewTopicCount: topics.filter((item) => ["incorrect", "incomplete", "unsupported", "not-graded"].includes(item?.latestOutcome ?? "")).length,
     attemptCount: topics.reduce((sum, item) => sum + (item?.attemptCount ?? 0), 0),
     scoredAttemptCount: topics.reduce((sum, item) => sum + (item?.scoredAttemptCount ?? item?.attemptCount ?? 0), 0),
     correctCount: topics.reduce((sum, item) => sum + (item?.correctCount ?? 0), 0),
+    independentScoredAttemptCount: topics.reduce((sum, item) => sum + (item?.independentScoredAttemptCount ?? 0), 0),
+    independentCorrectCount: topics.reduce((sum, item) => sum + (item?.independentCorrectCount ?? 0), 0),
   };
 }
 
@@ -450,17 +453,17 @@ export const LearnerProfileResponseSchema = z.object({
     sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
     topicCount: z.number().int().nonnegative(), practicedTopicCount: z.number().int().nonnegative(),
     lastPracticedAt: z.string().nullable(),
-    topics: z.array(z.object({ conceptId: z.string().uuid(), title: z.string(), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
+    topics: z.array(z.object({ conceptId: z.string().uuid(), title: z.string(), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
   })),
   assessments: z.array(z.object({
     id: z.string().uuid(), title: z.string(), instructorText: z.string(), kind: z.enum(["exam", "quiz", "other"]),
     scheduledAt: z.string().nullable(), availableMinutes: z.number().int().nullable(), dailyMinutes: z.number().int(), createdAt: z.string(),
     attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
-    topics: z.array(z.object({ id: z.string().uuid(), conceptId: z.string().uuid().nullable(), title: z.string(), position: z.number().int(), importance: z.enum(["low", "normal", "high"]), provenance: z.enum(["learner", "model", "material"]), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
+    topics: z.array(z.object({ id: z.string().uuid(), conceptId: z.string().uuid().nullable(), title: z.string(), position: z.number().int(), importance: z.enum(["low", "normal", "high"]), provenance: z.enum(["learner", "model", "material"]), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
   })),
   concepts: z.array(z.object({
     id: z.string().uuid(), stableKey: z.string(), title: z.string(), description: z.string(),
-    attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(),
+    attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(),
     latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(),
     lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
   })),

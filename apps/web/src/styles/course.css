@@ -740,6 +740,7 @@
 .accepted-map__category-progress>div>small:first-child { color:#879087; }
 .accepted-map__progress-track--checked>span { background:#6689a0; }
 .accepted-map__progress-track--accuracy>span { background:#bc9560; }
+.accepted-map__progress-track--independent>span { background:#8a719b; }
 .accepted-map__module-detail { position:relative; z-index:1; margin:0 8px 20px; padding:19px; border:1px solid #d8e0d2; border-radius:9px; background:#f8faf5; }
 .accepted-map__module-detail-heading { display:flex; justify-content:space-between; gap:20px; }
 .accepted-map__module-detail-heading h5 { margin:4px 0; color:#354339; font-size:1rem; }

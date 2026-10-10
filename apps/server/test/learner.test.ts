@@ -162,17 +162,20 @@ test("category progress counts only the displayed topics and ignores duplicate t
 test("study coverage distinguishes lesson sessions from saved knowledge checks", () => {
   assert.deepEqual(summarizeStudyCoverage(["Bell states", "Partial trace", "BELL STATES"], [
     { title: "Bell states", sessionCount: 2, attemptCount: 0, correctCount: 0 },
-    { title: "Partial trace", sessionCount: 0, attemptCount: 2, scoredAttemptCount: 1, correctCount: 1, latestOutcome: "incorrect" },
+    { title: "Partial trace", sessionCount: 0, attemptCount: 2, scoredAttemptCount: 1, independentScoredAttemptCount: 1, independentCorrectCount: 0, correctCount: 1, latestOutcome: "incorrect" },
     { title: "Unrelated topic", sessionCount: 9, attemptCount: 9, correctCount: 9 },
   ]), {
     topicCount: 2,
     lessonTopicCount: 1,
     checkedTopicCount: 1,
+    independentlyCheckedTopicCount: 1,
     uncheckedTopicCount: 1,
     reviewTopicCount: 1,
     attemptCount: 2,
     scoredAttemptCount: 1,
     correctCount: 1,
+    independentScoredAttemptCount: 1,
+    independentCorrectCount: 0,
   });
   const scoredOnlyCoverage = summarizeStudyCoverage(["Partial trace"], [
     { title: "Partial trace", sessionCount: 0, attemptCount: 2, scoredAttemptCount: 1, correctCount: 1 },
@@ -511,6 +514,7 @@ test("study attempts from a learner exam scope update assessment and topic progr
   const finalProfile = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/profile` });
   assert.deepEqual([finalProfile.json().assessments[0].attemptCount, finalProfile.json().assessments[0].scoredAttemptCount, finalProfile.json().assessments[0].correctCount], [2, 2, 1]);
   assert.deepEqual([finalProfile.json().assessments[0].topics[0].attemptCount, finalProfile.json().assessments[0].topics[0].scoredAttemptCount, finalProfile.json().assessments[0].topics[0].correctCount], [2, 2, 1]);
+  assert.deepEqual([finalProfile.json().assessments[0].topics[0].independentScoredAttemptCount, finalProfile.json().assessments[0].topics[0].independentCorrectCount], [1, 1], "assessment progress separates independent from hinted attempts");
   const methodProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
   assert.equal(methodProgress.statusCode, 200, methodProgress.body);
   assert.deepEqual(methodProgress.json().map(({ method, attemptCount, scoredAttemptCount, confidenceRatedAttemptCount, meanConfidenceGap, correctCount, topicCount, topicTitles }: { method: string; attemptCount: number; scoredAttemptCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[] }) => [method, attemptCount, scoredAttemptCount, confidenceRatedAttemptCount, meanConfidenceGap, correctCount, topicCount, topicTitles]), [
@@ -1099,6 +1103,7 @@ test("assignment study sessions retrieve only the selected course material and r
   assert.deepEqual([sourceSignal.attemptCount, sourceSignal.correctCount, sourceSignal.practicedTopicCount], [1, 0, 1]);
   assert.equal(sourceSignal.sessionCount, 2, "the focused remediation lesson is also attached to the selected source");
   assert.deepEqual([sourceSignal.topics[0].attemptCount, sourceSignal.topics[0].latestOutcome], [1, "incorrect"]);
+  assert.deepEqual([sourceSignal.topics[0].independentScoredAttemptCount, sourceSignal.topics[0].independentCorrectCount], [0, 0], "source progress does not count hinted checks as independent");
   assert.equal(progress.json().sources.some((item: { materialId: string; attemptCount: number }) => item.materialId !== materialId && item.attemptCount), false);
 
   const invalidSource = await app.inject({

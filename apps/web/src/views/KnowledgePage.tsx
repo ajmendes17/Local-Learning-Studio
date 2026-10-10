@@ -39,6 +39,8 @@ export function KnowledgePage({ profiles, loading, error, onOpenCourse, onStudyT
       attemptCount: 0,
       scoredAttemptCount: 0,
       correctCount: 0,
+      independentScoredAttemptCount: 0,
+      independentCorrectCount: 0,
       latestOutcome: null,
       lastPracticedAt: null,
       sessionCount: 0,

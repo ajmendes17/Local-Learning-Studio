@@ -397,6 +397,14 @@ export class LearnerLibrary {
         EXISTS (SELECT 1 FROM json_each(a.source_refs_json) ref WHERE json_extract(ref.value,'$.materialId')=m.id)
         OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
       )) AS scoredAttemptCount,
+      (SELECT COUNT(*) FROM study_attempts a JOIN mastery_evidence me ON me.attempt_id=a.id AND me.course_id=a.course_id WHERE a.course_id=m.course_id AND a.concept_id=c.id AND a.outcome IN ('correct','incorrect') AND me.independence='independent' AND (
+        EXISTS (SELECT 1 FROM json_each(a.source_refs_json) ref WHERE json_extract(ref.value,'$.materialId')=m.id)
+        OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
+      )) AS independentScoredAttemptCount,
+      (SELECT COUNT(*) FROM study_attempts a JOIN mastery_evidence me ON me.attempt_id=a.id AND me.course_id=a.course_id WHERE a.course_id=m.course_id AND a.concept_id=c.id AND a.outcome='correct' AND me.independence='independent' AND (
+        EXISTS (SELECT 1 FROM json_each(a.source_refs_json) ref WHERE json_extract(ref.value,'$.materialId')=m.id)
+        OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
+      )) AS independentCorrectCount,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=m.course_id AND a.concept_id=c.id AND a.outcome='correct' AND (
         EXISTS (SELECT 1 FROM json_each(a.source_refs_json) ref WHERE json_extract(ref.value,'$.materialId')=m.id)
         OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
@@ -430,6 +438,8 @@ export class LearnerLibrary {
     const topics = this.database.prepare(`SELECT t.id,t.assessment_id AS assessmentId,t.concept_id AS conceptId,t.title,t.position,t.importance,t.provenance,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=t.course_id AND a.assessment_id=t.assessment_id AND a.concept_id=t.concept_id) AS attemptCount,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=t.course_id AND a.assessment_id=t.assessment_id AND a.concept_id=t.concept_id AND a.outcome IN ('correct','incorrect')) AS scoredAttemptCount,
+      (SELECT COUNT(*) FROM study_attempts a JOIN mastery_evidence me ON me.attempt_id=a.id AND me.course_id=a.course_id WHERE a.course_id=t.course_id AND a.assessment_id=t.assessment_id AND a.concept_id=t.concept_id AND a.outcome IN ('correct','incorrect') AND me.independence='independent') AS independentScoredAttemptCount,
+      (SELECT COUNT(*) FROM study_attempts a JOIN mastery_evidence me ON me.attempt_id=a.id AND me.course_id=a.course_id WHERE a.course_id=t.course_id AND a.assessment_id=t.assessment_id AND a.concept_id=t.concept_id AND a.outcome='correct' AND me.independence='independent') AS independentCorrectCount,
       (SELECT COUNT(*) FROM study_attempts a WHERE a.course_id=t.course_id AND a.assessment_id=t.assessment_id AND a.concept_id=t.concept_id AND a.outcome='correct') AS correctCount,
       (SELECT outcome FROM study_attempts a WHERE a.course_id=t.course_id AND a.assessment_id=t.assessment_id AND a.concept_id=t.concept_id ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1) AS latestOutcome,
       (SELECT MAX(a.created_at) FROM study_attempts a WHERE a.course_id=t.course_id AND a.assessment_id=t.assessment_id AND a.concept_id=t.concept_id) AS lastPracticedAt,
@@ -439,11 +449,13 @@ export class LearnerLibrary {
     const concepts = this.database.prepare(`SELECT c.id,c.stable_key AS stableKey,c.title,c.description,
       COUNT(a.id) AS attemptCount,SUM(CASE WHEN a.outcome='correct' THEN 1 ELSE 0 END) AS correctCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') THEN 1 ELSE 0 END) AS scoredAttemptCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND me.independence='independent' THEN 1 ELSE 0 END) AS independentScoredAttemptCount,
+      SUM(CASE WHEN a.outcome='correct' AND me.independence='independent' THEN 1 ELSE 0 END) AS independentCorrectCount,
       (SELECT outcome FROM study_attempts WHERE concept_id=c.id ORDER BY created_at DESC, rowid DESC LIMIT 1) AS latestOutcome,
       MAX(a.created_at) AS lastPracticedAt,
       (SELECT COUNT(*) FROM study_sessions s WHERE s.course_id=c.course_id AND s.concept_id=c.id) AS sessionCount,
       (SELECT MAX(s.created_at) FROM study_sessions s WHERE s.course_id=c.course_id AND s.concept_id=c.id) AS lastSessionAt
-      FROM learner_concepts c LEFT JOIN study_attempts a ON a.concept_id=c.id
+      FROM learner_concepts c LEFT JOIN study_attempts a ON a.concept_id=c.id LEFT JOIN mastery_evidence me ON me.attempt_id=a.id AND me.course_id=a.course_id
       WHERE c.course_id = ? GROUP BY c.id ORDER BY c.title`).all(courseId) as any[];
     return {
       sources: sources.map((source) => ({ ...source,
@@ -451,17 +463,17 @@ export class LearnerLibrary {
         sessionCount: Number(source.sessionCount),
         topicCount: Number(source.topicCount), practicedTopicCount: Number(source.practicedTopicCount),
         topics: sourceTopics.filter((topic) => topic.materialId === source.materialId).map(({ materialId: _materialId, ...topic }) => ({
-          ...topic, attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount ?? 0), sessionCount: Number(topic.sessionCount),
+          ...topic, attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount ?? 0), independentScoredAttemptCount: Number(topic.independentScoredAttemptCount), independentCorrectCount: Number(topic.independentCorrectCount), sessionCount: Number(topic.sessionCount),
         })),
       })),
       assessments: assessmentRows.map((row) => ({
         ...row, availableMinutes: row.availableMinutes == null ? null : Number(row.availableMinutes), dailyMinutes: Number(row.dailyMinutes),
         attemptCount: Number(row.attemptCount), scoredAttemptCount: Number(row.scoredAttemptCount), correctCount: Number(row.correctCount), sessionCount: Number(row.sessionCount),
         topics: topics.filter((topic) => topic.assessmentId === row.id).map(({ assessmentId: _assessmentId, ...topic }) => ({
-          ...topic, position: Number(topic.position), attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount), sessionCount: Number(topic.sessionCount),
+          ...topic, position: Number(topic.position), attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount), independentScoredAttemptCount: Number(topic.independentScoredAttemptCount), independentCorrectCount: Number(topic.independentCorrectCount), sessionCount: Number(topic.sessionCount),
         })),
       })),
-      concepts: concepts.map((row) => ({ ...row, attemptCount: Number(row.attemptCount), scoredAttemptCount: Number(row.scoredAttemptCount ?? 0), correctCount: Number(row.correctCount ?? 0), sessionCount: Number(row.sessionCount) })),
+      concepts: concepts.map((row) => ({ ...row, attemptCount: Number(row.attemptCount), scoredAttemptCount: Number(row.scoredAttemptCount ?? 0), correctCount: Number(row.correctCount ?? 0), independentScoredAttemptCount: Number(row.independentScoredAttemptCount ?? 0), independentCorrectCount: Number(row.independentCorrectCount ?? 0), sessionCount: Number(row.sessionCount) })),
     };
   }
 
