@@ -466,7 +466,7 @@ export class LearnerLibrary {
   }
 
   getMethodProgress(courseId: string): LearnerMethodProgressResponse {
-    const canonicalMethod = "CASE WHEN method IN ('quiz','retrieval-practice') THEN 'retrieval-practice' ELSE method END";
+    const canonicalMethod = "CASE WHEN a.method IN ('quiz','retrieval-practice') THEN 'retrieval-practice' ELSE a.method END";
     const rows = this.database.prepare(`SELECT ${canonicalMethod} AS method,COUNT(*) AS attemptCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') THEN 1 ELSE 0 END) AS scoredAttemptCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND m.independence='independent' THEN 1 ELSE 0 END) AS independentScoredAttemptCount,
@@ -503,7 +503,10 @@ export class LearnerLibrary {
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND (m.independence IS NULL OR m.independence='unknown') THEN 1 ELSE 0 END) AS unknownIndependenceScoredAttemptCount,
       SUM(CASE WHEN a.outcome='correct' AND (m.independence IS NULL OR m.independence='unknown') THEN 1 ELSE 0 END) AS unknownIndependenceCorrectCount,
       SUM(CASE WHEN a.outcome='correct' THEN 1 ELSE 0 END) AS correctCount,
+      SUM(CASE WHEN a.outcome='correct' AND a.confidence<=0.5 THEN 1 ELSE 0 END) AS lowConfidenceCorrectCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND a.confidence IS NOT NULL THEN 1 ELSE 0 END) AS confidenceRatedAttemptCount,
+      (SELECT latest.outcome FROM study_attempts latest WHERE latest.course_id=a.course_id AND latest.concept_id=a.concept_id AND (CASE WHEN latest.method IN ('quiz','retrieval-practice') THEN 'retrieval-practice' ELSE latest.method END)=${canonicalMethod} ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1) AS latestOutcome,
+      (SELECT latest.confidence FROM study_attempts latest WHERE latest.course_id=a.course_id AND latest.concept_id=a.concept_id AND (CASE WHEN latest.method IN ('quiz','retrieval-practice') THEN 'retrieval-practice' ELSE latest.method END)=${canonicalMethod} ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1) AS latestConfidence,
       AVG(CASE WHEN a.outcome IN ('correct','incorrect') AND a.confidence IS NOT NULL THEN ABS(a.confidence - CASE WHEN a.outcome='correct' THEN 1.0 ELSE 0.0 END) END) AS meanConfidenceGap,
       MAX(a.created_at) AS lastPracticedAt
       FROM study_attempts a LEFT JOIN mastery_evidence m ON m.attempt_id=a.id AND m.course_id=a.course_id LEFT JOIN learner_concepts c ON c.id=a.concept_id AND c.course_id=a.course_id
@@ -543,7 +546,10 @@ export class LearnerLibrary {
         unknownIndependenceScoredAttemptCount: Number(topic.unknownIndependenceScoredAttemptCount),
         unknownIndependenceCorrectCount: Number(topic.unknownIndependenceCorrectCount),
         correctCount: Number(topic.correctCount),
+        lowConfidenceCorrectCount: Number(topic.lowConfidenceCorrectCount),
         confidenceRatedAttemptCount: Number(topic.confidenceRatedAttemptCount),
+        latestOutcome: topic.latestOutcome ?? null,
+        latestConfidence: topic.latestConfidence == null ? null : Number(topic.latestConfidence),
         meanConfidenceGap: topic.meanConfidenceGap == null ? null : Number(topic.meanConfidenceGap),
         lastPracticedAt: topic.lastPracticedAt,
       })),

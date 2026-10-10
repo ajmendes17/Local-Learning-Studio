@@ -233,6 +233,14 @@ test("recommendations ask for an independent check after assisted-only correct a
     { title: "Partial trace", scoredAttemptCount: 1, independentScoredAttemptCount: 0 },
   ];
   assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), signals, independence), { topic: topics[0], reason: "needs-independent-check" });
+  const lowConfidence = [
+    { title: "Bell states", latestOutcome: "correct", latestConfidence: 0.5 },
+    { title: "Partial trace", latestOutcome: "correct", latestConfidence: 0.75 },
+  ];
+  const independentlyChecked = independence.map((signal) => ({ ...signal, independentScoredAttemptCount: signal.scoredAttemptCount }));
+  assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), signals, independentlyChecked, lowConfidence), { topic: topics[0], reason: "low-confidence-correct" });
+  assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), signals, independentlyChecked, lowConfidence.map((signal) => ({ ...signal, latestConfidence: 0.75 }))), { topic: topics[0], reason: "least-recently-practiced" });
+  assert.deepEqual(recommendNextStudyTopic(topics, signals, independentlyChecked, lowConfidence), { topic: topics[2], reason: "not-practiced" });
   assert.deepEqual(recommendNextStudyTopic(topics.slice(0, 2), [
     { ...signals[0]!, latestOutcome: "incorrect" }, signals[1]!,
   ], independence), { topic: topics[0], reason: "needs-review" });
@@ -246,6 +254,7 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
     { title: "Lesson opened, no check", reason: "lesson-only" as const, importance: "normal" as const, contextPriority: 0 },
     { title: "High priority, untouched", reason: "not-practiced" as const, importance: "high" as const, contextPriority: 0 },
     { title: "No independent check yet", reason: "needs-independent-check" as const, importance: "high" as const, contextPriority: 0 },
+    { title: "Correct, low confidence", reason: "low-confidence-correct" as const, importance: "high" as const, contextPriority: 0 },
     { title: "Normal priority, untouched", reason: "not-practiced" as const, importance: "normal" as const, contextPriority: 0 },
   ];
   assert.deepEqual(prioritizeStudyRecommendations(candidates).map(({ title }) => title), [
@@ -255,6 +264,7 @@ test("cross-scope recommendations preserve review urgency and instructor priorit
     "High priority, untouched",
     "Normal priority, untouched",
     "No independent check yet",
+    "Correct, low confidence",
   ]);
   assert.equal(candidates[0]!.title, "Low priority, newer miss", "ranking should not reorder the caller's array");
 });
@@ -972,7 +982,7 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
       payload: {
         sessionId: study.json().sessionId, conceptId: study.json().conceptId, assessmentId: assessment.json().id,
         activityType: "recognition", prompt: study.json().question, response: study.json().options[study.json().answerIndex],
-        reasoning: "", confidence: 0.75, hintCount: 0, method: "quiz", outcome: "correct",
+        reasoning: "", confidence: 0.5, hintCount: 0, method: "quiz", outcome: "correct",
         sourceRefs: [{ materialId: material.json().id }], independence: "independent", rationale: "Disposable integration attempt.",
       },
     });
@@ -980,11 +990,11 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
     const profile = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/profile` });
     assert.deepEqual([profile.json().assessments[0].attemptCount, profile.json().assessments[0].correctCount], [1, 1]);
     const methodProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
-    assert.deepEqual(methodProgress.json().map(({ method, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, topicCount, topicTitles }: { method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number; correctCount: number; topicCount: number; topicTitles: string[] }) => [method, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, topicCount, topicTitles]), [
-      ["retrieval-practice", 1, 1, 1, 1, 0, 0, 0, 1, 1, ["Bell states"]],
+    assert.deepEqual(methodProgress.json().map(({ method, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, lowConfidenceCorrectCount, topicCount, topicTitles }: { method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number; correctCount: number; lowConfidenceCorrectCount: number; topicCount: number; topicTitles: string[] }) => [method, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, lowConfidenceCorrectCount, topicCount, topicTitles]), [
+      ["retrieval-practice", 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, ["Bell states"]],
     ]);
-    assert.deepEqual(methodProgress.json()[0].topicProgress.map(({ title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap }: { title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null }) => [title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap]), [
-      ["Bell states", 1, 1, 1, 1, 0, 0, 0, 1, 1, 0.25],
+    assert.deepEqual(methodProgress.json()[0].topicProgress.map(({ title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, lowConfidenceCorrectCount, confidenceRatedAttemptCount, latestOutcome, latestConfidence, meanConfidenceGap }: { title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number; correctCount: number; lowConfidenceCorrectCount: number; confidenceRatedAttemptCount: number; latestOutcome: string | null; latestConfidence: number | null; meanConfidenceGap: number | null }) => [title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, lowConfidenceCorrectCount, confidenceRatedAttemptCount, latestOutcome, latestConfidence, meanConfidenceGap]), [
+      ["Bell states", 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, "correct", 0.5, 0.5],
     ]);
     const assistedAttempt = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
@@ -1003,10 +1013,10 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
     assert.equal(exported.statusCode, 200, exported.body);
     assert.equal(exported.json().notesWritten, 4);
     const courseNote = await readFile(join(vaultPath, exported.json().courseFolder, "Course.md"), "utf8");
-    assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 1\/1 scored checks correct; 1\/1 correct independently; confidence gap 25% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
+    assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 1\/1 scored checks correct; 1\/1 correct independently; confidence gap 50% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
     assert.match(courseNote, /Clear explanation:\*\* 1\/1 scored checks correct; No independent scored checks; 1\/1 correct with outside help; confidence gap 50% across 1 rated check/);
     assert.match(courseNote, /across 1 topic; topics: Bell states/);
-    assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; 1\/1 independently correct; 25% confidence gap across 1 rated; last practiced 2026-\d\d-\d\dT/);
+    assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; 1\/1 independently correct; 50% confidence gap across 1 rated; last practiced 2026-\d\d-\d\dT/);
     assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; no independent scored checks; 1\/1 correct with outside help; 50% confidence gap across 1 rated/);
     const assessmentFolder = join(vaultPath, exported.json().courseFolder, "assessments");
     const assessmentNote = await readFile(join(assessmentFolder, "professor-s-bell-states-scope--" + assessment.json().id.slice(0, 8) + ".md"), "utf8");

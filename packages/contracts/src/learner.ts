@@ -205,7 +205,8 @@ export function recommendNextStudyTopic<T extends { title: string }>(
   topics: T[],
   signals: Array<{ title: string; attemptCount: number; sessionCount?: number; latestOutcome?: string | null; lastPracticedAt?: string | null; lastSessionAt?: string | null }>,
   independenceSignals: Array<{ title: string; scoredAttemptCount: number; independentScoredAttemptCount: number }> = [],
-): { topic: T; reason: "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "least-recently-practiced" } | null {
+  confidenceSignals: Array<{ title: string; latestOutcome: string | null; latestConfidence: number | null }> = [],
+): { topic: T; reason: "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced" } | null {
   if (!topics.length) return null;
   const signalByTitle = new Map(signals.map((signal) => [signal.title.trim().normalize("NFKC").toLocaleLowerCase(), signal]));
   const candidates = topics.map((topic, index) => ({
@@ -214,6 +215,7 @@ export function recommendNextStudyTopic<T extends { title: string }>(
     signal: signalByTitle.get(topic.title.trim().normalize("NFKC").toLocaleLowerCase()),
   }));
   const independenceByTitle = new Map(independenceSignals.map((signal) => [signal.title.trim().normalize("NFKC").toLocaleLowerCase(), signal]));
+  const confidenceByTitle = new Map(confidenceSignals.map((signal) => [signal.title.trim().normalize("NFKC").toLocaleLowerCase(), signal]));
   const importanceRank = (topic: T) => {
     const importance = (topic as T & { importance?: string }).importance;
     return importance === "high" ? 2 : importance === "low" ? 0 : 1;
@@ -246,12 +248,20 @@ export function recommendNextStudyTopic<T extends { title: string }>(
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0];
   if (needsIndependentCheck) return { topic: needsIndependentCheck.topic, reason: "needs-independent-check" };
 
+  const lowConfidenceCorrect = candidates
+    .filter(({ topic }) => {
+      const signal = confidenceByTitle.get(topic.title.trim().normalize("NFKC").toLocaleLowerCase());
+      return signal?.latestOutcome === "correct" && signal.latestConfidence != null && signal.latestConfidence <= 0.5;
+    })
+    .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0];
+  if (lowConfidenceCorrect) return { topic: lowConfidenceCorrect.topic, reason: "low-confidence-correct" };
+
   const leastRecentlyPracticed = candidates
     .sort((a, b) => importanceRank(b.topic) - importanceRank(a.topic) || timestamp(a.signal?.lastPracticedAt) - timestamp(b.signal?.lastPracticedAt) || a.index - b.index)[0]!;
   return { topic: leastRecentlyPracticed.topic, reason: "least-recently-practiced" };
 }
 
-type StudyRecommendationReason = "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "least-recently-practiced";
+type StudyRecommendationReason = "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
 
 export function prioritizeStudyRecommendations<T extends {
   title: string;
@@ -265,7 +275,8 @@ export function prioritizeStudyRecommendations<T extends {
     "lesson-only": 1,
     "not-practiced": 2,
     "needs-independent-check": 3,
-    "least-recently-practiced": 4,
+    "low-confidence-correct": 4,
+    "least-recently-practiced": 5,
   };
   const importanceRank = (importance?: T["importance"]) => importance === "high" ? 2 : importance === "low" ? 0 : 1;
   const timestamp = (value?: string | null) => {
@@ -487,7 +498,10 @@ export const LearnerMethodProgressResponseSchema = z.array(z.object({
     unknownIndependenceScoredAttemptCount: z.number().int().nonnegative(),
     unknownIndependenceCorrectCount: z.number().int().nonnegative(),
     correctCount: z.number().int().nonnegative(),
+    lowConfidenceCorrectCount: z.number().int().nonnegative(),
     confidenceRatedAttemptCount: z.number().int().nonnegative(),
+    latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(),
+    latestConfidence: z.number().min(0).max(1).nullable(),
     meanConfidenceGap: z.number().min(0).max(1).nullable(),
     lastPracticedAt: z.string().nullable(),
   })),

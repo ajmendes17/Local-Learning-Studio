@@ -52,12 +52,12 @@ interface SourceTopicProgress { conceptId: string; title: string; attemptCount: 
 interface SourceProgress { materialId: string; title: string; kind: string; mediaType: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; topicCount: number; practicedTopicCount: number; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null; topics: SourceTopicProgress[] }
 interface SessionSummary { sessionId: string; conceptId: string; topic: string; method: Method; createdAt: string; attemptCount: number; correctCount: number; latestOutcome: string | null }
 interface ConceptProgress { id: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
-interface MethodTopicProgress { conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }
+interface MethodTopicProgress { conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; correctCount: number; lowConfidenceCorrectCount: number; confidenceRatedAttemptCount: number; latestOutcome: string | null; latestConfidence: number | null; meanConfidenceGap: number | null; lastPracticedAt: string | null }
 interface MethodProgress { method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: MethodTopicProgress[]; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }
 interface AssessmentScope { id: string; title: string; instructorText: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
 interface StudyRecommendation {
   title: string;
-  reason: "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "least-recently-practiced";
+  reason: "needs-review" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "least-recently-practiced";
   latestOutcome: string | null;
   lastPracticedAt: string | null;
   assessmentId?: string;
@@ -638,6 +638,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   const independenceByTitle = new Map<string, { title: string; scoredAttemptCount: number; independentScoredAttemptCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number }>();
+  const confidenceByTitle = new Map<string, { title: string; latestOutcome: string | null; latestConfidence: number | null; lastPracticedAt: string | null }>();
   for (const method of methodProgress) for (const topic of method.topicProgress) {
     const key = topic.title.trim().normalize("NFKC").toLocaleLowerCase();
     const current = independenceByTitle.get(key) ?? { title: topic.title, scoredAttemptCount: 0, independentScoredAttemptCount: 0, hintedScoredAttemptCount: 0, assistedScoredAttemptCount: 0, unknownIndependenceScoredAttemptCount: 0 };
@@ -647,13 +648,18 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     current.assistedScoredAttemptCount += topic.assistedScoredAttemptCount;
     current.unknownIndependenceScoredAttemptCount += topic.unknownIndependenceScoredAttemptCount;
     independenceByTitle.set(key, current);
+    const confidence = confidenceByTitle.get(key);
+    if (!confidence || Date.parse(topic.lastPracticedAt ?? "") >= Date.parse(confidence.lastPracticedAt ?? "")) {
+      confidenceByTitle.set(key, { title: topic.title, latestOutcome: topic.latestOutcome, latestConfidence: topic.latestConfidence, lastPracticedAt: topic.lastPracticedAt });
+    }
   }
   const independenceSignals = [...independenceByTitle.values()];
+  const confidenceSignals = [...confidenceByTitle.values()];
   // Include lesson-only topics and topics with only assisted checks: both need
   // a retrieval attempt that adds a new kind of evidence.
-  const classNextTopic = recommendNextStudyTopic(progress, progress, independenceSignals);
+  const classNextTopic = recommendNextStudyTopic(progress, progress, independenceSignals, confidenceSignals);
   const mappedNextTopic = acceptedCourseMap
-    ? recommendNextStudyTopic(acceptedCourseMap.payload.concepts, progress, independenceSignals)
+    ? recommendNextStudyTopic(acceptedCourseMap.payload.concepts, progress, independenceSignals, confidenceSignals)
     : null;
   const recommendations: StudyRecommendation[] = [
     ...assessmentScopes.flatMap((assessment) => {
@@ -712,6 +718,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       ? "No lesson or check activity is recorded for this topic yet."
     : nextRecommendation?.reason === "needs-independent-check"
       ? "You have saved scored checks for this topic, but none were recorded as independent. Try it without hints or outside help for a clearer recall signal."
+      : nextRecommendation?.reason === "low-confidence-correct"
+        ? "You answered this correctly with low confidence. Try free recall to strengthen the idea before it fades."
       : nextRecommendation?.lastPracticedAt
         ? `Last practiced ${new Date(nextRecommendation.lastPracticedAt).toLocaleDateString()}.`
         : "No recent practice is recorded.";
@@ -719,6 +727,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     ? "error-analysis"
     : nextRecommendation?.reason === "needs-independent-check"
       ? "quiz"
+      : nextRecommendation?.reason === "low-confidence-correct"
+        ? "free-recall"
     : method;
   const topicIndependenceSummary = (title: string) => {
     const signal = independenceByTitle.get(title.trim().normalize("NFKC").toLocaleLowerCase());
