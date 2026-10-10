@@ -389,9 +389,20 @@ export const StudyFreeRecallQuestionSchema = z.object({
   feedback: z.string().min(1).max(4000),
   hints: z.array(z.string().min(1).max(1200)).min(1).max(3),
 });
-export const StudySessionGenerationContentSchema = StudySessionContentSchema.safeExtend({
+// Keep the model response limited to generated learning content. Session IDs,
+// topic/method metadata, and nullable scope IDs are added by the server after
+// generation; asking the model to fill those optional storage fields creates
+// response schemas that strict structured-output APIs reject.
+export const StudySessionGenerationContentSchema = z.object({
+  lesson: z.string().min(1),
+  example: z.string(),
+  question: z.string().min(1),
+  options: z.array(z.string().min(1)).max(6),
+  answerIndex: z.number().int().nonnegative().nullable(),
+  feedback: z.string().min(1),
+  clarification: z.string().min(1),
   hints: z.array(z.string().min(1).max(1200)).min(1).max(3),
-});
+}).strict();
 export const StudySessionRecordSchema = StudySessionContentSchema.safeExtend({
   sessionId: z.string().uuid(),
   createdAt: z.string().datetime(),

@@ -37,10 +37,6 @@ async function createAppWithStudyModel(options: { corruptMath?: boolean; failure
       prompts.push(prompt);
       if (options.failure) throw new CodexRunError("execution_failed", `Codex failed while running ${task}.`, "The selected local model is unavailable.");
       const output = outputSchema.parse({
-        conceptId: randomUUID(),
-        topic: "model topic",
-        method: prompt.includes("Start with unaided free recall") ? "free-recall" : "explanation",
-        sourceBasis: "course-materials",
         lesson: options.corruptMath
           ? `## Source-grounded idea\n\nThe key operation is $H${controlCharacter}\\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.`
           : "## Source-grounded idea\n\nThe key operation is $H\\lvert 0\\rangle = (\\lvert 0\\rangle + \\lvert 1\\rangle)/\\sqrt{2}$.",
@@ -48,10 +44,8 @@ async function createAppWithStudyModel(options: { corruptMath?: boolean; failure
         question: prompt.includes("Use a teach-back exercise")
           ? "Teach back the main idea and explain why it holds."
           : options.corruptMath ? `Which state $${controlCharacter}\\ket{\\psi}$ does the source operation produce?` : "Which state does the source operation produce?",
-        ...(prompt.includes("Start with unaided free recall") ? {} : {
-          options: [options.corruptMath ? `$${controlCharacter}\\lvert 0\\rangle$` : "$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
-          answerIndex: 2,
-        }),
+        options: prompt.includes("Start with unaided free recall") || prompt.includes("Use a teach-back exercise") ? [] : [options.corruptMath ? `$${controlCharacter}\\lvert 0\\rangle$` : "$\\lvert 0\\rangle$", "$\\lvert 1\\rangle$", "$\\lvert +\\rangle$", "$\\lvert -\\rangle$"],
+        answerIndex: prompt.includes("Start with unaided free recall") || prompt.includes("Use a teach-back exercise") ? null : 2,
         feedback: options.corruptMath ? `The source identifies $${controlCharacter}\\ket{+}$.` : "The source identifies the equal superposition.",
         clarification: options.corruptMath ? `The operation creates both components of $${controlCharacter}\\ket{\\psi}$.` : "The operation creates both basis components.",
         hints: [options.corruptMath ? `Check the coefficient of $${controlCharacter}\\ket{0}$.` : "Check the coefficients in the source."],

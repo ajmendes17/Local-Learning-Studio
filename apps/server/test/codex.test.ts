@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { CodexStatusResponseSchema } from "@local-learning-studio/contracts";
+import { CodexStatusResponseSchema, StudySessionGenerationContentSchema } from "@local-learning-studio/contracts";
 import { z } from "zod";
 import { buildApp } from "../src/app.js";
 import { CodexRunError, CodexRunner } from "../src/codex/codex-runner.js";
@@ -31,6 +31,11 @@ for await (const chunk of process.stdin) prompt += chunk;
 const valueAfter = (flag) => args[args.indexOf(flag) + 1];
 const delay = Number(prompt.match(/delay:(\\d+)/)?.[1] ?? 0);
 if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+if (prompt.includes("event-fail")) {
+  console.error("nonfatal CLI warning");
+  console.log(JSON.stringify({ type: "turn.failed", error: { message: "actual structured failure reason" } }));
+  process.exit(7);
+}
 if (prompt.includes("fail")) {
   console.error("simulated Codex failure; OPENAI_API_KEY=sk-test-key-1234567890");
   process.exit(7);
@@ -75,6 +80,18 @@ test("model router keeps narrow tasks on Luna and synthesis on Terra", () => {
   assert.equal(router.modelFor("audit-learning-artifact"), "sol-test");
 });
 
+test("study generation JSON schema uses only required model-authored fields", () => {
+  const schema = z.toJSONSchema(StudySessionGenerationContentSchema) as {
+    properties: Record<string, unknown>;
+    required: string[];
+    additionalProperties?: boolean;
+  };
+  assert.deepEqual(schema.required, Object.keys(schema.properties));
+  assert.equal(schema.additionalProperties, false);
+  assert.equal("assessmentId" in schema.properties, false);
+  assert.equal("conceptId" in schema.properties, false);
+});
+
 test("Codex runner reports local installation and authentication", async () => {
   const { root, runner } = await fakeRunner();
   assert.deepEqual(await runner.status(), {
@@ -116,6 +133,12 @@ test("Codex runner rejects execution failures and invalid output", async () => {
     runner.run("map-course", "invalid", outputSchema),
     (error: unknown) =>
       error instanceof CodexRunError && error.code === "invalid_output",
+  );
+  await assert.rejects(
+    runner.run("map-course", "event-fail", outputSchema),
+    (error: unknown) => error instanceof CodexRunError
+      && error.code === "execution_failed"
+      && error.detail === "actual structured failure reason\nCLI stderr: nonfatal CLI warning",
   );
   await rm(root, { recursive: true });
 });

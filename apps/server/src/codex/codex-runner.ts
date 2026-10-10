@@ -218,7 +218,9 @@ export class CodexRunner {
       );
 
       if (result.exitCode !== 0) {
-        const diagnostic = result.stderr.trim() || diagnosticMessageFromEvents(result.stdout);
+        const eventDiagnostic = diagnosticMessageFromEvents(result.stdout);
+        const stderrDiagnostic = result.stderr.trim();
+        const diagnostic = [eventDiagnostic, stderrDiagnostic].filter(Boolean).join("\nCLI stderr: ");
         throw new CodexRunError(
           "execution_failed",
           `Codex failed while running ${task}.`,
