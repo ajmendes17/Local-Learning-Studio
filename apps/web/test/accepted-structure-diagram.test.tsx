@@ -43,6 +43,31 @@ test("unscored and missed topics are not mislabeled as scheduled spaced recall",
   assert.doesNotMatch(incorrect, /spaced recall/);
 });
 
+test("topic summaries separate scored correctness from independent checks", () => {
+  const supportedOnly = describePractice({
+    attemptCount: 2,
+    scoredAttemptCount: 2,
+    correctCount: 2,
+    independentScoredAttemptCount: 0,
+    independentCorrectCount: 0,
+    latestOutcome: "correct",
+  });
+  assert.match(supportedOnly, /2\/2 scored checks correct · independent checks 0\/2/);
+
+  const mixed = describePractice({
+    attemptCount: 3,
+    scoredAttemptCount: 3,
+    correctCount: 3,
+    independentScoredAttemptCount: 2,
+    independentCorrectCount: 2,
+    latestOutcome: "correct",
+  });
+  assert.match(mixed, /independent checks 2\/3/);
+
+  const legacy = describePractice({ attemptCount: 1, scoredAttemptCount: 1, correctCount: 1 });
+  assert.doesNotMatch(legacy, /independent checks/);
+});
+
 test("low scored accuracy starts quiz-first practice from topic actions", () => {
   assert.equal(practiceReviewMethod({
     attemptCount: 5,

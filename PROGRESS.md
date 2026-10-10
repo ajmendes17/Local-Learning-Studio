@@ -2234,3 +2234,4 @@ dist/assets/study-progress-HYFWFq93.js                397.27 kB │ gzip: 120.25
 ✓ built in 409ms passed. |
 
 | 2026-10-10 | Obsidian managed-note identity repair | Export refreshes managed frontmatter IDs to migrate old formats while preserving learner text. Regression covers stale Topic Progress IDs. Browser draft restore passed. Live vault export updated 39 notes; validation found zero issues across 39 notes and 393 links; Obsidian reports zero unresolved links. Full project checks passed. |
+| 2026-10-10 | Map progress independence cue | Shared topic progress descriptions now show independent checks alongside overall scored correctness, keeping assisted success from reading as solo recall. Regression tests cover supported-only, mixed, and legacy signals. All 44 web tests passed; web typecheck, production build, and `git diff --check` passed. |

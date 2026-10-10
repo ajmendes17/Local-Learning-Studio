@@ -68,6 +68,10 @@ export function describePractice(signal: PracticeSignal | undefined, now = Date.
   const summary = scoredAttemptCount
     ? `${signal.correctCount}/${scoredAttemptCount} scored checks correct${signal.attemptCount > scoredAttemptCount ? ` · ${signal.attemptCount - scoredAttemptCount} unscored` : ""}`
     : `${signal.attemptCount} unscored attempt${signal.attemptCount === 1 ? "" : "s"}`;
+  const independentCount = signal.independentScoredAttemptCount == null || !scoredAttemptCount
+    ? null
+    : Math.min(scoredAttemptCount, Math.max(0, Math.floor(signal.independentScoredAttemptCount)));
+  const independentSummary = independentCount == null ? "" : ` · independent checks ${independentCount}/${scoredAttemptCount}`;
   const date = signal.lastPracticedAt ? ` · last ${new Date(signal.lastPracticedAt).toLocaleDateString()}` : "";
   const reviewReason = outcome === "incorrect" ? "last check incorrect"
     : outcome === "incomplete" ? "last check incomplete"
@@ -80,5 +84,5 @@ export function describePractice(signal: PracticeSignal | undefined, now = Date.
       ? " · spaced recall is due"
       : ` · next spaced recall ${new Date(spacedReview.dueAt).toLocaleDateString()}`
     : "";
-  return `${needsReview ? `Needs review · ${reviewReason}` : "Practice recorded"} · ${summary} · ${lessons}${date}${spacedReviewText}`;
+  return `${needsReview ? `Needs review · ${reviewReason}` : "Practice recorded"} · ${summary}${independentSummary} · ${lessons}${date}${spacedReviewText}`;
 }
