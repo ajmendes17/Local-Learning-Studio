@@ -634,12 +634,15 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     }
   }
 
-  const independenceByTitle = new Map<string, { title: string; scoredAttemptCount: number; independentScoredAttemptCount: number }>();
+  const independenceByTitle = new Map<string, { title: string; scoredAttemptCount: number; independentScoredAttemptCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number }>();
   for (const method of methodProgress) for (const topic of method.topicProgress) {
     const key = topic.title.trim().normalize("NFKC").toLocaleLowerCase();
-    const current = independenceByTitle.get(key) ?? { title: topic.title, scoredAttemptCount: 0, independentScoredAttemptCount: 0 };
+    const current = independenceByTitle.get(key) ?? { title: topic.title, scoredAttemptCount: 0, independentScoredAttemptCount: 0, hintedScoredAttemptCount: 0, assistedScoredAttemptCount: 0, unknownIndependenceScoredAttemptCount: 0 };
     current.scoredAttemptCount += topic.scoredAttemptCount;
     current.independentScoredAttemptCount += topic.independentScoredAttemptCount;
+    current.hintedScoredAttemptCount += topic.hintedScoredAttemptCount;
+    current.assistedScoredAttemptCount += topic.assistedScoredAttemptCount;
+    current.unknownIndependenceScoredAttemptCount += topic.unknownIndependenceScoredAttemptCount;
     independenceByTitle.set(key, current);
   }
   const independenceSignals = [...independenceByTitle.values()];
@@ -716,9 +719,13 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     : method;
   const topicIndependenceSummary = (title: string) => {
     const signal = independenceByTitle.get(title.trim().normalize("NFKC").toLocaleLowerCase());
-    return signal?.scoredAttemptCount
-      ? ` · ${signal.independentScoredAttemptCount} of ${signal.scoredAttemptCount} scored checks independent`
-      : "";
+    if (!signal?.scoredAttemptCount) return "";
+    const supported = [
+      signal.hintedScoredAttemptCount ? `${signal.hintedScoredAttemptCount} with hints` : "",
+      signal.assistedScoredAttemptCount ? `${signal.assistedScoredAttemptCount} with outside help` : "",
+      signal.unknownIndependenceScoredAttemptCount ? `${signal.unknownIndependenceScoredAttemptCount} with support unrecorded` : "",
+    ].filter(Boolean);
+    return ` · ${signal.independentScoredAttemptCount}/${signal.scoredAttemptCount} independent${supported.length ? ` · ${supported.join(" · ")}` : ""}`;
   };
   const sessionSourceTitle = content?.sourceMaterialId
     ? sourceProgress.find(({ materialId }) => materialId === content.sourceMaterialId)?.title
