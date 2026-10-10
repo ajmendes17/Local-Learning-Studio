@@ -451,9 +451,11 @@ export class ObsidianVault {
         const matchingConcept = (data.map?.concepts ?? []).find(({ title }) => title.trim().toLocaleLowerCase() === topic.title.trim().toLocaleLowerCase());
         const noteLink = matchingConcept && topicPaths.get(matchingConcept.key) ? ` · ${wikilink(topicPaths.get(matchingConcept.key)!, "open topic")}` : "";
         const planMinutes = plannedMinutes.get(topic.title.trim().normalize("NFKC").toLocaleLowerCase());
-        const activity = topic.attemptCount
+        const lessonActivity = `${topic.sessionCount} lesson session${topic.sessionCount === 1 ? "" : "s"}${topic.lastSessionAt ? `; last lesson: ${topic.lastSessionAt}` : ""}`;
+        const checkActivity = topic.attemptCount
           ? `${scoredProgress(topic.attemptCount, topic.scoredAttemptCount, topic.correctCount)}; latest: ${topic.latestOutcome ?? "not checked"}; last checked: ${topic.lastPracticedAt ?? "never"}`
-          : `${topic.sessionCount} lesson sessions; no checks saved${topic.lastSessionAt ? `; last lesson: ${topic.lastSessionAt}` : ""}`;
+          : "no check attempts saved";
+        const activity = `${lessonActivity}; ${checkActivity}`;
         return `- ${topic.title} _(source: ${topic.provenance}; priority: ${topic.importance ?? "normal"}${planMinutes == null ? "" : `; suggested time: ${planMinutes} min`}; ${activity})_${noteLink}`;
       }).join("\n") || "- No topic scope added yet.";
       if (assessment.instructorText?.trim()) {
@@ -462,6 +464,7 @@ export class ObsidianVault {
       const reviewTopics = assessment.topics.filter((topic) => needsReview(topic.latestOutcome)).length;
       const checkedTopics = assessment.topics.filter((topic) => topic.attemptCount > 0).length;
       const uncheckedTopics = Math.max(0, assessment.topics.length - checkedTopics);
+      const lessonTopics = assessment.topics.filter((topic) => topic.sessionCount > 0).length;
       const studyPlanText = studyPlan.length
         ? studyPlan.map(({ topic, minutes }) => `- **${minutes} min** — ${topic.title}`).join("\n")
         : "No available study-time budget saved.";
@@ -471,7 +474,7 @@ export class ObsidianVault {
         : daySchedule.status === "missing-deadline" ? "Add an assessment date in Local Learning Studio to schedule these sessions."
           : daySchedule.status === "deadline-passed" ? "The assessment date has passed; update it to create a future schedule."
             : "No study sessions need scheduling.";
-      managed.push({ path: join(courseFolder, assessmentPaths.get(assessment.id)!), id: `assessment:${assessment.id}`, title: assessment.title, body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Type:** ${assessment.kind}\n**Date:** ${assessment.scheduledAt ? `${assessment.scheduledAt}${deadline ? ` (${deadline})` : ""}` : "Not set"}\n**Available study time:** ${assessment.availableMinutes == null ? "Not set" : `${assessment.availableMinutes} minutes`}\n**Daily target:** ${assessment.dailyMinutes ?? 45} minutes\n**Practice activity:** ${scoredProgress(assessment.attemptCount, assessment.scoredAttemptCount, assessment.correctCount)}\n\n## Progress summary\n**Topics checked:** ${checkedTopics}/${assessment.topics.length}\n**Topics needing review:** ${reviewTopics}\n**Topics without a saved check:** ${uncheckedTopics}\n\n## Suggested study plan\n${studyPlanText}\n\n## Day-by-day schedule\n${dayScheduleText}\n\n## Topics to study\n${scope}\n\n_Practice counts are evidence of activity, not mastery. Suggested time rebalances as saved topic evidence changes._` });
+      managed.push({ path: join(courseFolder, assessmentPaths.get(assessment.id)!), id: `assessment:${assessment.id}`, title: assessment.title, body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Type:** ${assessment.kind}\n**Date:** ${assessment.scheduledAt ? `${assessment.scheduledAt}${deadline ? ` (${deadline})` : ""}` : "Not set"}\n**Available study time:** ${assessment.availableMinutes == null ? "Not set" : `${assessment.availableMinutes} minutes`}\n**Daily target:** ${assessment.dailyMinutes ?? 45} minutes\n**Practice activity:** ${scoredProgress(assessment.attemptCount, assessment.scoredAttemptCount, assessment.correctCount)}\n\n## Progress summary\n**Topics studied:** ${lessonTopics}/${assessment.topics.length}\n**Lesson sessions opened:** ${assessment.sessionCount}\n**Topics checked:** ${checkedTopics}/${assessment.topics.length}\n**Knowledge-check attempts:** ${assessment.attemptCount} (${assessment.scoredAttemptCount} scored)\n**Topics needing review:** ${reviewTopics}\n**Topics without a saved check:** ${uncheckedTopics}\n\n## Suggested study plan\n${studyPlanText}\n\n## Day-by-day schedule\n${dayScheduleText}\n\n## Topics to study\n${scope}\n\n_Practice counts are evidence of activity, not mastery. Suggested time rebalances as saved topic evidence changes._` });
     }
 
     for (const [index, assessment] of (data.map?.assessments ?? []).entries()) {

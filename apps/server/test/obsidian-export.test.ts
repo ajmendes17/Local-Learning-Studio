@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { access, appendFile, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,6 +96,12 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
       ] },
     });
     assert.equal(assessmentResponse.statusCode, 201, assessmentResponse.body);
+    const lessonSessionId = randomUUID();
+    const lessonCreatedAt = new Date().toISOString();
+    const sessionDatabase = openDatabase(databasePath);
+    sessionDatabase.prepare("INSERT INTO study_sessions (id,course_id,concept_id,topic,method,content_json,created_at) VALUES (?,?,?,?,?,?,?)")
+      .run(lessonSessionId, courseId, conceptResponse.json().id, "Bell states", "explanation", JSON.stringify({ assessmentId: assessmentResponse.json().id, topic: "Bell states", method: "explanation" }), lessonCreatedAt);
+    sessionDatabase.close();
     const attemptResponse = await app.inject({
       method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
       payload: {
@@ -181,8 +188,8 @@ test("Obsidian export creates linked class notes and preserves learner-owned tex
     assert.equal(dailyMinutes.reduce((sum, minutes) => sum + minutes, 0), 90);
     assert.ok(dailyMinutes.every((minutes) => minutes <= 30));
     assert.match(assessmentNote, /Practice activity:\*\* 0\/1 scored checks correct; 1 unscored/);
-    assert.match(assessmentNote, /## Progress summary[\s\S]*Topics checked:\*\* 1\/2[\s\S]*Topics needing review:\*\* 1[\s\S]*Topics without a saved check:\*\* 1/);
-    assert.match(assessmentNote, /Bell states .*0\/1 scored checks correct; 1 unscored; latest: not-graded/);
+    assert.match(assessmentNote, /## Progress summary[\s\S]*Topics studied:\*\* 1\/2[\s\S]*Lesson sessions opened:\*\* 1[\s\S]*Topics checked:\*\* 1\/2[\s\S]*Knowledge-check attempts:\*\* 2 \(1 scored\)[\s\S]*Topics needing review:\*\* 1[\s\S]*Topics without a saved check:\*\* 1/);
+    assert.match(assessmentNote, /Bell states .*1 lesson session; last lesson: .+; 0\/1 scored checks correct; 1 unscored; latest: not-graded/);
     assert.match(assessmentNote, /Practice counts are evidence of activity, not mastery/);
 
     await appendFile(courseNotePath, "\n## My reflection\nKeep my instructor's phrasing here.\n");
