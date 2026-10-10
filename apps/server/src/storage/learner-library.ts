@@ -427,6 +427,11 @@ export class LearnerLibrary {
     const canonicalMethod = "CASE WHEN method IN ('quiz','retrieval-practice') THEN 'retrieval-practice' ELSE method END";
     const rows = this.database.prepare(`SELECT ${canonicalMethod} AS method,COUNT(*) AS attemptCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') THEN 1 ELSE 0 END) AS scoredAttemptCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND m.independence='independent' THEN 1 ELSE 0 END) AS independentScoredAttemptCount,
+      SUM(CASE WHEN a.outcome='correct' AND m.independence='independent' THEN 1 ELSE 0 END) AS independentCorrectCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND m.independence='hinted' THEN 1 ELSE 0 END) AS hintedScoredAttemptCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND m.independence='assisted' THEN 1 ELSE 0 END) AS assistedScoredAttemptCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND (m.independence IS NULL OR m.independence='unknown') THEN 1 ELSE 0 END) AS unknownIndependenceScoredAttemptCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND a.confidence IS NOT NULL THEN 1 ELSE 0 END) AS confidenceRatedAttemptCount,
       AVG(CASE WHEN a.outcome IN ('correct','incorrect') AND a.confidence IS NOT NULL THEN ABS(a.confidence - CASE WHEN a.outcome='correct' THEN 1.0 ELSE 0.0 END) END) AS meanConfidenceGap,
       SUM(CASE WHEN a.outcome='correct' THEN 1 ELSE 0 END) AS correctCount,
@@ -435,7 +440,7 @@ export class LearnerLibrary {
       SUM(CASE WHEN a.outcome='incorrect' AND a.confidence>=0.75 THEN 1 ELSE 0 END) AS highConfidenceMissCount,
       SUM(CASE WHEN a.outcome='correct' AND a.confidence<=0.5 THEN 1 ELSE 0 END) AS lowConfidenceCorrectCount,
       MAX(a.created_at) AS lastPracticedAt
-      FROM study_attempts a LEFT JOIN learner_concepts c ON c.id=a.concept_id AND c.course_id=a.course_id
+      FROM study_attempts a LEFT JOIN mastery_evidence m ON m.attempt_id=a.id AND m.course_id=a.course_id LEFT JOIN learner_concepts c ON c.id=a.concept_id AND c.course_id=a.course_id
       WHERE a.course_id=? AND trim(a.method)!=''
       GROUP BY ${canonicalMethod} ORDER BY attemptCount DESC,method`).all(courseId).map((row: any) => ({
       ...row,
@@ -444,11 +449,16 @@ export class LearnerLibrary {
     const topicRows = this.database.prepare(`SELECT ${canonicalMethod} AS method,a.concept_id AS conceptId,
       COALESCE(c.title,'Unlabeled topic') AS title,COUNT(*) AS attemptCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') THEN 1 ELSE 0 END) AS scoredAttemptCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND m.independence='independent' THEN 1 ELSE 0 END) AS independentScoredAttemptCount,
+      SUM(CASE WHEN a.outcome='correct' AND m.independence='independent' THEN 1 ELSE 0 END) AS independentCorrectCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND m.independence='hinted' THEN 1 ELSE 0 END) AS hintedScoredAttemptCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND m.independence='assisted' THEN 1 ELSE 0 END) AS assistedScoredAttemptCount,
+      SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND (m.independence IS NULL OR m.independence='unknown') THEN 1 ELSE 0 END) AS unknownIndependenceScoredAttemptCount,
       SUM(CASE WHEN a.outcome='correct' THEN 1 ELSE 0 END) AS correctCount,
       SUM(CASE WHEN a.outcome IN ('correct','incorrect') AND a.confidence IS NOT NULL THEN 1 ELSE 0 END) AS confidenceRatedAttemptCount,
       AVG(CASE WHEN a.outcome IN ('correct','incorrect') AND a.confidence IS NOT NULL THEN ABS(a.confidence - CASE WHEN a.outcome='correct' THEN 1.0 ELSE 0.0 END) END) AS meanConfidenceGap,
       MAX(a.created_at) AS lastPracticedAt
-      FROM study_attempts a LEFT JOIN learner_concepts c ON c.id=a.concept_id AND c.course_id=a.course_id
+      FROM study_attempts a LEFT JOIN mastery_evidence m ON m.attempt_id=a.id AND m.course_id=a.course_id LEFT JOIN learner_concepts c ON c.id=a.concept_id AND c.course_id=a.course_id
       WHERE a.course_id=? AND trim(a.method)!=''
       GROUP BY ${canonicalMethod},a.concept_id ORDER BY method,title`).all(courseId) as any[];
     const topicProgressByMethod = new Map<string, typeof topicRows>();
@@ -458,6 +468,11 @@ export class LearnerLibrary {
       method: row.method,
       attemptCount: Number(row.attemptCount),
       scoredAttemptCount: Number(row.scoredAttemptCount),
+      independentScoredAttemptCount: Number(row.independentScoredAttemptCount),
+      independentCorrectCount: Number(row.independentCorrectCount),
+      hintedScoredAttemptCount: Number(row.hintedScoredAttemptCount),
+      assistedScoredAttemptCount: Number(row.assistedScoredAttemptCount),
+      unknownIndependenceScoredAttemptCount: Number(row.unknownIndependenceScoredAttemptCount),
       confidenceRatedAttemptCount: Number(row.confidenceRatedAttemptCount),
       meanConfidenceGap: row.meanConfidenceGap == null ? null : Number(row.meanConfidenceGap),
       correctCount: Number(row.correctCount),
@@ -468,6 +483,11 @@ export class LearnerLibrary {
         title: topic.title,
         attemptCount: Number(topic.attemptCount),
         scoredAttemptCount: Number(topic.scoredAttemptCount),
+        independentScoredAttemptCount: Number(topic.independentScoredAttemptCount),
+        independentCorrectCount: Number(topic.independentCorrectCount),
+        hintedScoredAttemptCount: Number(topic.hintedScoredAttemptCount),
+        assistedScoredAttemptCount: Number(topic.assistedScoredAttemptCount),
+        unknownIndependenceScoredAttemptCount: Number(topic.unknownIndependenceScoredAttemptCount),
         correctCount: Number(topic.correctCount),
         confidenceRatedAttemptCount: Number(topic.confidenceRatedAttemptCount),
         meanConfidenceGap: topic.meanConfidenceGap == null ? null : Number(topic.meanConfidenceGap),

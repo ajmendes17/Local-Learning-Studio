@@ -493,6 +493,11 @@ test("study attempts from a learner exam scope update assessment and topic progr
   const unscoredConceptSignal = profileWithUnscored.json().concepts.find((item: { id: string }) => item.id === partialConcept.json().id);
   assert.deepEqual([unscoredConceptSignal.attemptCount, unscoredConceptSignal.scoredAttemptCount, unscoredConceptSignal.correctCount], [2, 0, 0]);
   const methodProgressWithIncomplete = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
+  const retrievalIndependence = methodProgressWithIncomplete.json().find((item: { method: string }) => item.method === "retrieval-practice");
+  assert.deepEqual([retrievalIndependence.independentScoredAttemptCount, retrievalIndependence.independentCorrectCount, retrievalIndependence.hintedScoredAttemptCount, retrievalIndependence.assistedScoredAttemptCount, retrievalIndependence.unknownIndependenceScoredAttemptCount], [1, 1, 1, 0, 0]);
+  assert.deepEqual([retrievalIndependence.topicProgress[0].independentScoredAttemptCount, retrievalIndependence.topicProgress[0].independentCorrectCount, retrievalIndependence.topicProgress[0].hintedScoredAttemptCount], [1, 1, 1]);
+  const explanationIndependence = methodProgressWithIncomplete.json().find((item: { method: string }) => item.method === "explanation");
+  assert.deepEqual([explanationIndependence.independentScoredAttemptCount, explanationIndependence.independentCorrectCount, explanationIndependence.unknownIndependenceScoredAttemptCount], [1, 1, 0]);
   assert.deepEqual(methodProgressWithIncomplete.json().map(({ method, attemptCount, scoredAttemptCount, confidenceRatedAttemptCount, meanConfidenceGap, correctCount, topicCount, topicTitles }: { method: string; attemptCount: number; scoredAttemptCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[] }) => [method, attemptCount, scoredAttemptCount, confidenceRatedAttemptCount, meanConfidenceGap, correctCount, topicCount, topicTitles]), [
     ["explanation", 2, 1, 1, 0.25, 1, 2, ["Bell states", "Partial recall"]],
     ["retrieval-practice", 2, 2, 2, 0.375, 1, 1, ["Bell states"]],
@@ -589,19 +594,19 @@ test("quiz study, saved answer, method progress, and Obsidian export work togeth
     const profile = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/profile` });
     assert.deepEqual([profile.json().assessments[0].attemptCount, profile.json().assessments[0].correctCount], [1, 1]);
     const methodProgress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
-    assert.deepEqual(methodProgress.json().map(({ method, attemptCount, scoredAttemptCount, correctCount, topicCount, topicTitles }: { method: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; topicCount: number; topicTitles: string[] }) => [method, attemptCount, scoredAttemptCount, correctCount, topicCount, topicTitles]), [
-      ["retrieval-practice", 1, 1, 1, 1, ["Bell states"]],
+    assert.deepEqual(methodProgress.json().map(({ method, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, topicCount, topicTitles }: { method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number; correctCount: number; topicCount: number; topicTitles: string[] }) => [method, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, topicCount, topicTitles]), [
+      ["retrieval-practice", 1, 1, 1, 1, 0, 0, 0, 1, 1, ["Bell states"]],
     ]);
-    assert.deepEqual(methodProgress.json()[0].topicProgress.map(({ title, attemptCount, scoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap }: { title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null }) => [title, attemptCount, scoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap]), [
-      ["Bell states", 1, 1, 1, 1, 0.25],
+    assert.deepEqual(methodProgress.json()[0].topicProgress.map(({ title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap }: { title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; assistedScoredAttemptCount: number; unknownIndependenceScoredAttemptCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null }) => [title, attemptCount, scoredAttemptCount, independentScoredAttemptCount, independentCorrectCount, hintedScoredAttemptCount, assistedScoredAttemptCount, unknownIndependenceScoredAttemptCount, correctCount, confidenceRatedAttemptCount, meanConfidenceGap]), [
+      ["Bell states", 1, 1, 1, 1, 0, 0, 0, 1, 1, 0.25],
     ]);
     const exported = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
     assert.equal(exported.statusCode, 200, exported.body);
     assert.equal(exported.json().notesWritten, 3);
     const courseNote = await readFile(join(vaultPath, exported.json().courseFolder, "Course.md"), "utf8");
-    assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 1\/1 scored checks correct; confidence gap 25% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
+    assert.match(courseNote, /## Practice by study approach[\s\S]*Quiz first:\*\* 1\/1 scored checks correct; 1\/1 correct independently; confidence gap 25% across 1 rated check \(lower is closer to outcomes\); 1 total attempt/);
     assert.match(courseNote, /across 1 topic; topics: Bell states/);
-    assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; 25% confidence gap across 1 rated; last practiced 2026-\d\d-\d\dT/);
+    assert.match(courseNote, /by topic: Bell states \(1\/1 scored correct; 1\/1 independently correct; 25% confidence gap across 1 rated; last practiced 2026-\d\d-\d\dT/);
     const assessmentFolder = join(vaultPath, exported.json().courseFolder, "assessments");
     const assessmentNote = await readFile(join(assessmentFolder, "professor-s-bell-states-scope--" + assessment.json().id.slice(0, 8) + ".md"), "utf8");
     assert.match(assessmentNote, /Bell states .*priority: high; .*1\/1 scored checks correct/);
