@@ -3,12 +3,13 @@ import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, parseInstructorTo
 import { MathText } from "../components/MathText";
 import "../styles/study.css";
 
-type Method = "explanation" | "worked-example" | "quiz" | "analogy";
+type Method = "explanation" | "worked-example" | "quiz" | "analogy" | "free-recall";
 const studyMethods: Array<{ value: Method; label: string; description: string }> = [
   { value: "explanation", label: "Clear explanation", description: "Build intuition first, then connect the idea to precise terms and a short example." },
   { value: "worked-example", label: "Worked example", description: "Follow a complete solution step by step, then identify the pattern you can reuse." },
   { value: "quiz", label: "Quiz first", description: "Try retrieval before seeing the lesson; the explanation becomes a debrief afterward." },
   { value: "analogy", label: "Use an analogy", description: "Connect the idea to something familiar, including where that comparison stops working." },
+  { value: "free-recall", label: "Free recall", description: "Answer one open question from memory, then compare your own explanation with the reference. Your response is saved but not graded." },
 ];
 
 function studyMethodLabel(method: string) {
@@ -18,6 +19,7 @@ function studyMethodLabel(method: string) {
     case "quiz":
     case "retrieval-practice": return "Quiz first";
     case "analogy": return "Use an analogy";
+    case "free-recall": return "Free recall";
     default: return method.trim() ? method.replaceAll("-", " ") : "Method not recorded";
   }
 }
@@ -51,7 +53,7 @@ interface ChatAnswer { answer: string; followUp: string; sourceBasis: "general-k
 interface PatternEvidence { id: string; conceptTitle: string; response: string; outcome: string; confidence: number | null; hintCount: number; method: string; createdAt: string }
 interface Pattern { id: string; patternKey: string; kind: string; conceptIds: string[]; claim: string; status: string; confidence: number; supportingAttemptIds: string[]; counterexampleAttemptIds: string[]; supportingEvidence: PatternEvidence[]; counterexampleEvidence: PatternEvidence[]; statusRationale: string }
 interface PendingAttempt { id: string; payload: Record<string, unknown> }
-interface StudyAttemptDraft { selected: number | null; confidence: number; hintCount: number; usedOutsideHelp?: boolean; studyTab: "lesson" | "check" }
+interface StudyAttemptDraft { selected: number | null; response?: string; confidence: number; hintCount: number; usedOutsideHelp?: boolean; studyTab: "lesson" | "check" }
 
 function attemptDraftKey(courseId: string, sessionId: string) {
   return `lls-study-draft:${courseId}:${sessionId}`;
@@ -67,7 +69,7 @@ function readAttemptDraft(courseId: string, content: StudyContent): StudyAttempt
     const confidence = [0.25, 0.5, 0.75, 1].includes(parsed.confidence ?? Number.NaN) ? parsed.confidence! : 0.5;
     const hintCount = Number.isInteger(parsed.hintCount) ? Math.max(0, Math.min(content.hints.length, parsed.hintCount!)) : 0;
     const studyTab = parsed.studyTab === "check" || parsed.studyTab === "lesson" ? parsed.studyTab : content.method === "quiz" ? "check" : "lesson";
-    return { selected, confidence, hintCount, usedOutsideHelp: parsed.usedOutsideHelp === true, studyTab };
+    return { selected, response: typeof parsed.response === "string" ? parsed.response.slice(0, 20000) : "", confidence, hintCount, usedOutsideHelp: parsed.usedOutsideHelp === true, studyTab };
   } catch {
     return null;
   }
@@ -102,6 +104,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [method, setMethod] = useState<Method>("explanation");
   const [content, setContent] = useState<StudyContent | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [freeResponse, setFreeResponse] = useState("");
   const [reopenedAttempt, setReopenedAttempt] = useState<StudyAttemptSummary | null>(null);
   const [confidence, setConfidence] = useState(0.5);
   const [hintCount, setHintCount] = useState(0);
@@ -187,8 +190,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       clearAttemptDraft(courseId, content.sessionId);
       return;
     }
-    writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, usedOutsideHelp, studyTab });
-  }, [courseId, content?.sessionId, selected, confidence, hintCount, usedOutsideHelp, studyTab, saved, reopenedAttempt]);
+    writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp, studyTab });
+  }, [courseId, content?.sessionId, selected, freeResponse, confidence, hintCount, usedOutsideHelp, studyTab, saved, reopenedAttempt]);
 
   async function beginStudy(event: React.FormEvent) {
     event.preventDefault();
@@ -200,8 +203,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     const requestStartedAt = Date.now();
     setTopic(requestedTopic.trim());
     setMethod(requestedMethod);
-    setBusy(true); setError(""); setNotice(""); setContent(null); setSelected(null); setReopenedAttempt(null); setSaved(false); setAttemptSaveError(""); pendingAttempt.current = null; setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false);
-    setStudyTab(requestedMethod === "quiz" ? "check" : "lesson");
+    setBusy(true); setError(""); setNotice(""); setContent(null); setSelected(null); setFreeResponse(""); setReopenedAttempt(null); setSaved(false); setAttemptSaveError(""); pendingAttempt.current = null; setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false);
+    setStudyTab(requestedMethod === "quiz" || requestedMethod === "free-recall" ? "check" : "lesson");
     try {
       const generated = await postJson<StudyContent>(`/api/courses/${courseId}/learner/study-session`, { topic: requestedTopic.trim(), method: requestedMethod, ...(sourceMaterialId ? { sourceMaterialId } : {}), ...(assessmentId ? { assessmentId } : {}), ...(reviewSessionId ? { reviewSessionId } : {}) });
       const next = { ...generated, sourceMaterialId: generated.sourceMaterialId ?? sourceMaterialId ?? null };
@@ -225,10 +228,11 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     pendingAttempt.current = null; setAttemptSaveError("");
     const latestAttempt = reopened.attempts?.at(-1) ?? null;
     const draft = latestAttempt ? null : readAttemptDraft(courseId, reopened);
-    setContent(reopened); setTopic(reopened.topic); setMethod(reopened.method); setStudyTab(draft?.studyTab ?? (reopened.method === "quiz" ? "check" : "lesson"));
+    setContent(reopened); setTopic(reopened.topic); setMethod(reopened.method); setStudyTab(draft?.studyTab ?? (reopened.method === "quiz" || reopened.method === "free-recall" ? "check" : "lesson"));
     setReopenedAttempt(latestAttempt);
     const savedOptionIndex = latestAttempt ? reopened.options.indexOf(latestAttempt.response) : -1;
     setSelected(savedOptionIndex >= 0 ? savedOptionIndex : draft?.selected ?? null);
+    setFreeResponse(latestAttempt?.response ?? draft?.response ?? "");
     setSaved(Boolean(latestAttempt));
     setConfidence(latestAttempt?.confidence ?? draft?.confidence ?? 0.5);
     setHintCount(latestAttempt?.hintCount ?? draft?.hintCount ?? 0);
@@ -278,30 +282,35 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   function selectAnswer(index: number) {
     if (!saved && !reopenedAttempt && !pendingAttempt.current) {
       setSelected(index);
-      if (content) writeAttemptDraft(courseId, content.sessionId, { selected: index, confidence, hintCount, usedOutsideHelp, studyTab });
+      if (content) writeAttemptDraft(courseId, content.sessionId, { selected: index, response: freeResponse, confidence, hintCount, usedOutsideHelp, studyTab });
     }
+  }
+
+  function updateFreeResponse(value: string) {
+    setFreeResponse(value);
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: value, confidence, hintCount, usedOutsideHelp, studyTab });
   }
 
   function updateConfidence(value: number) {
     setConfidence(value);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence: value, hintCount, usedOutsideHelp, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence: value, hintCount, usedOutsideHelp, studyTab });
   }
 
   function revealHint() {
     const nextHintCount = Math.min(content?.hints.length ?? 0, hintCount + 1);
     setHintCount(nextHintCount);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount: nextHintCount, usedOutsideHelp, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount: nextHintCount, usedOutsideHelp, studyTab });
   }
 
   function updateOutsideHelp(value: boolean) {
     setUsedOutsideHelp(value);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, usedOutsideHelp: value, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp: value, studyTab });
   }
 
   function selectStudyTab(nextTab: "lesson" | "check") {
     setStudyTab(nextTab);
     if (content && !saved && !reopenedAttempt) {
-      writeAttemptDraft(courseId, content.sessionId, { selected, confidence, hintCount, usedOutsideHelp, studyTab: nextTab });
+      writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp, studyTab: nextTab });
     }
   }
 
@@ -320,16 +329,16 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   async function submitAnswer() {
-    if (!content || selected === null || reopenedAttempt || pendingAttempt.current) return;
+    if (!content || (content.method === "free-recall" ? !freeResponse.trim() : selected === null) || reopenedAttempt || pendingAttempt.current) return;
     const correct = selected === content.answerIndex;
     pendingAttempt.current = {
       id: crypto.randomUUID(),
       payload: {
-        sessionId: content.sessionId, conceptId: content.conceptId, assessmentId: content.assessmentId ?? null, activityType: "recognition", prompt: content.question,
-        response: content.options[selected], reasoning: "", confidence, hintCount,
+        sessionId: content.sessionId, conceptId: content.conceptId, assessmentId: content.assessmentId ?? null, activityType: content.method === "free-recall" ? "explanation" : "recognition", prompt: content.question,
+        response: content.method === "free-recall" ? freeResponse.trim() : content.options[selected!], reasoning: "", confidence, hintCount,
         method: content.method === "quiz" ? "retrieval-practice" : content.method,
-        outcome: correct ? "correct" : "incorrect", sourceRefs: content.sourceMaterialId ? [{ materialId: content.sourceMaterialId }] : [],
-        independence: usedOutsideHelp ? "assisted" : hintCount > 0 ? "hinted" : "independent", rationale: `${correct ? "Selected the validated answer key" : "Answer did not match the validated key"}${usedOutsideHelp ? " with help outside this check" : hintCount ? ` after ${hintCount} hint(s)` : " independently"}; confidence ${Math.round(confidence * 100)}%.`,
+        outcome: content.method === "free-recall" ? "not-graded" : correct ? "correct" : "incorrect", sourceRefs: content.sourceMaterialId ? [{ materialId: content.sourceMaterialId }] : [],
+        independence: usedOutsideHelp ? "assisted" : hintCount > 0 ? "hinted" : "independent", rationale: content.method === "free-recall" ? `Learner submitted a free-recall response for self-comparison; not graded. Confidence ${Math.round(confidence * 100)}%.` : `${correct ? "Selected the validated answer key" : "Answer did not match the validated key"}${usedOutsideHelp ? " with help outside this check" : hintCount ? ` after ${hintCount} hint(s)` : " independently"}; confidence ${Math.round(confidence * 100)}%.`,
       },
     };
     setSaved(false); setAttemptSaveError("");
@@ -374,7 +383,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     setBusy(true); setError("");
     try {
       const next = await postJson<StudyContent>(`/api/courses/${courseId}/learner/study-sessions/${content.sessionId}/next-question`, {});
-      pendingAttempt.current = null; setAttemptSaveError(""); setContent(next); setSelected(null); setReopenedAttempt(null); setSaved(false); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5); setChatAnswer(null); setStudyTab("check");
+      pendingAttempt.current = null; setAttemptSaveError(""); setContent(next); setSelected(null); setFreeResponse(""); setReopenedAttempt(null); setSaved(false); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5); setChatAnswer(null); setStudyTab("check");
       setActiveSessionInUrl(next.sessionId);
       void refreshClassData();
     } catch (err) { setError((err as Error).message); }
@@ -388,11 +397,11 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   function retryCurrentQuestion() {
-    pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setReopenedAttempt(null); setSaved(false); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5); setChatAnswer(null);
+    pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setFreeResponse(""); setReopenedAttempt(null); setSaved(false); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5); setChatAnswer(null);
   }
 
   async function reopenSession(sessionId: string) {
-    setBusy(true); setError(""); pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setSaved(false); setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5);
+    setBusy(true); setError(""); pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setFreeResponse(""); setSaved(false); setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5);
     try {
       const response = await fetch(`/api/courses/${courseId}/learner/study-sessions/${sessionId}`);
       const value = await response.json().catch(() => null);
@@ -629,6 +638,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const sessionSourceTitle = content?.sourceMaterialId
     ? sourceProgress.find(({ materialId }) => materialId === content.sourceMaterialId)?.title
     : undefined;
+  const freeRecall = content?.method === "free-recall";
   const reviewedAnswerCorrect = reopenedAttempt ? reopenedAttempt.outcome === "correct" : selected === content?.answerIndex;
   const reviewedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
   const displayedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
@@ -637,7 +647,9 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const independenceSummary = displayedIndependence === "assisted" ? "outside help recorded" : displayedIndependence === "hinted" ? "in-app hints used" : displayedIndependence === "independent" ? "independent attempt" : "support not recorded";
   const confidenceSummary = displayedConfidence == null ? "confidence not recorded" : `confidence ${Math.round(displayedConfidence * 100)}%`;
   const usedOutsideHelpForAnswer = reopenedAttempt?.independence === "assisted" || (!reopenedAttempt && usedOutsideHelp);
-  const answerFollowUp = !reviewedAnswerCorrect
+  const answerFollowUp = freeRecall
+    ? "Compare your saved response with the reference explanation. This practice is recorded, but it is not graded."
+    : !reviewedAnswerCorrect
     ? reviewedConfidence != null && reviewedConfidence >= 0.75
       ? "You felt confident in this answer. Review the explanation and compare the key distinction with the choice you made."
       : "Review the explanation, then try a different version to reinforce the idea."
@@ -742,23 +754,23 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           <p className="section-kicker">{method === "worked-example" ? "Worked example" : method === "analogy" ? "A helpful analogy" : "Core idea"}</p>
           <h2>{content.topic}</h2><MathText className="lesson-copy" content={content.lesson} />
           {content.example ? <div className="worked-example"><strong>{method === "analogy" ? "Connect it" : "Walkthrough"}</strong><MathText content={content.example} /></div> : null}
-          {method === "quiz" ? <p className="quiz-first-note">You started with retrieval. Review the explanation after trying the check.</p> : null}
+          {method === "quiz" || method === "free-recall" ? <p className="quiz-first-note">You started with retrieval. Review the explanation after trying the check.</p> : null}
         </section>
         <section className="check-card" role="tabpanel" id="study-panel-check" aria-labelledby="study-tab-check" hidden={studyTab !== "check"}>
-          <div><p className="section-kicker">Quick knowledge check</p><MathText className="check-question" content={content.question} /></div>
+          <div><p className="section-kicker">{freeRecall ? "Closed-book free recall" : "Quick knowledge check"}</p><MathText className="check-question" content={content.question} />{freeRecall && !saved && !reopenedAttempt ? <small>Write what you can recall, then save it to reveal the reference explanation. It will be tracked as ungraded recall.</small> : null}</div>
           {!saved && !reopenedAttempt && !pendingAttempt.current && content.hints.length ? <div className="study-hints"><div><strong>Need a hint?</strong><small>Hints are counted as part of this attempt.</small></div>{content.hints.slice(0,hintCount).map((hint,index) => <p key={`${index}-${hint}`}><span>Hint {index+1}</span><MathText inline content={hint} /></p>)}{hintCount < content.hints.length ? <button type="button" className="button-secondary" onClick={revealHint}>Show hint {hintCount + 1}</button> : null}</div> : null}
           {!saved && !reopenedAttempt ? <label className="outside-help-input"><input type="checkbox" checked={usedOutsideHelp} disabled={savingAttempt || busy || Boolean(pendingAttempt.current)} onChange={(event) => updateOutsideHelp(event.target.checked)} /><span><strong>I used help outside these hints</strong><small>For example, notes, a textbook, or another person.</small></span></label> : null}
           {reopenedAttempt ? <p className="reopened-attempt-note" role="status">Showing your saved {reopenedAttempt.outcome} response from {new Date(reopenedAttempt.createdAt).toLocaleString()}. Choose “Try this exact question again” below if you want to make another attempt.</p> : null}
-          <div className="answer-options" role="group" aria-label="Answer choices">{content.options.map((option,index) => {
+          {freeRecall ? <label className="free-recall-response">Your explanation<textarea maxLength={20000} rows={5} value={freeResponse} disabled={saved || Boolean(reopenedAttempt) || savingAttempt || Boolean(pendingAttempt.current)} onChange={(event) => updateFreeResponse(event.target.value)} placeholder="Explain the idea from memory. Include the key terms, relationships, or steps you remember." /></label> : <div className="answer-options" role="group" aria-label="Answer choices">{content.options.map((option,index) => {
             const isCorrect = index === content.answerIndex;
             const className = saved ? selected === index ? isCorrect ? "answer-option answer-option--correct" : "answer-option answer-option--wrong" : isCorrect ? "answer-option answer-option--correct" : "answer-option"
               : selected === index ? "answer-option answer-option--selected" : "answer-option";
             return <button type="button" key={`${index}-${option}`} disabled={saved || savingAttempt || Boolean(reopenedAttempt) || Boolean(pendingAttempt.current)} aria-pressed={selected === index} onClick={() => selectAnswer(index)} className={className}><span>{String.fromCharCode(65+index)}</span><MathText inline content={option} /></button>;
-          })}</div>
+          })}</div>}
           {!saved && !reopenedAttempt ? <label className="confidence-input">How confident are you?<select value={confidence} onChange={(event) => updateConfidence(Number(event.target.value))}><option value={0.25}>Low</option><option value={0.5}>Somewhat</option><option value={0.75}>Confident</option><option value={1}>Very confident</option></select></label> : null}
-          {!saved && !reopenedAttempt ? <button className="button-primary check-submit" type="button" disabled={selected === null || savingAttempt || busy} onClick={() => void submitAnswer()}>{savingAttempt ? "Saving answer…" : "Check answer"}</button> : null}
-          {saved ? <><div className={reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong><MathText content={content.feedback} /><small>{`Attempt saved · ${independenceSummary} · ${confidenceSummary} · ${displayedHintCount} hint${displayedHintCount === 1 ? "" : "s"}.`}</small></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>Your answer was checked, but it hasn’t been saved to your progress yet: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => void nextQuestion()}>{busy ? "Preparing…" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2 ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
-          <details className="lesson-recap"><summary>Show answer explanation</summary><MathText content={content.feedback} /></details>
+          {!saved && !reopenedAttempt ? <button className="button-primary check-submit" type="button" disabled={freeRecall ? !freeResponse.trim() || savingAttempt || busy : selected === null || savingAttempt || busy} onClick={() => void submitAnswer()}>{savingAttempt ? "Saving response…" : freeRecall ? "Save response & compare" : "Check answer"}</button> : null}
+          {saved ? <><div className={freeRecall ? "answer-feedback" : reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{freeRecall ? "Reference explanation" : reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong>{freeRecall && reopenedAttempt?.response ? <div className="free-recall-saved"><strong>Your saved response</strong><MathText content={reopenedAttempt.response} /></div> : freeRecall && freeResponse ? <div className="free-recall-saved"><strong>Your response</strong><MathText content={freeResponse} /></div> : null}<MathText content={content.feedback} /><small>{freeRecall ? "Attempt saved · not graded · " : "Attempt saved · "}{independenceSummary} · {confidenceSummary} · {displayedHintCount} hint{displayedHintCount === 1 ? "" : "s"}.</small></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>The {freeRecall ? "response" : "answer"} could not be saved to your progress: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => void nextQuestion()}>{busy ? "Preparing…" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!freeRecall && (!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2) ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
+          {(!freeRecall || saved || reopenedAttempt) ? <details className="lesson-recap"><summary>Show answer explanation</summary><MathText content={content.feedback} /></details> : null}
         </section>
       </div>
       <aside className="study-chat"><p className="section-kicker">Side chat</p><h2>Clarify a step.</h2><p>Ask a follow-up without losing your place in the lesson.</p><form onSubmit={askClarification}><textarea value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} placeholder="Which part should we unpack?" /><button className="button-secondary" disabled={chatBusy || !chatQuestion.trim()}>{chatBusy ? "Thinking…" : "Ask Codex"}</button></form>{chatAnswer ? <div className="chat-answer"><MathText content={chatAnswer.answer} />{chatAnswer.followUp ? <small>{chatAnswer.followUp}</small> : null}<span>{chatAnswer.sourceBasis === "general-knowledge" ? "General knowledge · not course-verified" : "Course-grounded"}</span></div> : <div className="chat-prompt">Try: “Can you explain why that step works?”</div>}<div className="session-recap"><span>Learning method</span><strong>{studyMethodLabel(content.method)}</strong><span>One check does not establish mastery. More evidence builds your profile.</span></div></aside>

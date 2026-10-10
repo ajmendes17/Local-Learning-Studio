@@ -253,6 +253,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       "worked-example": "Lead with a complete worked example, show why each step is valid, then identify the reusable pattern. Keep the learner's practice check separate.",
       quiz: "Use retrieval first: make the knowledge check test the central idea before revealing the lesson. Keep the lesson as a concise debrief that the learner can open after attempting the check.",
       analogy: "Choose a concrete analogy that maps the important parts of the concept, state where the analogy breaks, then connect it back to precise terms.",
+      "free-recall": "Use closed-book free recall: ask one open-ended question that requires the learner to explain the core concept in their own words. Do not make the question multiple choice. Keep the answer explanation hidden until the learner submits a short response; after submission, show a concise reference explanation they can compare against. Do not claim the response was graded.",
     } satisfies Record<typeof parsed.data.method, string>;
     try {
       const result = await options.codex.run("compose-study-lesson", [
@@ -262,7 +263,9 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           : "Teach from reliable general knowledge when no course passages are supplied. Clearly mark that content as not verified against the learner's course.",
         assessment ? "Focus this session on the selected learner-provided assessment topic. Preserve the instructor's wording and do not expand into unrelated topics." : "",
         reviewSession ? "This is a focused remediation follow-up. Use the saved attempt evidence to address the learner's specific uncertainty. For a miss or unscored response, explain the likely gap briefly before a different example; for a low-confidence correct response, test transfer. Do not repeat the old question or reveal the new answer in advance." : "",
-        "Return one concise lesson, an optional worked example, one four-option knowledge check, the correct option index, concise immediate feedback, a clarification answer, and one or two progressive hints that do not reveal the answer.",
+        parsed.data.method === "free-recall"
+          ? "Return one concise lesson, an optional worked example, one open-ended free-recall question, a concise reference explanation in feedback, a clarification answer, and one or two progressive hints that do not reveal the answer. The contract also requires options and an answer index; provide neutral placeholders for those fields because the free-recall interface will not display or score them."
+          : "Return one concise lesson, an optional worked example, one four-option knowledge check, the correct option index, concise immediate feedback, a clarification answer, and one or two progressive hints that do not reveal the answer.",
         "Write mathematical notation with Markdown math delimiters: use $...$ inline; for display equations put $$ on its own line, the equation on following line(s), and the closing $$ on its own line. For quantum notation use supported LaTeX such as \\ket{\\psi}, \\bra{\\phi}, and \\braket{\\phi|\\psi}; do not leave raw TeX commands outside math delimiters.",
         methodDirections[parsed.data.method],
         "Never say the learner has mastered the topic based on this generated lesson.",
@@ -306,7 +309,9 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           .slice(0, 24)
         : [];
       const result = await options.codex.run("generate-adaptive-practice", [
-        "Use $generate-adaptive-practice to create exactly one new multiple-choice question for this same concept.",
+        session.method === "free-recall"
+          ? "Use $generate-adaptive-practice to create one new open-ended free-recall prompt for this same concept. Ask the learner to explain or retrieve the idea in their own words; the learner will submit text and compare it with a reference explanation, so do not make the prompt multiple choice."
+          : "Use $generate-adaptive-practice to create exactly one new multiple-choice question for this same concept.",
         "Use the attempt history to target likely uncertainty. Change the surface form or reasoning path; do not repeat any prior question or simply paraphrase its choices.",
         "Return a compact question, 2 to 6 plausible options, a validated correct option index, concise corrective feedback, and up to two progressive hints that do not reveal the answer.",
         sourceMaterial

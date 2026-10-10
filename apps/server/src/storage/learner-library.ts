@@ -162,8 +162,11 @@ export class LearnerLibrary {
   saveStudySession(courseId: string, conceptId: string, content: unknown) {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
+    // Keep compatibility with databases whose CHECK constraint predates free-recall;
+    // the canonical method is preserved in content_json and used by readers below.
+    const storedMethod = (content as any).method === "free-recall" ? "quiz" : (content as any).method;
     this.database.prepare(`INSERT INTO study_sessions (id,course_id,concept_id,topic,method,content_json,created_at)
-      VALUES (?,?,?,?,?,?,?)`).run(id, courseId, conceptId, (content as any).topic, (content as any).method, JSON.stringify(content), createdAt);
+      VALUES (?,?,?,?,?,?,?)`).run(id, courseId, conceptId, (content as any).topic, storedMethod, JSON.stringify(content), createdAt);
     return { sessionId: id, createdAt, ...(content as object) };
   }
 
@@ -184,7 +187,7 @@ export class LearnerLibrary {
   }
 
   listStudySessions(courseId: string, limit = 30) {
-    return this.database.prepare(`SELECT s.id AS sessionId,s.concept_id AS conceptId,s.topic,s.method,s.created_at AS createdAt,
+    return this.database.prepare(`SELECT s.id AS sessionId,s.concept_id AS conceptId,s.topic,COALESCE(json_extract(s.content_json,'$.method'),s.method) AS method,s.created_at AS createdAt,
       COUNT(a.id) AS attemptCount,SUM(CASE WHEN a.outcome='correct' THEN 1 ELSE 0 END) AS correctCount,
       (SELECT outcome FROM study_attempts WHERE session_id=s.id ORDER BY created_at DESC, rowid DESC LIMIT 1) AS latestOutcome
       FROM study_sessions s LEFT JOIN study_attempts a ON a.session_id=s.id

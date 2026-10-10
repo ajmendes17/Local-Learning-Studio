@@ -537,6 +537,7 @@ test("study methods send distinct learning directions", async () => {
     ["worked-example", /complete worked example/],
     ["quiz", /Use retrieval first/],
     ["analogy", /concrete analogy/],
+    ["free-recall", /closed-book free recall/],
   ] as const;
   for (const [method, direction] of methods) {
     const response = await app.inject({
@@ -551,6 +552,54 @@ test("study methods send distinct learning directions", async () => {
   assert.equal(prompts.length, methods.length);
   await app.close();
   await rm(root, { recursive: true });
+});
+
+test("free recall saves the learner response as ungraded and keeps the method in history", async () => {
+  const { app, root, prompts } = await createAppWithStudyModel();
+  try {
+    const course = await app.inject({ method: "POST", url: "/api/courses", payload: { title: "Free recall check" } });
+    const courseId = course.json().id as string;
+    const vaultPath = join(root, "vault");
+    await mkdir(vaultPath, { recursive: true });
+    const vaultConfig = await app.inject({ method: "POST", url: "/api/obsidian/config", payload: { vaultPath } });
+    assert.equal(vaultConfig.statusCode, 200, vaultConfig.body);
+    const study = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/study-session`,
+      payload: { topic: "Bell states", method: "free-recall" },
+    });
+    assert.equal(study.statusCode, 200, study.body);
+    assert.equal(study.json().method, "free-recall");
+    assert.match(prompts.at(-1) ?? "", /open-ended free-recall question/);
+    const saved = await app.inject({
+      method: "POST", url: `/api/courses/${courseId}/learner/attempts`,
+      payload: {
+        sessionId: study.json().sessionId, conceptId: study.json().conceptId,
+        activityType: "explanation", prompt: study.json().question,
+        response: "I recall that Bell states are entangled two-qubit states.", reasoning: "",
+        confidence: 0.5, hintCount: 0, method: "free-recall", outcome: "not-graded",
+        sourceRefs: [], independence: "independent", rationale: "Saved for self-comparison; not graded.",
+      },
+    });
+    assert.equal(saved.statusCode, 201, saved.body);
+    const reopened = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions/${study.json().sessionId}` });
+    assert.equal(reopened.statusCode, 200, reopened.body);
+    assert.equal(reopened.json().method, "free-recall");
+    assert.equal(reopened.json().attempts[0].response, "I recall that Bell states are entangled two-qubit states.");
+    assert.equal(reopened.json().attempts[0].outcome, "not-graded");
+    const history = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/study-sessions` });
+    assert.equal(history.json()[0].method, "free-recall");
+    const progress = await app.inject({ method: "GET", url: `/api/courses/${courseId}/learner/method-progress` });
+    const recall = progress.json().find((item: { method: string }) => item.method === "free-recall");
+    assert.deepEqual([recall.attemptCount, recall.scoredAttemptCount, recall.correctCount], [1, 0, 0]);
+    const exported = await app.inject({ method: "POST", url: `/api/courses/${courseId}/obsidian/export` });
+    assert.equal(exported.statusCode, 200, exported.body);
+    const courseNote = await readFile(join(vaultPath, exported.json().courseFolder, "Course.md"), "utf8");
+    assert.match(courseNote, /Free recall:/);
+    assert.match(courseNote, /1 unscored/);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true });
+  }
 });
 
 test("quiz study, saved answer, method progress, and Obsidian export work together in a disposable class", async () => {
