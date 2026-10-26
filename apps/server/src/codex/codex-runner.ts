@@ -30,6 +30,12 @@ export interface CodexRunResult<T> {
   model: string;
   startedAt: string;
   durationMs: number;
+  timing?: {
+    queueWaitMs: number;
+    setupMs: number;
+    executionMs: number;
+    decodeMs: number;
+  };
   usage?: CodexTokenUsage | null;
   output: T;
 }
@@ -124,7 +130,7 @@ export class CodexRunner {
   private queue: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: CodexRunnerOptions) {
-    this.command = options.command ?? "codex";
+    this.command = options.command ?? process.env.CODEX_CLI_PATH ?? "codex";
     this.prefixArgs = options.prefixArgs ?? [];
     this.timeoutMs = options.timeoutMs ?? 120_000;
     this.modelRouter = options.modelRouter ?? new CodexModelRouter();
@@ -175,17 +181,19 @@ export class CodexRunner {
   }
 
   run<T>(task: CodexTask, prompt: string, outputSchema: z.ZodType<T>) {
-    return this.enqueue(() => this.runNow(task, prompt, outputSchema));
+    return this.enqueue((queueWaitMs) => this.runNow(task, prompt, outputSchema, queueWaitMs));
   }
 
   private async runNow<T>(
     task: CodexTask,
     prompt: string,
     outputSchema: z.ZodType<T>,
+    queueWaitMs: number,
   ): Promise<CodexRunResult<T>> {
     const started = Date.now();
     const startedAt = new Date(started).toISOString();
     const model = this.modelRouter.modelFor(task);
+    const setupStarted = Date.now();
     const runDirectory = await mkdtemp(join(tmpdir(), "learning-studio-codex-"));
     const schemaPath = join(runDirectory, "output-schema.json");
     const outputPath = join(runDirectory, "output.json");
@@ -196,6 +204,8 @@ export class CodexRunner {
         JSON.stringify(z.toJSONSchema(outputSchema), null, 2),
         "utf8",
       );
+      const setupMs = Date.now() - setupStarted;
+      const executionStarted = Date.now();
       const result = await this.execute(
         [
           "exec",
@@ -216,6 +226,7 @@ export class CodexRunner {
         prompt,
         this.timeoutMs,
       );
+      const executionMs = Date.now() - executionStarted;
 
       if (result.exitCode !== 0) {
         const eventDiagnostic = diagnosticMessageFromEvents(result.stdout);
@@ -228,6 +239,7 @@ export class CodexRunner {
         );
       }
 
+      const decodeStarted = Date.now();
       let rawOutput: string;
       try {
         rawOutput = await readFile(outputPath, "utf8");
@@ -244,6 +256,12 @@ export class CodexRunner {
           model,
           startedAt,
           durationMs: Date.now() - started,
+          timing: {
+            queueWaitMs,
+            setupMs,
+            executionMs,
+            decodeMs: Date.now() - decodeStarted,
+          },
           usage: tokenUsageFromEvents(result.stdout),
           output: outputSchema.parse(JSON.parse(rawOutput)),
         };
@@ -259,15 +277,16 @@ export class CodexRunner {
     }
   }
 
-  private async enqueue<T>(work: () => Promise<T>): Promise<T> {
+  private async enqueue<T>(work: (queueWaitMs: number) => Promise<T>): Promise<T> {
     const previous = this.queue;
+    const queuedAt = Date.now();
     let release!: () => void;
     this.queue = new Promise<void>((resolve) => {
       release = resolve;
     });
     await previous;
     try {
-      return await work();
+      return await work(Date.now() - queuedAt);
     } finally {
       release();
     }

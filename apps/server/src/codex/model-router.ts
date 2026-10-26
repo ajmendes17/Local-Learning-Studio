@@ -18,6 +18,7 @@ const taskTiers: Record<CodexTask, keyof CodexModels> = {
   "plan-remediation": "terra",
   "review-learning-patterns": "terra",
   "audit-learning-artifact": "sol",
+  "reconcile-assessments": "sol",
 };
 
 export function configuredCodexModels(

@@ -3,13 +3,15 @@ import type {
   CourseMaterial,
   CourseLearningArtifactsResponse,
   LearnerProfileResponse,
+  AssessmentReconciliationResponse,
 } from "@local-learning-studio/contracts";
 import type { LearningRunInfo } from "../lib/learning-run-history";
 import { AcceptedStructureDiagram } from "./AcceptedStructureDiagram";
 import { MathText } from "./MathText";
 import type { ApiErrorInfo } from "../lib/api";
+import { useState } from "react";
 
-export type LearningAction = "analyzing" | "mapping" | "accepting" | null;
+export type LearningAction = "analyzing" | "mapping" | "accepting" | "reconciling" | "merging" | null;
 
 interface CourseMapPanelProps {
   artifacts: CourseLearningArtifactsResponse | null;
@@ -18,6 +20,7 @@ interface CourseMapPanelProps {
   learnerAssessments?: LearnerProfileResponse["assessments"];
   codex: CodexStatusResponse | null;
   readySourceCount: number;
+  assessmentCount: number;
   materials: CourseMaterial[];
   action: LearningAction;
   run: LearningRunInfo | null;
@@ -26,6 +29,9 @@ interface CourseMapPanelProps {
   onAnalyze: (regenerate: boolean) => Promise<void>;
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAccept: () => Promise<void>;
+  reconciliation: AssessmentReconciliationResponse | null;
+  onReconcile: () => Promise<void>;
+  onMergeAssessmentNotes: (canonicalRecordKey: string, duplicateRecordKeys: string[]) => Promise<void>;
   onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string, method?: "quiz") => void;
   onStudyMaterial: (topic: string, materialId: string) => void;
 }
@@ -80,6 +86,7 @@ export function CourseMapPanel({
   learnerAssessments = [],
   codex,
   readySourceCount,
+  assessmentCount,
   materials,
   action,
   run,
@@ -88,9 +95,15 @@ export function CourseMapPanel({
   onAnalyze,
   onBuildMap,
   onAccept,
+  reconciliation,
+  onReconcile,
+  onMergeAssessmentNotes,
   onStudyTopic,
   onStudyMaterial,
 }: CourseMapPanelProps) {
+  const [mergeDecisions, setMergeDecisions] = useState<Record<string, "merged" | "kept">>({});
+  const [mergeBusy, setMergeBusy] = useState<string | null>(null);
+  const [mergeError, setMergeError] = useState<string | null>(null);
   const classification = artifacts?.classification ?? null;
   const courseMap = artifacts?.courseMap ?? null;
   const classificationCurrent = artifacts?.classificationCurrent ?? false;
@@ -98,6 +111,9 @@ export function CourseMapPanel({
   const codexReady = codex?.ready ?? false;
   const busy = action !== null;
   const mapAccepted = courseMapCurrent && courseMap?.status === "accepted";
+  const supportedCount = reconciliation?.topicFindings.filter(({ status }) => status === "directly-supported").length ?? 0;
+  const unsupportedCount = reconciliation?.topicFindings.filter(({ status }) => status === "contradicted" || status === "unsupported").length ?? 0;
+  const scheduledCount = reconciliation?.topicFindings.filter(({ status }) => status === "scheduled" || status === "plausible-unverified").length ?? 0;
 
   return (
     <section className="learning-map" aria-labelledby="learning-map-title">
@@ -177,6 +193,38 @@ export function CourseMapPanel({
       {runHistory.length ? <details className="learning-run-history"><summary>Recent analysis runs ({runHistory.length})</summary><ol>{runHistory.map((item) => <li key={item.operationId}><div><strong>{item.phase === "classification" ? "Source analysis" : "Course map"}</strong><span>{item.status === "running" ? "Interrupted or still running" : item.status} · {item.model ?? "Model not reported"} · {new Date(item.startedAt).toLocaleString()}</span></div><p>{item.usage ? `${item.usage.inputTokens.toLocaleString()} input · ${item.usage.cachedInputTokens.toLocaleString()} cached · ${item.usage.outputTokens.toLocaleString()} output tokens` : "No token usage reported"}{item.durationMs != null ? ` · ${(item.durationMs / 1000).toFixed(1)}s` : ""}</p>{item.promptCharacters != null && item.sourceStats ? <small>Prompt {item.promptCharacters.toLocaleString()} chars · {item.sourceStats.materialCount} sources · {item.sourceStats.passageCount} passages · {item.sourceStats.characterCount.toLocaleString()} source chars · {item.omittedPassageCount ?? 0} omitted</small> : null}</li>)}</ol></details> : null}
 
       {error ? <div className="map-error" role="alert"><p>{error.error}</p>{error.diagnostics ? <details className="map-error__diagnostics" open><summary>Inspect validation details</summary><p>These checks compare the generated response with the supported structure and the exact course evidence supplied for this run.</p><dl>{Object.entries(error.diagnostics).map(([key, value]) => <div key={key}><dt>{key.replaceAll(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())}</dt><dd>{diagnosticText(value)}</dd></div>)}</dl></details> : null}</div> : null}
+      <section className="assessment-reconciliation" aria-labelledby="assessment-reconciliation-title">
+        <div className="assessment-reconciliation__heading">
+          <div><span className="map-action-card__label">Assessment check</span><h3 id="assessment-reconciliation-title">Compare exam records with course sources</h3><p>Find duplicate exam entries and see which topics are supported by a review or only appear in the schedule. Accepted merges keep one note, preserve personal notes, and archive duplicate snapshots in the vault.</p></div>
+          <button type="button" className="button-secondary" disabled={!codexReady || busy || readySourceCount === 0 || assessmentCount === 0} onClick={() => void onReconcile()}>{action === "reconciling" ? "Comparing sources…" : reconciliation ? "Compare again" : "Reconcile assessments"}</button>
+        </div>
+        {assessmentCount === 0 ? <p className="assessment-reconciliation__hint">Add an exam or assessment to the course map first.</p> : null}
+        {reconciliation ? <div className="assessment-reconciliation__result" aria-live="polite">
+          <div className={`assessment-reconciliation__dashboard assessment-reconciliation__dashboard--${reconciliation.accuracyGrade.toLowerCase()}`}>
+            <div className="assessment-reconciliation__grade"><span>Map accuracy</span><strong>{reconciliation.accuracyGrade}</strong></div>
+            <div className="assessment-reconciliation__metric assessment-reconciliation__metric--supported"><strong>{supportedCount}</strong><span>Supported</span></div>
+            <div className="assessment-reconciliation__metric assessment-reconciliation__metric--scheduled"><strong>{scheduledCount}</strong><span>Scheduled / uncertain</span></div>
+            <div className="assessment-reconciliation__metric assessment-reconciliation__metric--unsupported"><strong>{unsupportedCount}</strong><span>Unsupported / contradicted</span></div>
+          </div>
+          <p className="assessment-reconciliation__grade-rationale">{reconciliation.gradeRationale}</p>
+          <h4>Assessment records</h4>
+          {reconciliation.assessmentGroups.map((group, index) => {
+            const groupKey = group.recordKeys.join("|");
+            const obsidianRecords = group.recordKeys.map((key) => reconciliation.recordIndex.find((record) => record.recordKey === key)).filter((record) => record?.kind === "obsidian-note");
+            const canonicalSlug = group.canonicalTitle.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+            const canonical = obsidianRecords.find((record) => record?.filename?.startsWith(`${canonicalSlug}--course-`)) ?? obsidianRecords[0];
+            const duplicates = obsidianRecords.filter((record) => record && record.recordKey !== canonical?.recordKey);
+            return <article className={`assessment-reconciliation__record ${duplicates.length && group.duplicateConfidence !== "not-duplicates" ? "assessment-reconciliation__record--duplicate" : ""}`} key={`${group.canonicalTitle}-${index}`}><strong>{group.canonicalTitle}</strong><span>{group.duplicateConfidence === "not-duplicates" ? "Separate records" : `${group.duplicateConfidence} confidence they describe the same assessment`}</span><p>{group.recordKeys.map((key) => reconciliation.recordIndex.find((record) => record.recordKey === key)?.title ?? key).join(" · ")}: {group.rationale}</p>{duplicates.length ? mergeDecisions[groupKey] === "merged" ? <small className="assessment-reconciliation__decision assessment-reconciliation__decision--accepted">One note kept; duplicate snapshots archived and personal notes preserved.</small> : mergeDecisions[groupKey] === "kept" ? <small className="assessment-reconciliation__decision assessment-reconciliation__decision--denied">Kept as separate notes.</small> : <div className="assessment-reconciliation__actions"><button type="button" className="assessment-reconciliation__accept" disabled={busy || mergeBusy !== null} onClick={async () => { if (!canonical?.recordKey) return; setMergeBusy(groupKey); setMergeError(null); try { await onMergeAssessmentNotes(canonical.recordKey, duplicates.map((record) => record!.recordKey)); setMergeDecisions((current) => ({ ...current, [groupKey]: "merged" })); } catch (error) { setMergeError((error as Error).message); } finally { setMergeBusy(null); } }}>{mergeBusy === groupKey ? "Combining notes…" : `Accept · keep “${group.canonicalTitle}”`}</button><button type="button" className="assessment-reconciliation__deny" disabled={busy || mergeBusy !== null} onClick={() => setMergeDecisions((current) => ({ ...current, [groupKey]: "kept" }))}>Keep separate</button></div> : null}</article>;
+          })}
+          {mergeError ? <p className="map-error" role="alert">{mergeError}</p> : null}
+          <h4>Topic evidence</h4>
+          <ul className="assessment-reconciliation__topics">{reconciliation.topicFindings.map((finding, index) => <li className={`assessment-reconciliation__topic assessment-reconciliation__topic--${finding.status}`} key={`${finding.topic}-${index}`}><div><strong>{finding.topic}</strong><span>{finding.status.replaceAll("-", " ")}</span></div><p>{finding.explanation}</p><small className="assessment-reconciliation__citations">{finding.examEvidence.length ? `Review evidence: ${finding.examEvidence.join(", ")}` : "No direct exam-review evidence."}{finding.scheduleEvidence.length ? ` · Schedule evidence: ${finding.scheduleEvidence.join(", ")}` : ""}</small></li>)}</ul>
+          {reconciliation.clarifications.length ? <><h4>Still unclear</h4><ul>{reconciliation.clarifications.map((item, index) => <li key={index}>{item}</li>)}</ul></> : null}
+          {reconciliation.cleanupSuggestions.length ? <><h4>Suggested cleanup</h4><ul>{reconciliation.cleanupSuggestions.map((item, index) => <li key={index}>{item}</li>)}</ul></> : null}
+          <details><summary>Sources used</summary><ul>{reconciliation.sourceIndex.map((source) => <li key={source.sourceKey}>{source.sourceKey} · {source.materialName} · {source.location}</li>)}</ul></details>
+          <small>Generated by {reconciliation.model} · {new Date(reconciliation.createdAt).toLocaleString()}</small>
+        </div> : null}
+      </section>
       {!codexReady && codex ? (
         <div className="map-notice">
           <strong>Connect Codex before running analysis.</strong>
@@ -279,7 +327,7 @@ export function CourseMapPanel({
             </span>
           </div>
 
-          {mapAccepted ? <AcceptedStructureDiagram proposal={courseMap.payload} materials={materials} learnerProgress={learnerProgress} sourceProgress={sourceProgress} learnerAssessments={learnerAssessments} onStudyTopic={onStudyTopic} /> : <div className="map-module-list">
+          {mapAccepted ? <AcceptedStructureDiagram proposal={courseMap.payload} materials={materials} learnerProgress={learnerProgress} sourceProgress={sourceProgress} learnerAssessments={learnerAssessments} onStudyTopic={onStudyTopic} onStudyMaterial={onStudyMaterial} /> : <div className="map-module-list">
             {[...courseMap.payload.modules]
               .sort((left, right) => left.position - right.position)
               .map((module, index) => (

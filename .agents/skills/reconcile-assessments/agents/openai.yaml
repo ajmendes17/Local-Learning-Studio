@@ -1,0 +1,6 @@
+interface:
+  display_name: "Reconcile Assessments"
+  short_description: "Check exam scope and find duplicate records"
+  default_prompt: "Use $reconcile-assessments to compare this exam's notes, schedule, and Obsidian entries."
+policy:
+  allow_implicit_invocation: false

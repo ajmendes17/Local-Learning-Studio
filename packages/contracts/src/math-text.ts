@@ -72,6 +72,7 @@ export function normalizeMathText(input: string, options: { inline?: boolean } =
     }
     if (!inMath) return part.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
     return part
+      .replace(/\r(angle)(?![A-Za-z])/g, "\\rangle")
       .replace(/\rho(?![A-Za-z])/g, "\\rho")
       .replace(/\right(?![A-Za-z])/g, "\\right")
       .replace(/\theta(?![A-Za-z])/g, "\\theta")
@@ -85,6 +86,6 @@ export function normalizeMathText(input: string, options: { inline?: boolean } =
       .replace(/\n(abla)(?![A-Za-z])/g, "\\nabla")
       .replace(/\n(u)(?![A-Za-z])/g, "\\nu")
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-      .replace(/\\\\(?=[A-Za-z])/g, "\\");
+      .replace(/\\\\(?=(?:rho|right|theta|times|tfrac|braket|bra|beta|begin|frac|nabla|nu)\b)/g, "\\");
   }).join("");
 }

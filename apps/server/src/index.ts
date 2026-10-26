@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
-import { buildApp } from "./app.js";
+import { join } from "node:path";
+import { buildApp, findProjectRoot } from "./app.js";
 
-if (existsSync(".env")) loadEnvFile();
+const envFile = join(findProjectRoot(), ".env");
+if (existsSync(envFile)) loadEnvFile(envFile);
 
 const port = Number.parseInt(process.env.PORT ?? "4318", 10);
 const host = process.env.HOST ?? "127.0.0.1";

@@ -37,7 +37,7 @@ export interface AppOptions {
   codex?: LearningCodexClient;
 }
 
-function findProjectRoot() {
+export function findProjectRoot() {
   let current = dirname(fileURLToPath(import.meta.url));
   const filesystemRoot = parse(current).root;
 
@@ -122,7 +122,7 @@ export function buildApp(options: AppOptions = {}) {
     sourceLibrary,
   });
   void app.register(registerCodexRoutes, { codex });
-  void app.register(registerLearningRoutes, { learning });
+  void app.register(registerLearningRoutes, { learning, vault: obsidian });
   app.get<{ Params: { courseId: string } }>("/api/courses/:courseId/learning-operations", async (request, reply) => {
     const courseId = request.params.courseId;
     if (!library.getCourseDetail(courseId)) return reply.code(404).send({ error: "Course not found." });

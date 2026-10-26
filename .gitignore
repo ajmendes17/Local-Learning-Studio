@@ -10,3 +10,4 @@ data/*
 courses/*
 !courses/.gitkeep
 !data/.gitkeep
+.playwright-cli/

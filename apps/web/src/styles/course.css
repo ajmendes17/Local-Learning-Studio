@@ -638,6 +638,60 @@
   margin-top: 18px;
 }
 
+.assessment-reconciliation {
+  margin-top: 18px;
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+}
+.assessment-reconciliation__heading { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.assessment-reconciliation__heading h3 { margin:7px 0; font-size:1.05rem; }
+.assessment-reconciliation__heading p,.assessment-reconciliation__hint { max-width:680px; margin:0; color:var(--muted); font-size:.78rem; line-height:1.55; }
+.assessment-reconciliation__result { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); color:var(--ink); font-size:.82rem; line-height:1.55; }
+.assessment-reconciliation__result h4 { margin:18px 0 8px; }
+.assessment-reconciliation__result article { display:grid; grid-template-columns:minmax(130px, .5fr) 1fr; gap:4px 16px; padding:10px 0; border-bottom:1px solid var(--line); }
+.assessment-reconciliation__dashboard { display:grid; grid-template-columns:1.1fr repeat(3,minmax(110px,1fr)); gap:10px; padding:12px; border:1px solid var(--line); border-radius:9px; background:#f4f1e9; }
+.assessment-reconciliation__grade,.assessment-reconciliation__metric { display:flex; align-items:center; gap:10px; min-width:0; padding:9px 12px; border-radius:7px; }
+.assessment-reconciliation__grade { color:#873f38; background:#f8e5df; }
+.assessment-reconciliation__grade strong { font-size:1.45rem; line-height:1; }
+.assessment-reconciliation__grade span,.assessment-reconciliation__metric span { font-size:.68rem; font-weight:700; line-height:1.3; }
+.assessment-reconciliation__dashboard--a .assessment-reconciliation__grade,.assessment-reconciliation__dashboard--b .assessment-reconciliation__grade { color:#356047; background:#deece2; }
+.assessment-reconciliation__dashboard--c .assessment-reconciliation__grade,.assessment-reconciliation__dashboard--d .assessment-reconciliation__grade,.assessment-reconciliation__dashboard--f .assessment-reconciliation__grade { color:#873f38; background:#f8e5df; }
+.assessment-reconciliation__metric { display:grid; grid-template-columns:auto 1fr; color:#356047; background:#deece2; }
+.assessment-reconciliation__metric strong { font-size:1.15rem; }
+.assessment-reconciliation__metric--scheduled { color:#6f5a32; background:#f4ead0; }
+.assessment-reconciliation__metric--unsupported { color:#873f38; background:#f8e5df; }
+.assessment-reconciliation__grade-rationale { margin:10px 2px 16px; color:var(--muted); font-size:.76rem; }
+.assessment-reconciliation__result article p { grid-column:1/-1; margin:0; color:var(--muted); }
+.assessment-reconciliation__record--duplicate { margin:6px 0; padding:11px 12px!important; border:1px solid #c5d8c9!important; border-radius:7px; background:#f0f6f0; }
+.assessment-reconciliation__decision { grid-column:1/-1; font-weight:700; }
+.assessment-reconciliation__decision--accepted { color:#356047!important; }
+.assessment-reconciliation__decision--denied { color:#873f38!important; }
+.assessment-reconciliation__actions { grid-column:1/-1; display:flex; align-items:center; gap:14px; margin-top:7px; }
+.assessment-reconciliation__accept,.assessment-reconciliation__deny { min-height:38px; padding:0 13px; border:1px solid transparent; border-radius:6px; font-size:.68rem; font-weight:750; cursor:pointer; transition:background-color .15s ease,border-color .15s ease,transform .15s ease; }
+.assessment-reconciliation__accept { color:#28523a; border-color:#a8c4ae; background:#deece2; }
+.assessment-reconciliation__accept:hover:not(:disabled) { border-color:#82a58a; background:#cfe1d3; transform:translateY(-1px); }
+.assessment-reconciliation__deny { color:#873f38; border-color:#d9aaa1; background:#fbefeb; }
+.assessment-reconciliation__deny:hover:not(:disabled) { border-color:#b86d61; background:#f8e5df; transform:translateY(-1px); }
+.assessment-reconciliation__accept:focus-visible,.assessment-reconciliation__deny:focus-visible { outline:3px solid #bd9148; outline-offset:2px; }
+.assessment-reconciliation__accept:disabled,.assessment-reconciliation__deny:disabled { cursor:not-allowed; opacity:.48; transform:none; }
+.assessment-reconciliation__result article span,.assessment-reconciliation__result small { color:var(--muted); }
+.assessment-reconciliation__result li { margin:5px 0; }
+.assessment-reconciliation__topics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:0; list-style:none; }
+.assessment-reconciliation__topic { margin:0!important; padding:11px 12px; border:1px solid var(--line); border-left:4px solid #b7c9ba; border-radius:7px; background:#f0f6f0; }
+.assessment-reconciliation__topic>div { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.assessment-reconciliation__topic>div>span { flex:none; padding:3px 7px; border-radius:999px; color:#356047; background:#deece2; font-size:.61rem; font-weight:750; text-transform:capitalize; }
+.assessment-reconciliation__topic p { margin:6px 0; color:var(--muted); font-size:.72rem; }
+.assessment-reconciliation__topic--scheduled,.assessment-reconciliation__topic--plausible-unverified { border-left-color:#b58a3b; background:#fbf6e9; }
+.assessment-reconciliation__topic--scheduled>div>span,.assessment-reconciliation__topic--plausible-unverified>div>span { color:#6f5a32; background:#f4ead0; }
+.assessment-reconciliation__topic--contradicted,.assessment-reconciliation__topic--unsupported { border-left-color:#b86d61; background:#fbefeb; }
+.assessment-reconciliation__topic--contradicted>div>span,.assessment-reconciliation__topic--unsupported>div>span { color:#873f38; background:#f8e5df; }
+.assessment-reconciliation__citations { display:block; color:var(--muted); font-size:.7rem; }
+.assessment-reconciliation__result details { margin-top:14px; }
+@media(max-width:760px) { .assessment-reconciliation__dashboard { grid-template-columns:repeat(2,minmax(0,1fr)); }.assessment-reconciliation__topics { grid-template-columns:1fr; } }
+@media(max-width:620px) { .assessment-reconciliation__heading { align-items:stretch; flex-direction:column; }.assessment-reconciliation__heading button { width:100%; }.assessment-reconciliation__result article { grid-template-columns:1fr; }.assessment-reconciliation__result article p { grid-column:auto; }.assessment-reconciliation__dashboard { grid-template-columns:1fr 1fr; }.assessment-reconciliation__grade { justify-content:center; } }
+
 .map-status {
   padding: 6px 9px;
   border-radius: 999px;

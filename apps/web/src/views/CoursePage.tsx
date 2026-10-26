@@ -4,6 +4,7 @@ import type {
   CourseLearningArtifactsResponse,
   CourseMaterial,
   LearnerProfileResponse,
+  AssessmentReconciliationResponse,
   MaterialKind,
   SourceAnnotation,
   SourcePassage,
@@ -35,11 +36,14 @@ interface CoursePageProps {
   learningRun: LearningRunInfo | null;
   learningRunHistory: LearningRunInfo[];
   learningError: ApiErrorInfo | null;
+  reconciliation: AssessmentReconciliationResponse | null;
   onBack: () => void;
   onUpload: (file: File, kind: MaterialKind) => Promise<void>;
   onAnalyze: (regenerate: boolean) => Promise<void>;
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAcceptMap: () => Promise<void>;
+  onReconcile: () => Promise<void>;
+  onMergeAssessmentNotes: (canonicalRecordKey: string, duplicateRecordKeys: string[]) => Promise<void>;
   onStudy: () => void;
   onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string, method?: "quiz") => void;
   onStudyMaterial: (topic: string, materialId: string) => void;
@@ -267,11 +271,14 @@ export function CoursePage({
   learningRun,
   learningRunHistory,
   learningError,
+  reconciliation,
   onBack,
   onUpload,
   onAnalyze,
   onBuildMap,
   onAcceptMap,
+  onReconcile,
+  onMergeAssessmentNotes,
   onStudy,
   onStudyTopic,
   onStudyMaterial,
@@ -414,6 +421,7 @@ export function CoursePage({
         readySourceCount={
           course.materials.filter(({ status }) => status === "ready").length
         }
+        assessmentCount={course.assessments.length + (artifacts?.courseMap?.payload.assessments.length ?? 0)}
         materials={course.materials}
         action={learningAction}
         run={learningRun}
@@ -422,6 +430,9 @@ export function CoursePage({
         onAnalyze={onAnalyze}
         onBuildMap={onBuildMap}
         onAccept={onAcceptMap}
+        reconciliation={reconciliation}
+        onReconcile={onReconcile}
+        onMergeAssessmentNotes={onMergeAssessmentNotes}
         onStudyTopic={onStudyTopic}
         onStudyMaterial={onStudyMaterial}
       />

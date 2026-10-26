@@ -10,6 +10,7 @@ import type {
   LearnerMethodProgressResponse,
   CourseMapArtifact,
   MaterialKind,
+  AssessmentReconciliationResponse,
 } from "@local-learning-studio/contracts";
 import { AppHeader, type ServiceState } from "./components/AppHeader";
 import type { LearningAction } from "./components/CourseMapPanel";
@@ -22,6 +23,8 @@ import {
   getCodexStatus,
   getCourse,
   getLearningArtifacts,
+  reconcileCourseAssessments,
+  mergeObsidianAssessmentNotes,
   listCourses,
   uploadMaterial,
   type ApiErrorInfo,
@@ -38,7 +41,7 @@ const KnowledgePage = lazy(() => import("./views/KnowledgePage").then(({ Knowled
 
 type AppRoute =
   | { kind: "library" }
-  | { kind: "course-study"; courseId: string; topic?: string; sourceMaterialId?: string; assessmentId?: string; sessionId?: string; initialMethod?: "quiz" }
+  | { kind: "course-study"; courseId: string; topic?: string; sourceMaterialId?: string; assessmentId?: string; sessionId?: string; initialMethod?: "quiz"; focus?: boolean }
   | { kind: "hand-tracking" }
   | { kind: "knowledge" }
   | { kind: "info" }
@@ -48,7 +51,7 @@ function routeFromPath(): AppRoute {
   const studyMatch = window.location.pathname.match(/^\/courses\/([^/]+)\/study$/);
   if (studyMatch?.[1]) {
     const query = new URLSearchParams(window.location.search);
-    return { kind: "course-study", courseId: studyMatch[1], topic: query.get("topic") ?? undefined, sourceMaterialId: query.get("sourceMaterialId") ?? undefined, assessmentId: query.get("assessmentId") ?? undefined, sessionId: query.get("sessionId") ?? undefined, initialMethod: suggestedStudyMethod(query.get("method")) };
+    return { kind: "course-study", courseId: studyMatch[1], topic: query.get("topic") ?? undefined, sourceMaterialId: query.get("sourceMaterialId") ?? undefined, assessmentId: query.get("assessmentId") ?? undefined, sessionId: query.get("sessionId") ?? undefined, initialMethod: suggestedStudyMethod(query.get("method")), focus: query.get("focus") === "1" };
   }
   if (window.location.pathname === "/hand-tracking") return { kind: "hand-tracking" };
   if (window.location.pathname === "/knowledge") return { kind: "knowledge" };
@@ -74,6 +77,7 @@ export function App() {
   const [learningAction, setLearningAction] = useState<LearningAction>(null);
   const [learningRun, setLearningRun] = useState<LearningRunInfo | null>(null);
   const [learningRunHistory, setLearningRunHistory] = useState<LearningRunInfo[]>([]);
+  const [reconciliation, setReconciliation] = useState<AssessmentReconciliationResponse | null>(null);
   const [, setClockTick] = useState(0);
   const [learningError, setLearningError] = useState<ApiErrorInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -193,6 +197,7 @@ export function App() {
   }, [learningRun]);
 
   useEffect(() => {
+    setReconciliation(null);
     if (route.kind === "course" || route.kind === "course-study") {
       void loadCourse(route.courseId);
     } else {
@@ -242,6 +247,11 @@ export function App() {
     window.history.pushState({}, "", path);
     setRoute(routeFromPath());
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openStudyTab(path: string) {
+    // Called directly from a user click so browsers allow the new tab.
+    window.open(path, "_blank", "noopener,noreferrer");
   }
 
   async function handleCreate(input: CreateCourseRequest) {
@@ -307,6 +317,34 @@ export function App() {
     }
   }
 
+  async function handleReconcileAssessments() {
+    if (route.kind !== "course") return;
+    setLearningAction("reconciling");
+    setLearningError(null);
+    setReconciliation(null);
+    try {
+      setReconciliation(await reconcileCourseAssessments(route.courseId));
+    } catch (requestError) {
+      setLearningError(requestError instanceof ApiRequestError ? requestError.info : { error: (requestError as Error).message });
+    } finally {
+      setLearningAction(null);
+    }
+  }
+
+  async function handleMergeAssessmentNotes(canonicalRecordKey: string, duplicateRecordKeys: string[]) {
+    if (route.kind !== "course") return;
+    setLearningAction("merging");
+    setLearningError(null);
+    try {
+      await mergeObsidianAssessmentNotes(route.courseId, canonicalRecordKey, duplicateRecordKeys);
+    } catch (requestError) {
+      setLearningError(requestError instanceof ApiRequestError ? requestError.info : { error: (requestError as Error).message });
+      throw requestError;
+    } finally {
+      setLearningAction(null);
+    }
+  }
+
   const activePage = route.kind === "course-study" ? "study" :
     route.kind === "hand-tracking" ? "hand-tracking" :
     route.kind === "knowledge" ? "knowledge" :
@@ -324,7 +362,7 @@ export function App() {
       />
       <Suspense fallback={<div className="page-chunk-loading" role="status">Loading your workspace…</div>}>
       {route.kind === "course-study" ? (
-        <StudyPage key={route.courseId} courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} initialTopic={route.topic} initialSourceMaterialId={route.sourceMaterialId} initialAssessmentId={route.assessmentId} initialSessionId={route.sessionId} initialMethod={route.initialMethod} onBack={() => navigate(`/courses/${route.courseId}`)} />
+        <StudyPage key={route.courseId} courseId={route.courseId} courseTitle={selectedCourse?.title ?? "Class"} initialTopic={route.topic} initialSourceMaterialId={route.sourceMaterialId} initialAssessmentId={route.assessmentId} initialSessionId={route.sessionId} initialMethod={route.initialMethod} focus={route.focus} onBack={() => navigate(`/courses/${route.courseId}`)} />
       ) : route.kind === "course" ? (
       <CoursePage
           course={selectedCourse}
@@ -339,14 +377,17 @@ export function App() {
           learningRun={learningRun}
           learningRunHistory={learningRunHistory}
           learningError={learningError}
+          reconciliation={reconciliation}
           onBack={() => navigate("/")}
           onUpload={handleUpload}
           onAnalyze={handleAnalyzeSources}
           onBuildMap={handleBuildCourseMap}
           onAcceptMap={handleAcceptCourseMap}
-          onStudy={() => navigate(`/courses/${route.courseId}/study`)}
-          onStudyTopic={(topic, sourceMaterialId, assessmentId, method) => navigate(studyTopicPath(route.courseId, topic, sourceMaterialId, assessmentId, method))}
-          onStudyMaterial={(topic, materialId) => navigate(`/courses/${route.courseId}/study?topic=${encodeURIComponent(topic)}&sourceMaterialId=${encodeURIComponent(materialId)}`)}
+          onReconcile={handleReconcileAssessments}
+          onMergeAssessmentNotes={handleMergeAssessmentNotes}
+          onStudy={() => openStudyTab(`/courses/${route.courseId}/study`)}
+          onStudyTopic={(topic, sourceMaterialId, assessmentId, method) => openStudyTab(studyTopicPath(route.courseId, topic, sourceMaterialId, assessmentId, method))}
+          onStudyMaterial={(_topic, materialId) => openStudyTab(`/courses/${route.courseId}/study?sourceMaterialId=${encodeURIComponent(materialId)}`)}
           onRefreshCourse={() => loadCourse(route.courseId)}
         />
       ) : route.kind === "hand-tracking" ? (
@@ -354,7 +395,7 @@ export function App() {
       ) : route.kind === "info" ? (
         <InfoPage onStart={() => navigate("/")} />
       ) : route.kind === "knowledge" ? (
-        <KnowledgePage profiles={knowledgeProfiles} loading={knowledgeLoading} error={knowledgeError} onOpenCourse={(courseId) => navigate(`/courses/${courseId}`)} onStudyTopic={(courseId, topic, assessmentId) => navigate(`/courses/${courseId}/study?topic=${encodeURIComponent(topic)}${assessmentId ? `&assessmentId=${encodeURIComponent(assessmentId)}` : ""}`)} />
+        <KnowledgePage profiles={knowledgeProfiles} loading={knowledgeLoading} error={knowledgeError} onOpenCourse={(courseId) => navigate(`/courses/${courseId}`)} onStudyTopic={(courseId, topic, assessmentId) => openStudyTab(`/courses/${courseId}/study?topic=${encodeURIComponent(topic)}${assessmentId ? `&assessmentId=${encodeURIComponent(assessmentId)}` : ""}`)} />
       ) : (
         <HomePage
           courses={courses}

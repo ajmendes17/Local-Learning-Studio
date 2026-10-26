@@ -10,6 +10,7 @@ interface AcceptedStructureDiagramProps {
   sourceProgress: LearnerProfileResponse["sources"];
   learnerAssessments?: LearnerProfileResponse["assessments"];
   onStudyTopic: (topic: string, sourceMaterialId?: string, assessmentId?: string, method?: "quiz") => void;
+  onStudyMaterial: (topic: string, materialId: string) => void;
 }
 
 interface ModuleConnection {
@@ -40,7 +41,7 @@ function CategoryProgress({ label, coverage }: { label: string; coverage: Return
   </div>;
 }
 
-export function AcceptedStructureDiagram({ proposal, materials, learnerProgress, sourceProgress, learnerAssessments = [], onStudyTopic }: AcceptedStructureDiagramProps) {
+export function AcceptedStructureDiagram({ proposal, materials, learnerProgress, sourceProgress, learnerAssessments = [], onStudyTopic, onStudyMaterial }: AcceptedStructureDiagramProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [paths, setPaths] = useState<Array<{ id: string; d: string; type: ModuleConnection["type"]; moduleKey: string; assessmentIndex: number }>>([]);
   const [selectedModuleKey, setSelectedModuleKey] = useState<string | null>(null);
@@ -261,11 +262,11 @@ export function AcceptedStructureDiagram({ proposal, materials, learnerProgress,
                         ? `Start with ${recommendedTopic!.title} · not studied yet →`
                         : `Revisit ${recommendedTopic!.title} · least recently studied →`;
                   return <div className="accepted-map__homework-group" key={material.id}>
-                    <button className="accepted-map__homework" type="button" aria-label={recommendedTopic ? `Study ${studyTopic}: ${recommendedTopic.title}` : `Study ${studyTopic}, no mapped study topics yet`} disabled={material.status !== "ready" || !recommendedTopic} onClick={() => recommendedTopic && onStudyTopic(recommendedTopic.title, material.id, undefined, recommendation?.reason === "spaced-review" || recommendation?.reason === "low-scored-accuracy" ? "quiz" : undefined)}>
-                      <span>{studyTopic}<span className="accepted-map__homework-action">{recommendedTopic ? "Study this homework →" : "No study topics available"}</span></span>
+                    <button className="accepted-map__homework" type="button" aria-label={`Open ${studyTopic} learning session`} disabled={material.status !== "ready"} onClick={() => onStudyMaterial(studyTopic, material.id)}>
+                      <span>{studyTopic}<span className="accepted-map__homework-action">Open homework learning session →</span></span>
                       <small>{material.status === "ready" ? `${homeworkLessonSessions} homework lesson session${homeworkLessonSessions === 1 ? "" : "s"}${homeworkLastPracticedAt ? ` · last topic check ${new Date(homeworkLastPracticedAt).toLocaleDateString()}` : ""}` : "Source extraction is not ready yet"}</small>
                       {material.status === "ready" && homeworkProgress.topicCount ? <CategoryProgress label={studyTopic} coverage={homeworkProgress} /> : null}
-                      <small>{recommendationAction}</small>
+                      <small>{recommendedTopic ? `Suggested first topic: ${recommendedTopic.title}` : recommendationAction}</small>
                     </button>
                     {unlinkedHomeworkPractice.length ? <div className="accepted-map__unlinked-practice"><strong>Assignment-level practice</strong>{unlinkedHomeworkPractice.map((signal) => {
                       const scored = signal.scoredAttemptCount ?? signal.attemptCount;

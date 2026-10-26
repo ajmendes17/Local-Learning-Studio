@@ -37,6 +37,8 @@ and its verification evidence.
 │   ├── PRODUCT-PLAN.md             # Durable product decisions and MVP scope
 │   ├── SKILL-ARCHITECTURE.md       # Specialized model-backed workflows
 │   └── SOURCE-INGESTION.md         # Extraction states and provenance
+├── CONTRIBUTING.md                 # Local peer testing and change workflow
+├── CHANGELOG.md                    # Major user-facing changes by release
 └── PROGRESS.md                    # Completed work and backlog
 ```
 
@@ -50,6 +52,11 @@ The local service verifies the Codex CLI and its saved authentication through
 `GET /api/codex/status`. Model-backed actions use non-interactive, ephemeral,
 read-only runs with schema-validated output. There is intentionally no generic
 prompt endpoint.
+
+If the server cannot find Codex on `PATH`, set `CODEX_CLI_PATH` in the project
+`.env` file to the absolute path of the Codex CLI. The server reads this file
+from the repository root when it starts, so restart the dev server after
+changing it.
 
 ## Start locally
 
@@ -96,6 +103,14 @@ npm run check
 The check runs TypeScript validation, server tests, and production builds for
 all workspaces.
 
+## Collaborating and testing
+
+Local Learning Studio is a local app, not a shared multi-user service. A
+fellow student should run their own checkout and use their own local course
+materials and learner data. The default web and API listeners are bound to
+localhost. For the branch, review, testing, and major-change communication
+workflow, see [CONTRIBUTING.md](./CONTRIBUTING.md) and [CHANGELOG.md](./CHANGELOG.md).
+
 ## What the app does
 
 - Stores course files and learner records locally, with source locations and
@@ -104,6 +119,10 @@ all workspaces.
 - Builds a reviewable, source-grounded course map. Modules, topics, homework,
   and exams appear in an interactive view; selecting a module or assessment
   opens its details and provides a path into study.
+- Compares assessment records with exam reviews and course schedules, flags
+  duplicate generated Obsidian notes, and offers a reviewable keep-or-merge
+  choice. Accepted duplicate snapshots are archived while personal note text
+  is preserved.
 - Supports clear explanations, worked examples, quiz-first practice, and
   analogy-based lessons. The lesson and knowledge check have separate tabs;
   checks include hints, confidence ratings, saved attempts, and follow-up

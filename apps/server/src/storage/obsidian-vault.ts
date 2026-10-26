@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, assessmentScheduleOverflowMinutes, normalizeMathText, scheduleAssessmentStudyDays, studyPlanReasonLabel, summarizeTopicEvidence, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, assessmentScheduleOverflowMinutes, estimateUnderstandingPercent, HOMEWORK_THREE_LEARNING_PATH, normalizeMathText, scheduleAssessmentStudyDays, studyPlanReasonLabel, summarizeTopicEvidence, type SourceAnnotation, type SourcePassage } from "@local-learning-studio/contracts";
 
 const START = "<!-- LLS:GENERATED:START -->";
 const END = "<!-- LLS:GENERATED:END -->";
@@ -18,7 +18,7 @@ export interface ObsidianCourseExport {
   map: { modules: Array<{ key: string; title: string; description: string; position: number; conceptKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; concepts: Array<{ key: string; title: string; description: string; learningObjectives: string[]; prerequisiteKeys: string[]; sourceReferences: Array<{ materialId: string; passageId: string }> }>; assessments: Array<{ title: string; kind: string; moduleKey: string | null; dueAt: string | null; weightPercent: number | null; sourceReferences: Array<{ materialId: string; passageId: string }> }> } | null;
   mapStatus?: "current" | "stale" | "none";
   mapDraftStatus?: "current" | "none";
-  profile: { concepts: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; independentScoredAttemptCount?: number; independentCorrectCount?: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; instructorText?: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
+  profile: { concepts: Array<{ id: string; title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; independentScoredAttemptCount?: number; independentCorrectCount?: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }>; sources?: Array<{ materialId: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ conceptId: string; title: string; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }>; assessments: Array<{ id: string; title: string; instructorText?: string; kind: string; scheduledAt: string | null; availableMinutes?: number | null; dailyMinutes?: number; attemptCount: number; scoredAttemptCount?: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ title: string; provenance: string; importance?: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount?: number; correctCount: number; latestOutcome: string | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }> };
   methodProgress?: Array<{ method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: Array<{ conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; correctCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; lastPracticedAt: string | null }>; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }>;
   studyAttempts?: Array<{ id: string; conceptId: string; topic: string; assessmentId: string | null; assessmentTitle: string | null; activityType: string; prompt: string; response: string; reasoning: string; confidence: number | null; hintCount: number; method: string; outcome: string; independence: string; correctAnswer?: string | null; referenceExplanation?: string | null; createdAt: string; sourceMaterialIds: string[] }>;
 }
@@ -290,6 +290,81 @@ export class ObsidianVault {
       if (typeof parsed.vaultPath !== "string" || typeof parsed.folderPath !== "string") return null;
       return parsed;
     } catch { return null; }
+  }
+
+  async readAssessmentNotes(courseId: string, courseTitle: string) {
+    const config = await this.getConfig();
+    if (!config) return [];
+    const vaultRoot = await realpath(config.vaultPath);
+    const notesRoot = resolve(vaultRoot, config.folderPath);
+    if (!pathIsInside(vaultRoot, notesRoot)) return [];
+    const courseFolder = resolve(notesRoot, `${slug(courseTitle)}--${courseId.slice(0, 8)}`);
+    if (!pathIsInside(notesRoot, courseFolder)) return [];
+    const assessmentFolder = join(courseFolder, "assessments");
+    try {
+      const folderInfo = await lstat(assessmentFolder);
+      if (folderInfo.isSymbolicLink() || !folderInfo.isDirectory() || !pathIsInside(courseFolder, await realpath(assessmentFolder))) return [];
+      const entries = (await readdir(assessmentFolder, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+      const notes = [];
+      for (const entry of entries.filter((item) => item.isFile() && item.name.endsWith(".md")).slice(0, 100)) {
+        const path = join(assessmentFolder, entry.name);
+        const info = await lstat(path);
+        if (info.isSymbolicLink() || info.size > 200_000) continue;
+        const body = await readFile(path, "utf8");
+        const generated = body.match(/<!-- LLS:GENERATED:START -->([\s\S]*?)<!-- LLS:GENERATED:END -->/)?.[1]?.trim();
+        if (generated) notes.push({ title: entry.name.replace(/\.md$/, ""), filename: entry.name, content: generated });
+      }
+      return notes;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+  }
+
+  async mergeAssessmentNotes(courseId: string, courseTitle: string, canonicalFilename: string, duplicateFilenames: string[]) {
+    if (!duplicateFilenames.length || duplicateFilenames.includes(canonicalFilename) || [...duplicateFilenames, canonicalFilename].some((name) => name.includes("/") || name.includes("\\") || !/^[a-z0-9-]+--course-\d+\.md$/.test(name))) {
+      throw new Error("Choose generated assessment notes from the same course to combine.");
+    }
+    const config = await this.getConfig();
+    if (!config) throw new Error("Configure an Obsidian vault before combining assessment notes.");
+    const vaultRoot = await realpath(config.vaultPath);
+    const notesRoot = resolve(vaultRoot, config.folderPath);
+    if (!pathIsInside(vaultRoot, notesRoot)) throw new Error("The configured notes folder must stay inside the selected vault.");
+    const courseFolder = resolve(notesRoot, `${slug(courseTitle)}--${courseId.slice(0, 8)}`);
+    const folder = join(courseFolder, "assessments");
+    if (!pathIsInside(notesRoot, folder) || !pathIsInside(courseFolder, await realpath(folder))) throw new Error("The assessment notes folder resolves outside the course notes.");
+    const readManaged = async (filename: string) => {
+      const path = join(folder, filename);
+      const info = await lstat(path);
+      if (info.isSymbolicLink() || !info.isFile() || info.size > 200_000) throw new Error(`Assessment note ${filename} is not a safe generated note.`);
+      const text = await readFile(path, "utf8");
+      const identity = text.match(/^id:\s*"course-assessment:([0-9a-f-]+):(\d+):([a-z0-9-]+)"\s*$/m);
+      const start = text.indexOf(START);
+      const end = text.indexOf(END, start + START.length);
+      if (!identity || identity[1] !== courseId || start < 0 || end < 0 || text.indexOf(START, start + START.length) >= 0) throw new Error(`Assessment note ${filename} is not a valid Local Learning Studio assessment note.`);
+      if (filename !== `${identity[3]}--course-${identity[2]}.md`) throw new Error(`Assessment note ${filename} does not match its saved identity.`);
+      return { path, text, index: identity[2], tail: text.slice(end + END.length).trim() };
+    };
+    const canonical = await readManaged(canonicalFilename);
+    const duplicates = await Promise.all(duplicateFilenames.map(readManaged));
+    if (duplicates.some((note) => note.index !== canonical.index)) throw new Error("These assessment notes do not share the same course-map assessment slot.");
+    const importedNotes = duplicates.map((note, index) => {
+      const body = note.tail.replace(/^## My notes\s*/i, "").trim();
+      return body ? `\n\n### Notes retained from ${duplicateFilenames[index]!.replace(/\.md$/, "")}\n\n${body}` : "";
+    }).join("");
+    const next = importedNotes ? `${canonical.text.trimEnd()}\n\n${importedNotes.trim()}\n` : canonical.text;
+    const temporary = `${canonical.path}.${randomUUID()}.tmp`;
+    await writeFile(temporary, next, { encoding: "utf8", flag: "wx" });
+    await rename(temporary, canonical.path);
+    const archiveFolder = resolve(notesRoot, "Merged assessment archives", courseId);
+    await ensureSafeManagedPath(notesRoot, join(archiveFolder, "placeholder.md"));
+    const archived = [];
+    for (const [index, duplicate] of duplicates.entries()) {
+      const archivePath = join(archiveFolder, `${Date.now()}-${index + 1}-${duplicateFilenames[index]}`);
+      await rename(duplicate.path, archivePath);
+      archived.push(archivePath.slice(notesRoot.length + 1).split(sep).join("/"));
+    }
+    return { mergedCount: duplicates.length + 1, kept: canonicalFilename, archived };
   }
 
   async validateCourse(courseId: string, courseTitle: string, expectedNoteIdentities: Map<string, string> = new Map(), expectedSourceHashes: Map<string, string> = new Map()) {
@@ -568,21 +643,35 @@ export class ObsidianVault {
       const practiceTopicLines = [
         ...relatedConcepts.map((concept) => {
           const topic = sourceTopicProgress.get(sourceTopicKey(concept.title));
+          const understandingPercent = estimateUnderstandingPercent((data.studyAttempts ?? []).filter((attempt) => attempt.conceptId === topic?.conceptId && attempt.sourceMaterialIds.includes(material.id)));
           const status = topic
             ? topic.attemptCount
-              ? `${scoredProgress(topic.attemptCount, topic.scoredAttemptCount, topic.correctCount)}; latest ${topic.latestOutcome ?? "not recorded"}${topic.lastPracticedAt ? `; last checked ${topic.lastPracticedAt}` : ""}`
+              ? `${understandingPercent}% estimated understanding; ${scoredProgress(topic.attemptCount, topic.scoredAttemptCount, topic.correctCount)}; latest ${topic.latestOutcome ?? "not recorded"}${topic.lastPracticedAt ? `; last checked ${topic.lastPracticedAt}` : ""}`
               : `Lesson opened; no checks saved${topic.lastSessionAt ? `; last lesson ${topic.lastSessionAt}` : ""}`
             : "Not practiced yet";
-          return `- ${wikilink(topicPaths.get(concept.key)!, concept.title)}: ${status}`;
+          return `- ${wikilink(topicPaths.get(concept.key)!, concept.title)}: ${topic?.attemptCount ? status : `0% estimated understanding; ${status}`}`;
         }),
         ...(sourceProgress?.topics ?? [])
           .filter((topic) => !linkedTopicKeys.has(sourceTopicKey(topic.title)))
-          .map((topic) => `- **${topic.title}:** ${topic.attemptCount ? `${scoredProgress(topic.attemptCount, topic.scoredAttemptCount, topic.correctCount)}; latest ${topic.latestOutcome ?? "not recorded"}${topic.lastPracticedAt ? `; last checked ${topic.lastPracticedAt}` : ""}` : `Lesson opened; no checks saved${topic.lastSessionAt ? `; last lesson ${topic.lastSessionAt}` : ""}`}`),
+          .map((topic) => {
+            const understandingPercent = estimateUnderstandingPercent((data.studyAttempts ?? []).filter((attempt) => attempt.conceptId === topic.conceptId && attempt.sourceMaterialIds.includes(material.id)));
+            return `- **${topic.title}:** ${topic.attemptCount ? `${understandingPercent}% estimated understanding; ${scoredProgress(topic.attemptCount, topic.scoredAttemptCount, topic.correctCount)}; latest ${topic.latestOutcome ?? "not recorded"}${topic.lastPracticedAt ? `; last checked ${topic.lastPracticedAt}` : ""}` : `${understandingPercent}% estimated understanding; lesson opened, no checks saved`}`;
+          }),
       ];
+      const homeworkThreeProgress = material.kind === "assignment" && /homework\s*3/i.test(material.originalName)
+        ? HOMEWORK_THREE_LEARNING_PATH.map((topic) => {
+          const sourceTopic = sourceTopicProgress.get(sourceTopicKey(topic.title));
+          const evidence = (data.studyAttempts ?? []).filter((attempt) => sourceTopic && attempt.conceptId === sourceTopic.conceptId && attempt.sourceMaterialIds.includes(material.id));
+          const scoredCount = evidence.filter(({ outcome }) => outcome === "correct" || outcome === "incorrect").length;
+          const understandingPercent = estimateUnderstandingPercent(evidence);
+          const latestOutcome = evidence[0]?.outcome;
+          return `- **${topic.problem} · ${topic.title}:** ${understandingPercent}% estimated understanding${scoredCount ? ` · ${scoredCount} scored check${scoredCount === 1 ? "" : "s"}${latestOutcome ? ` · latest ${latestOutcome}` : ""}` : " · no scored checks yet"}`;
+        })
+        : null;
       const mappedTopicSessions = (sourceProgress?.topics ?? []).reduce((sum, topic) => sum + topic.sessionCount, 0);
       const unlinkedSourceSessions = Math.max(0, (sourceProgress?.sessionCount ?? 0) - mappedTopicSessions);
       if (unlinkedSourceSessions) practiceTopicLines.push(`- **Homework-level sessions:** ${unlinkedSourceSessions} lesson session${unlinkedSourceSessions === 1 ? "" : "s"} started without a mapped topic; open a mapped topic to track topic-level progress.`);
-      const practiceTopics = practiceTopicLines.join("\n") || "- No accepted course-map topics or saved practice attempts cite this source yet.";
+      const practiceTopics = (homeworkThreeProgress?.join("\n") ?? practiceTopicLines.join("\n")) || "- No accepted course-map topics or saved practice attempts cite this source yet.";
       const extracted = material.passages.map((passage) => {
         const comments = (material.annotations ?? []).filter((annotation) => annotation.isCurrent && annotation.passageId === passage.id);
         return [
@@ -649,6 +738,7 @@ export class ObsidianVault {
     if (data.map) {
       for (const concept of data.map.concepts) {
         const progress = profileByTitle.get(concept.title.trim().toLocaleLowerCase());
+        const understandingPercent = estimateUnderstandingPercent((data.studyAttempts ?? []).filter(({ conceptId }) => conceptId === progress?.id));
         const moduleTitles = data.map.modules.filter((module) => module.conceptKeys.includes(concept.key)).map((module) => wikilink(modulePaths.get(module.key)!, module.title));
         const practiceStatus = !progress || progress.attemptCount === 0
           ? (progress?.sessionCount ? "lesson-started" : "not-started")
@@ -672,6 +762,7 @@ export class ObsidianVault {
           `**Course:** ${wikilink("Course.md", data.course.title)}`,
           `**Modules:** ${moduleTitles.join(", ") || "Not assigned"}`,
           `**Practice evidence:** ${progress ? `${scoredProgress(progress.attemptCount, progress.scoredAttemptCount, progress.correctCount)}; latest: ${progress.latestOutcome ?? "not checked"}` : "No checks recorded yet."}`,
+          `**Estimated understanding:** ${understandingPercent}% · rough estimate from recent scored answers; not calibrated.`,
           `**Evidence level:** ${evidence.label}`,
           ...(scoredAttemptCount > 0 && scoredAttemptCount < 3 ? ["**Sample size:** Early signal · at least 3 scored checks give a steadier topic-level signal."] : []),
           ...(evidence.level === "low-scored-accuracy" ? ["**Suggested next step:** Take another quiz in Local Learning Studio to see whether accuracy improves."] : []),
@@ -693,6 +784,7 @@ export class ObsidianVault {
             attempt_count: progress?.attemptCount ?? 0,
             scored_attempt_count: progress?.scoredAttemptCount ?? 0,
             correct_count: progress?.correctCount ?? 0,
+            understanding_percent: understandingPercent,
             independent_scored_attempt_count: independentScoredAttemptCount,
             independent_correct_count: independentCorrectCount,
             evidence_level: evidenceLevel,
@@ -728,6 +820,7 @@ export class ObsidianVault {
 
       const topicRows = data.map.concepts.map((concept) => {
         const progress = profileByTitle.get(concept.title.trim().toLocaleLowerCase());
+        const understandingPercent = estimateUnderstandingPercent((data.studyAttempts ?? []).filter(({ conceptId }) => conceptId === progress?.id));
         const moduleLinks = data.map!.modules
           .filter((module) => module.conceptKeys.includes(concept.key))
           .map((module) => wikilink(modulePaths.get(module.key)!, module.title));
@@ -746,7 +839,7 @@ export class ObsidianVault {
               ? "Practice recorded"
               : "Not started";
         const evidence = progress
-          ? `${scoredProgress(progress.attemptCount, progress.scoredAttemptCount, progress.correctCount)}; latest: ${progress.latestOutcome ?? "not checked"}; ${progress.sessionCount} lesson session${progress.sessionCount === 1 ? "" : "s"}; last practice: ${progress.lastPracticedAt ?? "never"}`
+          ? `${understandingPercent}% estimated understanding; ${scoredProgress(progress.attemptCount, progress.scoredAttemptCount, progress.correctCount)}; latest: ${progress.latestOutcome ?? "not checked"}; ${progress.sessionCount} lesson session${progress.sessionCount === 1 ? "" : "s"}; last practice: ${progress.lastPracticedAt ?? "never"}`
           : "No lesson or check activity yet";
         return `- **${wikilink(topicPaths.get(concept.key)!, concept.title)}** — ${status}. ${evidence}${moduleLinks.length ? ` · Module: ${moduleLinks.join(", ")}` : ""}${sourceLinks.length ? ` · Sources: ${sourceLinks.join(", ")}` : ""}`;
       });
@@ -760,7 +853,7 @@ export class ObsidianVault {
         path: join(courseFolder, topicProgressPath),
         id: `topic-progress-${data.course.id}`,
         title: "Topic Progress",
-        body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Mapped topics:** ${data.map.concepts.length}\n**Course map:** ${data.mapStatus === "stale" ? "Accepted structure · stale" : "Accepted structure · current"}\n${staleMapWarning ? `\n${staleMapWarning}\n` : ""}\n${topicRows.join("\n") || "No topics are listed in the accepted course map."}\n\n_Progress describes lesson and check activity, not mastery. Open a topic for objectives and source evidence._`,
+        body: `**Course:** ${wikilink("Course.md", data.course.title)}\n**Mapped topics:** ${data.map.concepts.length}\n**Course map:** ${data.mapStatus === "stale" ? "Accepted structure · stale" : "Accepted structure · current"}\n${staleMapWarning ? `\n${staleMapWarning}\n` : ""}\n${topicRows.join("\n") || "No topics are listed in the accepted course map."}\n\n_Understanding percentages are rough, recency-weighted estimates from saved scored answers. They are not calibrated mastery scores._`,
       });
       topicProgressLink = wikilink(topicProgressPath, "Topic Progress");
     }
@@ -776,6 +869,8 @@ export class ObsidianVault {
       );
       let scope = assessment.topics.map((topic) => {
         const matchingConcept = (data.map?.concepts ?? []).find(({ title }) => title.trim().toLocaleLowerCase() === topic.title.trim().toLocaleLowerCase());
+        const matchingProgress = profileByTitle.get(topic.title.trim().toLocaleLowerCase());
+        const understandingPercent = estimateUnderstandingPercent((data.studyAttempts ?? []).filter((attempt) => attempt.conceptId === matchingProgress?.id && attempt.assessmentId === assessment.id));
         const noteLink = matchingConcept && topicPaths.get(matchingConcept.key) ? ` · ${wikilink(topicPaths.get(matchingConcept.key)!, "open topic")}` : "";
         const planMinutes = plannedMinutes.get(topic.title.trim().normalize("NFKC").toLocaleLowerCase());
         const lessonActivity = `${topic.sessionCount} lesson session${topic.sessionCount === 1 ? "" : "s"}${topic.lastSessionAt ? `; last lesson: ${topic.lastSessionAt}` : ""}`;
@@ -783,7 +878,7 @@ export class ObsidianVault {
           ? `${scoredProgress(topic.attemptCount, topic.scoredAttemptCount, topic.correctCount)}; latest: ${topic.latestOutcome ?? "not checked"}; last checked: ${topic.lastPracticedAt ?? "never"}`
           : "no check attempts saved";
         const activity = `${lessonActivity}; ${checkActivity}`;
-        return `- ${topic.title} _(source: ${topic.provenance}; priority: ${topic.importance ?? "normal"}${planMinutes == null ? "" : `; suggested time: ${planMinutes} min`}; ${activity})_${noteLink}`;
+        return `- ${topic.title} _(estimated understanding: ${understandingPercent}% · rough recency-weighted estimate; source: ${topic.provenance}; priority: ${topic.importance ?? "normal"}${planMinutes == null ? "" : `; suggested time: ${planMinutes} min`}; ${activity})_${noteLink}`;
       }).join("\n") || "- No topic scope added yet.";
       if (assessment.instructorText?.trim()) {
         scope += `\n\n## Professor’s original wording\n\n${fencedVerbatim(assessment.instructorText)}`;
@@ -848,8 +943,12 @@ export class ObsidianVault {
         const latest = signals.filter((signal) => signal.lastPracticedAt).sort((a, b) =>
           Date.parse(b.lastPracticedAt ?? "") - Date.parse(a.lastPracticedAt ?? ""),
         )[0];
+        const topicProgress = profileByTitle.get(concept.title.trim().normalize("NFKC").toLocaleLowerCase());
+        const scoredEvidence = (data.studyAttempts ?? []).filter((attempt) => attempt.conceptId === topicProgress?.id
+          && (!isAssignment || attempt.sourceMaterialIds.some((materialId) => progressMaterialIds.has(materialId))));
+        const understandingPercent = estimateUnderstandingPercent(scoredEvidence);
         const status = attempts
-          ? `${scoredProgress(attempts, scoredAttempts, correct)}; latest ${latest?.latestOutcome ?? "not recorded"}${latest?.lastPracticedAt ? `; last practiced ${latest.lastPracticedAt}` : ""}`
+          ? `${understandingPercent}% estimated understanding; ${scoredProgress(attempts, scoredAttempts, correct)}; latest ${latest?.latestOutcome ?? "not recorded"}${latest?.lastPracticedAt ? `; last practiced ${latest.lastPracticedAt}` : ""}`
           : sessions ? "Lesson opened (no checks saved)" : "Not practiced yet";
         return `- ${wikilink(topicPaths.get(concept.key)!, concept.title)} — ${status}`;
       }).join("\n") || "- No accepted course topics linked.";

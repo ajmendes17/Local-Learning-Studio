@@ -1,6 +1,8 @@
 import {
   LearnerAssessmentCreateSchema,
   LearnerAssessmentUpdateSchema,
+  InstructorGuidanceResponseSchema,
+  InstructorGuidanceUpdateSchema,
   LearnerAssessmentTopicsAppendSchema,
   LearnerAssessmentTopicImportanceUpdateSchema,
   LearnerConceptCreateSchema,
@@ -174,7 +176,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
   courses: CourseLibrary;
   sources: SourceLibrary;
   learning: LearningWorkflowService;
-  codex: { run<T>(task: CodexTask, prompt: string, schema: import("zod").ZodType<T>): Promise<{ output: T; model?: string }> };
+  codex: { run<T>(task: CodexTask, prompt: string, schema: import("zod").ZodType<T>): Promise<{ output: T; model?: string; durationMs?: number; timing?: { queueWaitMs: number; setupMs: number; executionMs: number; decodeMs: number } }> };
 }) {
   const paramsSchema = z.object({ courseId: z.string().uuid() });
   const courseIdFor = (raw: unknown) => {
@@ -182,6 +184,20 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
     if (!parsed.success || !options.courses.getCourse(parsed.data.courseId)) return null;
     return parsed.data.courseId;
   };
+
+  app.get<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/instructor-guidance", async (request, reply) => {
+    const courseId = courseIdFor(request.params);
+    if (!courseId) return reply.code(404).send({ error: "Class not found." });
+    return InstructorGuidanceResponseSchema.parse(options.learner.getInstructorGuidance(courseId));
+  });
+
+  app.put<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/instructor-guidance", async (request, reply) => {
+    const courseId = courseIdFor(request.params);
+    if (!courseId) return reply.code(404).send({ error: "Class not found." });
+    const parsed = InstructorGuidanceUpdateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Instructor guidance must be 12,000 characters or fewer." });
+    return InstructorGuidanceResponseSchema.parse(options.learner.saveInstructorGuidance(courseId, parsed.data));
+  });
 
   app.get<{ Params: { courseId: string } }>("/api/courses/:courseId/learner/profile", async (request, reply) => {
     const courseId = courseIdFor(request.params);
@@ -208,6 +224,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       classId: courseId,
       course: { id: course.id, title: course.title, code: course.code, term: course.term, accent: course.accent },
       profile: LearnerProfileResponseSchema.parse(options.learner.getProfile(courseId)),
+      instructorGuidance: options.learner.getInstructorGuidance(courseId),
       methodProgress: LearnerMethodProgressResponseSchema.parse(options.learner.getMethodProgress(courseId)),
       studySessions: options.learner.getStudySessionsForExport(courseId),
       attempts: options.learner.getAttemptsForObsidianExport(courseId),
@@ -424,6 +441,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
     const sourcePassages = sourceMaterial
       ? (selectedSourcePassages ?? []).map(({ id, ordinal, content, location }) => ({ id, ordinal, content: content.slice(0, 1800), location }))
       : [];
+    const instructorGuidance = options.learner.getInstructorGuidance(courseId).body;
     const contrastTopics = parsed.data.method === "compare-contrast"
       ? acceptedContrastTopics(options.learning.getCurrentAcceptedCourseMap(courseId)?.payload ?? null, parsed.data.topic)
       : [];
@@ -452,6 +470,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           ? "Ground the lesson and knowledge check in the supplied course-material passages. Keep source-specific claims and notation faithful to the material; explain underlying ideas without inventing details. Mark sourceBasis as course-materials."
           : "Teach from reliable general knowledge when no course passages are supplied. Clearly mark that content as not verified against the learner's course.",
         assessment ? "Focus this session on the selected learner-provided assessment topic. Preserve the instructor's wording and do not expand into unrelated topics." : "",
+        instructorGuidance ? "Use the learner's saved instructor guidance as course context where it applies. It may describe topic coverage, required solution methods, or constraints; preserve its meaning without inventing additional requirements." : "",
         reviewSession ? "This is a focused remediation follow-up. Use the saved attempt evidence to address the learner's specific uncertainty. For a miss or unscored response, explain the likely gap briefly before a different example; for a low-confidence correct response, test transfer. Do not repeat the old question or reveal the new answer in advance." : "",
         openResponse
           ? parsed.data.method === "teach-back"
@@ -463,7 +482,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         "Write mathematical notation with Markdown math delimiters: use $...$ inline; for display equations put $$ on its own line, the equation on following line(s), and the closing $$ on its own line. For quantum notation use supported LaTeX such as \\ket{\\psi}, \\bra{\\phi}, and \\braket{\\phi|\\psi}; do not leave raw TeX commands outside math delimiters.",
         methodDirections[parsed.data.method],
         "Never say the learner has mastered the topic based on this generated lesson.",
-        "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, ...(parsed.data.method === "compare-contrast" ? { acceptedMapRelatedConcepts: contrastTopics } : {}), sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
+        "INPUT_JSON", JSON.stringify({ className: options.courses.getCourse(courseId)?.title, topic: parsed.data.topic, method: parsed.data.method, instructorGuidance: instructorGuidance || null, ...(parsed.data.method === "compare-contrast" ? { acceptedMapRelatedConcepts: contrastTopics } : {}), sourceMaterial: sourceMaterial ? { id: sourceMaterial.id, name: sourceMaterial.originalName, passages: sourcePassages } : null, assessmentScope: assessment ? { id: assessment.id, title: assessment.title, topic: assessmentTopic?.title, instructorWording: assessment.instructorText } : null, followUpEvidence: reviewAttempts.map(({ outcome, response, confidence, hintCount, method, independence, createdAt }) => ({ outcome, response: response.slice(0, 2000), confidence, hintCount, method, independence, createdAt })), learnerProfile: options.learner.getProfile(courseId).concepts.find((item) => item.id === concept.id) ?? null }),
       ].join("\n\n"), StudySessionGenerationContentSchema);
       if (parsed.data.method === "error-analysis" && !hasFourNumberedSteps(result.output.example)) {
         return reply.code(502).send({
@@ -494,6 +513,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
   });
 
   app.post<{ Params: { courseId: string; sessionId: string } }>("/api/courses/:courseId/learner/study-sessions/:sessionId/next-question", async (request, reply) => {
+    const routeStartedAt = Date.now();
     const courseId = courseIdFor(request.params);
     const sessionId = z.string().uuid().safeParse(request.params.sessionId);
     if (!courseId || !sessionId.success) return reply.code(404).send({ error: "Study session not found." });
@@ -524,6 +544,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
         : [];
       const openResponse = session.method === "free-recall" || session.method === "teach-back";
       const questionSchema = openResponse ? StudyFreeRecallQuestionSchema : StudyQuestionSchema;
+      const prepareMs = Date.now() - routeStartedAt;
       const result = await options.codex.run("generate-adaptive-practice", [
         openResponse
           ? session.method === "teach-back"
@@ -560,6 +581,7 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
           previousQuestion: session.question,
         }),
       ].join("\n\n"), questionSchema);
+      const validationStartedAt = Date.now();
       const generatedQuestion = questionSchema.parse(result.output);
       if (session.method === "error-analysis" && !hasFourNumberedSteps(generatedQuestion.question)) {
         return reply.code(502).send({
@@ -571,12 +593,28 @@ export async function registerLearnerRoutes(app: FastifyInstance, options: {
       const question = normalizeGeneratedQuestionText(session.method === "error-analysis"
         ? { ...generatedQuestion, options: ERROR_ANALYSIS_OPTIONS }
         : generatedQuestion);
+      const validationMs = Date.now() - validationStartedAt;
       const { sessionId: _oldSessionId, createdAt: _oldCreatedAt, ...sessionContent } = session;
+      const saveStartedAt = Date.now();
       const nextSession = StudySessionRecordSchema.parse(options.learner.saveStudySession(courseId, session.conceptId, {
         ...sessionContent,
         ...question,
         ...(openResponse ? { options: [], answerIndex: null } : {}),
       }));
+      const saveMs = Date.now() - saveStartedAt;
+      const timing = result.timing ?? { queueWaitMs: 0, setupMs: 0, executionMs: result.durationMs ?? 0, decodeMs: 0 };
+      const routeMs = Date.now() - routeStartedAt;
+      reply.header("Server-Timing", [
+        `route;dur=${routeMs}`,
+        `prepare;dur=${prepareMs}`,
+        `queue;dur=${timing.queueWaitMs}`,
+        `setup;dur=${timing.setupMs}`,
+        `codex;dur=${timing.executionMs}`,
+        `decode;dur=${timing.decodeMs}`,
+        `validate;dur=${validationMs}`,
+        `save;dur=${saveMs}`,
+      ].join(", "));
+      request.log.info({ event: "adaptive_practice_timing", courseId, sessionId: nextSession.sessionId, method: session.method, ...timing, prepareMs, validationMs, saveMs, routeMs }, "Adaptive practice generation timing");
       return nextSession;
     } catch (error) {
       if (error instanceof Error && error.name === "CodexRunError") return reply.code(503).send({ error: error.message });

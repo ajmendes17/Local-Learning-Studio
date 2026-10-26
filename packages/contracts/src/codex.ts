@@ -12,6 +12,7 @@ export const CodexTaskSchema = z.enum([
   "plan-remediation",
   "review-learning-patterns",
   "audit-learning-artifact",
+  "reconcile-assessments",
 ]);
 
 export type CodexTask = z.infer<typeof CodexTaskSchema>;

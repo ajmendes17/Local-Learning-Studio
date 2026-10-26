@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { LearnerAssessmentCreate, LearnerAssessmentTopicsAppend, LearnerAssessmentUpdate, LearnerMethodProgressResponse, LearnerPatternReviewResult, LearnerProfileResponse } from "@local-learning-studio/contracts";
+import type { InstructorGuidanceResponse, InstructorGuidanceUpdate, LearnerAssessmentCreate, LearnerAssessmentTopicsAppend, LearnerAssessmentUpdate, LearnerMethodProgressResponse, LearnerPatternReviewResult, LearnerProfileResponse } from "@local-learning-studio/contracts";
 
 function sourceSessionMatches(sessionAlias: string, materialAlias: string) {
   return `(json_extract(${sessionAlias}.content_json,'$.sourceMaterialId')=${materialAlias}.id OR (
@@ -14,6 +14,20 @@ function sourceSessionMatches(sessionAlias: string, materialAlias: string) {
 
 export class LearnerLibrary {
   constructor(private readonly database: DatabaseSync) {}
+
+  getInstructorGuidance(courseId: string): InstructorGuidanceResponse {
+    const row = this.database.prepare(`SELECT body,updated_at AS updatedAt FROM instructor_guidance WHERE course_id=?`)
+      .get(courseId) as { body: string; updatedAt: string } | undefined;
+    return row ?? { body: "", updatedAt: null };
+  }
+
+  saveInstructorGuidance(courseId: string, input: InstructorGuidanceUpdate): InstructorGuidanceResponse {
+    const updatedAt = new Date().toISOString();
+    this.database.prepare(`INSERT INTO instructor_guidance(course_id,body,updated_at) VALUES (?,?,?)
+      ON CONFLICT(course_id) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at`)
+      .run(courseId, input.body, updatedAt);
+    return { body: input.body, updatedAt };
+  }
 
   createAssessment(courseId: string, input: LearnerAssessmentCreate) {
     const foreignConcept = input.topics.some(({ conceptId }) => conceptId && !this.database
@@ -193,7 +207,8 @@ export class LearnerLibrary {
   }
 
   listStudySessions(courseId: string, limit = 30) {
-    return this.database.prepare(`SELECT s.id AS sessionId,s.concept_id AS conceptId,s.topic,COALESCE(json_extract(s.content_json,'$.method'),s.method) AS method,s.created_at AS createdAt,
+    return this.database.prepare(`SELECT s.id AS sessionId,s.concept_id AS conceptId,s.topic,COALESCE(json_extract(s.content_json,'$.method'),s.method) AS method,
+      json_extract(s.content_json,'$.sourceMaterialId') AS sourceMaterialId,s.created_at AS createdAt,
       COUNT(a.id) AS attemptCount,SUM(CASE WHEN a.outcome='correct' THEN 1 ELSE 0 END) AS correctCount,
       (SELECT outcome FROM study_attempts WHERE session_id=s.id ORDER BY created_at DESC, rowid DESC LIMIT 1) AS latestOutcome
       FROM study_sessions s LEFT JOIN study_attempts a ON a.session_id=s.id
@@ -423,6 +438,14 @@ export class LearnerLibrary {
         EXISTS (SELECT 1 FROM json_each(a.source_refs_json) ref WHERE json_extract(ref.value,'$.materialId')=m.id)
         OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
       ) ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1) AS latestConfidence,
+      (SELECT json_group_array(json_object('outcome',recent.outcome,'independence',recent.independence,'hintCount',recent.hintCount,'createdAt',recent.createdAt))
+        FROM (SELECT a.outcome,COALESCE(me.independence,'unknown') AS independence,a.hint_count AS hintCount,a.created_at AS createdAt
+          FROM study_attempts a LEFT JOIN mastery_evidence me ON me.attempt_id=a.id AND me.course_id=a.course_id
+          WHERE a.course_id=m.course_id AND a.concept_id=c.id AND a.outcome IN ('correct','incorrect') AND (
+            EXISTS (SELECT 1 FROM json_each(a.source_refs_json) ref WHERE json_extract(ref.value,'$.materialId')=m.id)
+            OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
+          ) ORDER BY a.created_at DESC,a.rowid DESC LIMIT 8) recent
+      ) AS recentEvidenceJson,
       (SELECT MAX(a.created_at) FROM study_attempts a WHERE a.course_id=m.course_id AND a.concept_id=c.id AND (
         EXISTS (SELECT 1 FROM json_each(a.source_refs_json) ref WHERE json_extract(ref.value,'$.materialId')=m.id)
         OR EXISTS (SELECT 1 FROM study_sessions s WHERE s.id=a.session_id AND s.course_id=m.course_id AND ${sourceSessionMatches("s", "m")})
@@ -464,6 +487,12 @@ export class LearnerLibrary {
       SUM(CASE WHEN a.outcome='correct' AND me.independence='independent' THEN 1 ELSE 0 END) AS independentCorrectCount,
       (SELECT outcome FROM study_attempts WHERE concept_id=c.id ORDER BY created_at DESC, rowid DESC LIMIT 1) AS latestOutcome,
       (SELECT confidence FROM study_attempts WHERE concept_id=c.id ORDER BY created_at DESC, rowid DESC LIMIT 1) AS latestConfidence,
+      (SELECT json_group_array(json_object('outcome',recent.outcome,'independence',recent.independence,'hintCount',recent.hintCount,'createdAt',recent.createdAt))
+        FROM (SELECT a.outcome,COALESCE(me.independence,'unknown') AS independence,a.hint_count AS hintCount,a.created_at AS createdAt
+          FROM study_attempts a LEFT JOIN mastery_evidence me ON me.attempt_id=a.id AND me.course_id=a.course_id
+          WHERE a.course_id=c.course_id AND a.concept_id=c.id AND a.outcome IN ('correct','incorrect')
+          ORDER BY a.created_at DESC,a.rowid DESC LIMIT 8) recent
+      ) AS recentEvidenceJson,
       MAX(a.created_at) AS lastPracticedAt,
       (SELECT COUNT(*) FROM study_sessions s WHERE s.course_id=c.course_id AND s.concept_id=c.id) AS sessionCount,
       (SELECT MAX(s.created_at) FROM study_sessions s WHERE s.course_id=c.course_id AND s.concept_id=c.id) AS lastSessionAt
@@ -474,8 +503,8 @@ export class LearnerLibrary {
         attemptCount: Number(source.attemptCount), scoredAttemptCount: Number(source.scoredAttemptCount), correctCount: Number(source.correctCount ?? 0),
         sessionCount: Number(source.sessionCount),
         topicCount: Number(source.topicCount), practicedTopicCount: Number(source.practicedTopicCount),
-        topics: sourceTopics.filter((topic) => topic.materialId === source.materialId).map(({ materialId: _materialId, ...topic }) => ({
-          ...topic, attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount ?? 0), independentScoredAttemptCount: Number(topic.independentScoredAttemptCount), independentCorrectCount: Number(topic.independentCorrectCount), latestConfidence: topic.latestConfidence == null ? null : Number(topic.latestConfidence), sessionCount: Number(topic.sessionCount),
+        topics: sourceTopics.filter((topic) => topic.materialId === source.materialId).map(({ materialId: _materialId, recentEvidenceJson, ...topic }) => ({
+          ...topic, attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount ?? 0), independentScoredAttemptCount: Number(topic.independentScoredAttemptCount), independentCorrectCount: Number(topic.independentCorrectCount), latestConfidence: topic.latestConfidence == null ? null : Number(topic.latestConfidence), recentEvidence: recentEvidenceJson ? JSON.parse(recentEvidenceJson) : [], sessionCount: Number(topic.sessionCount),
         })),
       })),
       assessments: assessmentRows.map((row) => ({
@@ -485,7 +514,7 @@ export class LearnerLibrary {
           ...topic, position: Number(topic.position), attemptCount: Number(topic.attemptCount), scoredAttemptCount: Number(topic.scoredAttemptCount), correctCount: Number(topic.correctCount), independentScoredAttemptCount: Number(topic.independentScoredAttemptCount), independentCorrectCount: Number(topic.independentCorrectCount), latestConfidence: topic.latestConfidence == null ? null : Number(topic.latestConfidence), sessionCount: Number(topic.sessionCount),
         })),
       })),
-      concepts: concepts.map((row) => ({ ...row, attemptCount: Number(row.attemptCount), scoredAttemptCount: Number(row.scoredAttemptCount ?? 0), correctCount: Number(row.correctCount ?? 0), independentScoredAttemptCount: Number(row.independentScoredAttemptCount ?? 0), independentCorrectCount: Number(row.independentCorrectCount ?? 0), latestConfidence: row.latestConfidence == null ? null : Number(row.latestConfidence), sessionCount: Number(row.sessionCount) })),
+      concepts: concepts.map(({ recentEvidenceJson, ...row }) => ({ ...row, attemptCount: Number(row.attemptCount), scoredAttemptCount: Number(row.scoredAttemptCount ?? 0), correctCount: Number(row.correctCount ?? 0), independentScoredAttemptCount: Number(row.independentScoredAttemptCount ?? 0), independentCorrectCount: Number(row.independentCorrectCount ?? 0), latestConfidence: row.latestConfidence == null ? null : Number(row.latestConfidence), recentEvidence: recentEvidenceJson ? JSON.parse(recentEvidenceJson) : [], sessionCount: Number(row.sessionCount) })),
     };
   }
 
@@ -587,6 +616,7 @@ export class LearnerLibrary {
     const tables = [
       "source_annotation_imports",
       "source_annotations",
+      "instructor_guidance",
       "mastery_evidence",
       "study_attempts",
       "study_sessions",

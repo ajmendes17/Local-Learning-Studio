@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, assessmentScheduleOverflowMinutes, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, studyPlanReasonLabel, summarizeStudyCoverage, type CourseMapArtifact } from "@local-learning-studio/contracts";
+import { allocateAssessmentStudyPlan, assessmentDeadlineLabel, assessmentScheduleOverflowMinutes, estimateUnderstandingPercent, HOMEWORK_THREE_LEARNING_PATH, parseInstructorTopicList, prioritizeStudyRecommendations, recommendNextStudyTopic, scheduleAssessmentStudyDays, studyPlanReasonLabel, summarizeStudyCoverage, type CourseMapArtifact } from "@local-learning-studio/contracts";
 import { MathText } from "../components/MathText";
 import { MethodProgressTracks } from "../components/MethodProgressTracks";
-import { getAcceptedCourseMap } from "../lib/api";
+import { getAcceptedCourseMap, uploadMaterial } from "../lib/api";
 import { clearInstructorTopicDraft, readInstructorTopicDraft, writeInstructorTopicDraft } from "../lib/instructor-topic-draft";
 import { clearStudyAttemptDraft, readStudyAttemptDraft, writeStudyAttemptDraft, type DraftStorage, type StudyAttemptDraft } from "../lib/study-attempt-draft";
 import { appendInstructorTopicWording, partitionInstructorTopics } from "../lib/instructor-topic-scope";
@@ -44,6 +44,24 @@ function studyMethodLabel(method: string) {
   }
 }
 
+function adaptiveGenerationTimingLabel(header: string | null) {
+  if (!header) return null;
+  const timing = Object.fromEntries(header.split(",").map((part) => {
+    const [name, ...attributes] = part.trim().split(";");
+    const duration = attributes.find((attribute) => attribute.startsWith("dur="))?.slice(4);
+    return [name, duration ? Number(duration) : 0];
+  })) as Record<string, number>;
+  if (!timing.route) return null;
+  const codexMs = timing.codex ?? 0;
+  const queueMs = timing.queue ?? 0;
+  const seconds = (value = 0) => `${(value / 1000).toFixed(1)}s`;
+  return `Question ready in ${seconds(timing.route)} · Codex CLI + model ${seconds(codexMs)} · queued ${seconds(queueMs)} · server work ${seconds(Math.max(0, timing.route - codexMs - queueMs))}`;
+}
+
+function friendlyMaterialTitle(name: string) {
+  return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/([a-z])([0-9])/gi, "$1 $2").replace(/\bstudent\b/gi, "").replace(/\s+/g, " ").trim();
+}
+
 interface StudyAttemptSummary { outcome: string; response: string; confidence: number | null; hintCount: number; independence: "independent" | "hinted" | "assisted" | "unknown"; createdAt: string }
 interface StudyContent {
   sessionId: string; createdAt: string;
@@ -51,13 +69,14 @@ interface StudyContent {
   lesson: string; example: string; question: string; options: string[]; answerIndex: number | null; feedback: string; clarification: string; hints: string[];
   attempts?: StudyAttemptSummary[];
 }
-interface SourceTopicProgress { conceptId: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
+interface SourceTopicProgress { conceptId: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; recentEvidence: Array<{ outcome: "correct" | "incorrect"; independence: "independent" | "hinted" | "assisted" | "unknown"; hintCount: number; createdAt: string }>; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
 interface SourceProgress { materialId: string; title: string; kind: string; mediaType: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; topicCount: number; practicedTopicCount: number; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null; topics: SourceTopicProgress[] }
-interface SessionSummary { sessionId: string; conceptId: string; topic: string; method: Method; createdAt: string; attemptCount: number; correctCount: number; latestOutcome: string | null }
-interface ConceptProgress { id: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
+interface SessionSummary { sessionId: string; conceptId: string; topic: string; method: Method; sourceMaterialId?: string | null; createdAt: string; attemptCount: number; correctCount: number; latestOutcome: string | null }
+interface ConceptProgress { id: string; title: string; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; recentEvidence: Array<{ outcome: "correct" | "incorrect"; independence: "independent" | "hinted" | "assisted" | "unknown"; hintCount: number; createdAt: string }>; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }
 interface MethodTopicProgress { conceptId: string | null; title: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; correctCount: number; lowConfidenceCorrectCount: number; confidenceRatedAttemptCount: number; latestOutcome: string | null; latestConfidence: number | null; meanConfidenceGap: number | null; lastPracticedAt: string | null }
 interface MethodProgress { method: string; attemptCount: number; scoredAttemptCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; hintedScoredAttemptCount: number; hintedCorrectCount: number; assistedScoredAttemptCount: number; assistedCorrectCount: number; unknownIndependenceScoredAttemptCount: number; unknownIndependenceCorrectCount: number; confidenceRatedAttemptCount: number; meanConfidenceGap: number | null; correctCount: number; topicCount: number; topicTitles: string[]; topicProgress: MethodTopicProgress[]; highConfidenceMissCount: number; lowConfidenceCorrectCount: number; lastPracticedAt: string | null }
 interface AssessmentScope { id: string; title: string; instructorText: string; kind: "exam" | "quiz" | "other"; scheduledAt: string | null; availableMinutes: number | null; dailyMinutes: number; attemptCount: number; scoredAttemptCount: number; correctCount: number; sessionCount: number; lastSessionAt: string | null; topics: Array<{ id: string; conceptId: string | null; title: string; importance: "low" | "normal" | "high"; attemptCount: number; scoredAttemptCount: number; correctCount: number; independentScoredAttemptCount: number; independentCorrectCount: number; latestOutcome: string | null; latestConfidence?: number | null; lastPracticedAt: string | null; sessionCount: number; lastSessionAt: string | null }> }
+interface InstructorGuidance { body: string; updatedAt: string | null }
 interface StudyRecommendation {
   title: string;
   reason: "needs-review" | "low-scored-accuracy" | "needs-scored-check" | "lesson-only" | "not-practiced" | "needs-independent-check" | "low-confidence-correct" | "spaced-review" | "least-recently-practiced";
@@ -114,7 +133,7 @@ async function postJson<T>(path: string, body: unknown, method: "POST" | "PATCH"
   return result as T;
 }
 
-export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMaterialId, initialAssessmentId, initialSessionId, initialMethod, onBack }: { courseId: string; courseTitle: string; initialTopic?: string; initialSourceMaterialId?: string; initialAssessmentId?: string; initialSessionId?: string; initialMethod?: "quiz"; onBack: () => void }) {
+export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMaterialId, initialAssessmentId, initialSessionId, initialMethod, focus = false, onBack }: { courseId: string; courseTitle: string; initialTopic?: string; initialSourceMaterialId?: string; initialAssessmentId?: string; initialSessionId?: string; initialMethod?: "quiz"; focus?: boolean; onBack: () => void }) {
   const [initialTopicScopeDraft] = useState(() => {
     const storage = typeof window === "undefined" ? null : browserSessionStorage();
     return storage ? readInstructorTopicDraft(storage, courseId) : null;
@@ -124,6 +143,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [studyAssessmentId, setStudyAssessmentId] = useState(initialAssessmentId);
   const [method, setMethod] = useState<Method>("explanation");
   const [content, setContent] = useState<StudyContent | null>(null);
+  const [generationTimingLabel, setGenerationTimingLabel] = useState<string | null>(null);
+  const [scrollToSessionId, setScrollToSessionId] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [freeResponse, setFreeResponse] = useState("");
   const [reopenedAttempt, setReopenedAttempt] = useState<StudyAttemptSummary | null>(null);
@@ -140,6 +161,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [chatQuestion, setChatQuestion] = useState("");
   const [chatAnswer, setChatAnswer] = useState<ChatAnswer | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [topicScopeOpen, setTopicScopeOpen] = useState(Boolean(initialTopicScopeDraft));
   const [topicScopeTargetAssessmentId, setTopicScopeTargetAssessmentId] = useState<string | null>(initialTopicScopeDraft?.assessmentId ?? null);
@@ -155,6 +177,13 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [editingInstructorScopeId, setEditingInstructorScopeId] = useState<string | null>(null);
   const [instructorTextDraft, setInstructorTextDraft] = useState("");
   const [instructorTextSaving, setInstructorTextSaving] = useState(false);
+  const [instructorGuidance, setInstructorGuidance] = useState<InstructorGuidance>({ body: "", updatedAt: null });
+  const [instructorGuidanceDraft, setInstructorGuidanceDraft] = useState("");
+  const [instructorGuidanceSaving, setInstructorGuidanceSaving] = useState(false);
+  const [instructorGuidanceUploading, setInstructorGuidanceUploading] = useState(false);
+  const [instructorGuidanceMessage, setInstructorGuidanceMessage] = useState("");
+  const guidanceFileInput = useRef<HTMLInputElement>(null);
+  const instructorGuidanceInitialized = useRef(false);
   const [savingPriorityTopicId, setSavingPriorityTopicId] = useState<string | null>(null);
   const [budgetTitle, setBudgetTitle] = useState("");
   const [budgetMinutes, setBudgetMinutes] = useState(60);
@@ -171,8 +200,68 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const [acceptedCourseMap, setAcceptedCourseMap] = useState<CourseMapArtifact | null>(null);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [patternBusy, setPatternBusy] = useState(false);
-  const [studyTab, setStudyTab] = useState<"lesson" | "check">("lesson");
+  const [studyTab, setStudyTab] = useState<"lesson" | "check" | "review">("lesson");
+  const attemptDraftStudyTab = studyTab === "review" ? "check" : studyTab;
+  const [obsidianExportBusy, setObsidianExportBusy] = useState(false);
+  const [obsidianExportMessage, setObsidianExportMessage] = useState("");
   const autoStartedTopic = useRef<string | null>(null);
+  const assignmentSource = sourceProgress.find(({ materialId }) => materialId === initialSourceMaterialId);
+  const isAssignmentWorkspace = assignmentSource?.kind === "assignment";
+  const assignmentTitle = assignmentSource ? friendlyMaterialTitle(assignmentSource.title) : "Assignment";
+  const isHomeworkThree = /homework\s*3/i.test(assignmentTitle);
+  const assignmentLearningPath = isHomeworkThree
+    ? HOMEWORK_THREE_LEARNING_PATH
+    : (acceptedCourseMap?.payload.concepts ?? [])
+      .filter((concept) => concept.sourceReferences.some((reference) => reference.materialId === initialSourceMaterialId))
+      .map((concept) => ({ problem: "Assignment topic", title: concept.title, focus: concept.description }));
+  const assignmentSessions = history.filter(({ sourceMaterialId }) => sourceMaterialId === initialSourceMaterialId);
+  const assignmentTopicActivity = assignmentLearningPath.map((item) => {
+    const signal = assignmentSource?.topics.find(({ title }) => title.trim().normalize("NFKC").toLocaleLowerCase() === item.title.trim().normalize("NFKC").toLocaleLowerCase());
+    const understandingPercent = estimateUnderstandingPercent(signal?.recentEvidence ?? []);
+    return { ...item, signal, understandingPercent };
+  });
+  const assignmentUnderstandingPercent = assignmentTopicActivity.length ? Math.round(assignmentTopicActivity.reduce((total, item) => total + item.understandingPercent, 0) / assignmentTopicActivity.length) : 0;
+  const assignmentCheckedTopicCount = assignmentTopicActivity.filter(({ signal }) => (signal?.scoredAttemptCount ?? 0) > 0).length;
+  const currentSourceTopicSignal = content?.sourceMaterialId
+    ? sourceProgress.find(({ materialId }) => materialId === content.sourceMaterialId)?.topics.find(({ title }) => title.trim().normalize("NFKC").toLocaleLowerCase() === content.topic.trim().normalize("NFKC").toLocaleLowerCase())
+    : undefined;
+  const currentConceptSignal = content ? progress.find(({ id }) => id === content.conceptId) : undefined;
+  const sessionReviewTopics = isAssignmentWorkspace ? assignmentTopicActivity : content ? [{
+    problem: "Current topic",
+    title: content.topic,
+    focus: "This estimate uses saved scored checks for the current study session.",
+    signal: currentSourceTopicSignal,
+    understandingPercent: estimateUnderstandingPercent(currentSourceTopicSignal?.recentEvidence ?? currentConceptSignal?.recentEvidence ?? []),
+  }] : [];
+  const sessionReviewTitle = isAssignmentWorkspace ? assignmentTitle : content?.topic ?? "Study session";
+  const sessionReviewCheckedTopicCount = isAssignmentWorkspace ? assignmentCheckedTopicCount : Number((currentSourceTopicSignal?.scoredAttemptCount ?? currentConceptSignal?.scoredAttemptCount ?? 0) > 0);
+  const sessionReviewTopicCount = isAssignmentWorkspace ? assignmentLearningPath.length : sessionReviewTopics.length;
+
+  function openAssignmentTopicSession(topicTitle: string, requestedMethod: "explanation" | "quiz") {
+    const query = new URLSearchParams({ topic: topicTitle, sourceMaterialId: initialSourceMaterialId ?? "", focus: "1" });
+    if (!initialSourceMaterialId) query.delete("sourceMaterialId");
+    if (requestedMethod === "quiz") query.set("method", requestedMethod);
+    window.open(`/courses/${encodeURIComponent(courseId)}/study?${query}`, "_blank", "noopener,noreferrer");
+  }
+
+  useEffect(() => {
+    if (!scrollToSessionId || content?.sessionId !== scrollToSessionId) return;
+    document.querySelector(".study-columns")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setScrollToSessionId(null);
+  }, [content?.sessionId, scrollToSessionId]);
+
+  useEffect(() => {
+    const activeTopic = content ? content.topic : initialTopic;
+    const assessmentId = content ? content.assessmentId : initialAssessmentId;
+    const sourceMaterialId = content ? content.sourceMaterialId : initialSourceMaterialId;
+    const assessmentTitle = assessmentScopes.find(({ id }) => id === assessmentId)?.title;
+    const materialTitle = sourceProgress.find(({ materialId }) => materialId === sourceMaterialId)?.title;
+    const activeMaterial = sourceProgress.find(({ materialId }) => materialId === sourceMaterialId);
+    const activeAssignment = activeMaterial?.kind === "assignment" ? activeMaterial : undefined;
+    const sessionLabel = assessmentTitle ?? (activeAssignment ? friendlyMaterialTitle(activeAssignment.title) : materialTitle) ?? activeTopic ?? "Study space";
+    document.title = `${sessionLabel} · ${courseTitle} | Local Learning Studio`;
+    return () => { document.title = "Local Learning Studio"; };
+  }, [content?.topic, content?.assessmentId, content?.sourceMaterialId, initialTopic, initialAssessmentId, initialSourceMaterialId, assessmentScopes, sourceProgress, courseTitle]);
 
   useEffect(() => {
     const storage = browserSessionStorage();
@@ -192,7 +281,6 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   function setActiveSessionInUrl(sessionId: string) {
     const query = new URLSearchParams(window.location.search);
     query.delete("topic");
-    query.delete("sourceMaterialId");
     query.delete("assessmentId");
     query.delete("method");
     query.set("sessionId", sessionId);
@@ -200,11 +288,12 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   async function refreshClassData() {
-    const [historyResponse, profileResponse, patternResponse, methodProgressResponse, acceptedMapResult] = await Promise.all([
+    const [historyResponse, profileResponse, patternResponse, methodProgressResponse, instructorGuidanceResponse, acceptedMapResult] = await Promise.all([
       fetch(`/api/courses/${courseId}/learner/study-sessions`),
       fetch(`/api/courses/${courseId}/learner/profile`),
       fetch(`/api/courses/${courseId}/learner/patterns`),
       fetch(`/api/courses/${courseId}/learner/method-progress`),
+      fetch(`/api/courses/${courseId}/learner/instructor-guidance`),
       getAcceptedCourseMap(courseId).then((courseMap) => ({ ok: true, courseMap })).catch(() => ({ ok: false, courseMap: null })),
     ]);
     if (historyResponse.ok) setHistory(await historyResponse.json());
@@ -216,13 +305,26 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     }
     if (patternResponse.ok) setPatterns((await patternResponse.json()).patterns);
     if (methodProgressResponse.ok) setMethodProgress(await methodProgressResponse.json());
+    if (instructorGuidanceResponse.ok) {
+      const savedGuidance = await instructorGuidanceResponse.json() as InstructorGuidance;
+      setInstructorGuidance(savedGuidance);
+      if (!instructorGuidanceInitialized.current) {
+        setInstructorGuidanceDraft(savedGuidance.body);
+        instructorGuidanceInitialized.current = true;
+      }
+    }
     if (acceptedMapResult.ok) setAcceptedCourseMap(acceptedMapResult.courseMap);
-    if ([historyResponse, profileResponse, patternResponse, methodProgressResponse].some((response) => !response.ok) || !acceptedMapResult.ok) {
+    if ([historyResponse, profileResponse, patternResponse, methodProgressResponse, instructorGuidanceResponse].some((response) => !response.ok) || !acceptedMapResult.ok) {
       setError("Some class progress could not be loaded. Check that the local service is running, then refresh.");
     } else setError((current) => current.startsWith("Some class progress could not be loaded.") ? "" : current);
   }
 
-  useEffect(() => { void refreshClassData().catch(() => undefined); }, [courseId]);
+  useEffect(() => {
+    instructorGuidanceInitialized.current = false;
+    setInstructorGuidance({ body: "", updatedAt: null });
+    setInstructorGuidanceDraft("");
+    void refreshClassData().catch(() => undefined);
+  }, [courseId]);
 
   useEffect(() => {
     if (!content) return;
@@ -230,7 +332,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       clearAttemptDraft(courseId, content.sessionId);
       return;
     }
-    writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp, studyTab });
+    writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp, studyTab: attemptDraftStudyTab });
   }, [courseId, content?.sessionId, selected, freeResponse, confidence, hintCount, usedOutsideHelp, studyTab, saved, reopenedAttempt]);
 
   async function beginStudy(event: React.FormEvent) {
@@ -243,7 +345,7 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     const requestStartedAt = Date.now();
     setTopic(requestedTopic.trim());
     setMethod(requestedMethod);
-    setBusy(true); setError(""); setNotice(""); setContent(null); setSelected(null); setFreeResponse(""); setReopenedAttempt(null); setSaved(false); setAttemptSaveError(""); pendingAttempt.current = null; setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false);
+    setBusy(true); setError(""); setNotice(""); setGenerationTimingLabel(null); setContent(null); setSelected(null); setFreeResponse(""); setReopenedAttempt(null); setSaved(false); setAttemptSaveError(""); pendingAttempt.current = null; setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false);
     setStudyTab(startsWithCheck(requestedMethod) ? "check" : "lesson");
     try {
       const generated = await postJson<StudyContent>(`/api/courses/${courseId}/learner/study-session`, { topic: requestedTopic.trim(), method: requestedMethod, ...(sourceMaterialId ? { sourceMaterialId } : {}), ...(assessmentId ? { assessmentId } : {}), ...(reviewSessionId ? { reviewSessionId } : {}) });
@@ -321,41 +423,38 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
 
   function selectAnswer(index: number) {
     if (!saved && !reopenedAttempt && !pendingAttempt.current) {
+      const nextConfidence = selected !== index ? 0.75 : confidence <= 0.5 ? 0.75 : 0.25;
       setSelected(index);
-      if (content) writeAttemptDraft(courseId, content.sessionId, { selected: index, response: freeResponse, confidence, hintCount, usedOutsideHelp, studyTab });
+      setConfidence(nextConfidence);
+      if (content) writeAttemptDraft(courseId, content.sessionId, { selected: index, response: freeResponse, confidence: nextConfidence, hintCount, usedOutsideHelp, studyTab: attemptDraftStudyTab });
     }
   }
 
   function updateFreeResponse(value: string) {
     setFreeResponse(value);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: value, confidence, hintCount, usedOutsideHelp, studyTab });
-  }
-
-  function updateConfidence(value: number) {
-    setConfidence(value);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence: value, hintCount, usedOutsideHelp, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: value, confidence, hintCount, usedOutsideHelp, studyTab: attemptDraftStudyTab });
   }
 
   function revealHint() {
     const nextHintCount = Math.min(content?.hints.length ?? 0, hintCount + 1);
     setHintCount(nextHintCount);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount: nextHintCount, usedOutsideHelp, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount: nextHintCount, usedOutsideHelp, studyTab: attemptDraftStudyTab });
   }
 
   function updateOutsideHelp(value: boolean) {
     setUsedOutsideHelp(value);
-    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp: value, studyTab });
+    if (content) writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp: value, studyTab: attemptDraftStudyTab });
   }
 
-  function selectStudyTab(nextTab: "lesson" | "check") {
+  function selectStudyTab(nextTab: "lesson" | "check" | "review") {
     setStudyTab(nextTab);
-    if (content && !saved && !reopenedAttempt) {
+    if (content && !saved && !reopenedAttempt && nextTab !== "review") {
       writeAttemptDraft(courseId, content.sessionId, { selected, response: freeResponse, confidence, hintCount, usedOutsideHelp, studyTab: nextTab });
     }
   }
 
   function navigateStudyTabs(event: KeyboardEvent<HTMLButtonElement>) {
-    const tabs: readonly ("lesson" | "check")[] = isOpenResponseMethod(content?.method) && !saved && !reopenedAttempt ? ["check"] : ["lesson", "check"];
+    const tabs: Array<"lesson" | "check" | "review"> = isOpenResponseMethod(content?.method) && !saved && !reopenedAttempt ? ["check"] : ["lesson", "check", ...(saved || reopenedAttempt ? ["review" as const] : [])];
     const index = tabs.indexOf(studyTab);
     const nextIndex = event.key === "ArrowRight" ? (index + 1) % tabs.length
       : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length
@@ -364,7 +463,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     if (nextIndex === index) return;
     event.preventDefault();
     const nextTab = tabs[nextIndex]!;
-    selectStudyTab(nextTab);
+    if (nextTab === "review") void openSessionReview();
+    else selectStudyTab(nextTab);
     document.getElementById(`study-tab-${nextTab}`)?.focus();
   }
 
@@ -411,6 +511,25 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     finally { setPatternBusy(false); }
   }
 
+  async function openSessionReview() {
+    await refreshClassData();
+    setObsidianExportMessage("");
+    selectStudyTab("review");
+  }
+
+  async function exportProgressToObsidian() {
+    setObsidianExportBusy(true);
+    setObsidianExportMessage("");
+    try {
+      const result = await postJson<{ notesWritten: number; courseFolder: string }>(`/api/courses/${courseId}/obsidian/export`, {});
+      setObsidianExportMessage(`Updated ${result.notesWritten} notes in Obsidian. Your notes outside generated sections were kept.`);
+    } catch (err) {
+      setObsidianExportMessage((err as Error).message);
+    } finally {
+      setObsidianExportBusy(false);
+    }
+  }
+
   async function updatePattern(id: string, status: string) {
     try {
       await postJson(`/api/courses/${courseId}/learner/patterns/${id}`, { status });
@@ -420,14 +539,37 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
 
   async function nextQuestion() {
     if (!content) return;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setGenerationTimingLabel(null);
     try {
-      const next = await postJson<StudyContent>(`/api/courses/${courseId}/learner/study-sessions/${content.sessionId}/next-question`, {});
+      const response = await fetch(`/api/courses/${courseId}/learner/study-sessions/${content.sessionId}/next-question`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const result = await response.json().catch(() => null) as (StudyContent & { error?: string; detail?: string }) | null;
+      if (!response.ok) throw new Error([result?.error, result?.detail].filter(Boolean).join(" ") || `The local service returned ${response.status}.`);
+      if (!result) throw new Error("The local service returned an empty response. Check that it is running, then try again.");
+      const next = result;
+      setGenerationTimingLabel(adaptiveGenerationTimingLabel(response.headers.get("server-timing")));
       pendingAttempt.current = null; setAttemptSaveError(""); setContent(next); setSelected(null); setFreeResponse(""); setReopenedAttempt(null); setSaved(false); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5); setChatAnswer(null); setStudyTab("check");
       setActiveSessionInUrl(next.sessionId);
       void refreshClassData();
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
+  }
+
+  function nextWorkedExampleTopic() {
+    if (!content) return null;
+    const orderedTopics = content.assessmentId
+      ? assessmentScopes.find(({ id }) => id === content.assessmentId)?.topics.map(({ title }) => title) ?? []
+      : content.sourceMaterialId
+        ? (assignmentLearningPath.length ? assignmentLearningPath : assignmentSource?.topics ?? []).map(({ title }) => title)
+        : (acceptedCourseMap?.payload.concepts.length ? acceptedCourseMap.payload.concepts : progress).map(({ title }) => title);
+    const currentIndex = orderedTopics.findIndex((title) => title.trim().normalize("NFKC").toLocaleLowerCase() === content.topic.trim().normalize("NFKC").toLocaleLowerCase());
+    const title = currentIndex >= 0 ? orderedTopics[currentIndex + 1] : undefined;
+    return title ? { title, sourceMaterialId: content.sourceMaterialId ?? undefined, assessmentId: content.assessmentId ?? undefined } : null;
+  }
+
+  function advanceWorkedExampleTopic() {
+    const nextTopic = nextWorkedExampleTopic();
+    if (nextTopic) void startStudy(nextTopic.title, "worked-example", nextTopic.sourceMaterialId, nextTopic.assessmentId);
+    else onBack();
   }
 
   function switchToReinforcementMethod() {
@@ -441,6 +583,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   }
 
   async function reopenSession(sessionId: string) {
+    setScrollToSessionId(sessionId);
+    setGenerationTimingLabel(null);
     setBusy(true); setError(""); pendingAttempt.current = null; setAttemptSaveError(""); setSelected(null); setFreeResponse(""); setSaved(false); setChatAnswer(null); setHintCount(0); setUsedOutsideHelp(false); setConfidence(0.5);
     try {
       const response = await fetch(`/api/courses/${courseId}/learner/study-sessions/${sessionId}`);
@@ -457,6 +601,30 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     setChatBusy(true); setError("");
     try {
       setChatAnswer(await postJson<ChatAnswer>(`/api/courses/${courseId}/learner/clarify`, { conceptId: content.conceptId, topic: content.topic, question: chatQuestion.trim(), context: content.lesson }));
+    } catch (err) { setError((err as Error).message); }
+    finally { setChatBusy(false); }
+  }
+
+  async function explainCurrentProcess() {
+    if (!content) return;
+    const chosenAnswer = selected === null ? "No multiple-choice answer was selected." : content.options[selected] ?? "Selected answer unavailable.";
+    const correctAnswer = content.answerIndex === null ? "This is an open-response prompt; compare the learner's response to the reference explanation." : content.options[content.answerIndex] ?? "Correct answer unavailable.";
+    const learnerResponse = openResponse ? (reopenedAttempt?.response || freeResponse || "No written response is available.") : chosenAnswer;
+    const choices = content.options.length ? content.options.map((option, index) => `${String.fromCharCode(65 + index)}. ${option}`).join("\n").slice(0, 800) : "Open response";
+    const question = [
+      "Explain this process in more detail than the brief answer feedback. Give a patient, step-by-step explanation of how to solve or reason through this exact question; explain why each step works, define any needed concepts, and connect the steps to the result. Address the learner's response and likely confusion directly. Keep the math notation readable, and finish with one short check-for-understanding question.",
+      `Question: ${content.question.slice(0, 850)}`,
+      `Choices: ${choices}`,
+      `Learner response: ${learnerResponse.slice(0, 500)}`,
+      `Correct/reference answer: ${correctAnswer.slice(0, 500)}`,
+      `Brief feedback: ${content.feedback.slice(0, 700)}`,
+    ].join("\n\n");
+    setChatOpen(true);
+    setChatBusy(true);
+    setChatAnswer(null);
+    setError("");
+    try {
+      setChatAnswer(await postJson<ChatAnswer>(`/api/courses/${courseId}/learner/clarify`, { conceptId: content.conceptId, topic: content.topic, question: question.slice(0, 4000), context: content.lesson.slice(0, 4000) }));
     } catch (err) { setError((err as Error).message); }
     finally { setChatBusy(false); }
   }
@@ -584,6 +752,46 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
       await refreshClassData();
     } catch (err) { setError((err as Error).message); }
     finally { setInstructorTextSaving(false); }
+  }
+
+  async function saveInstructorGuidance(event: React.FormEvent) {
+    event.preventDefault();
+    if (instructorGuidanceSaving) return;
+    setInstructorGuidanceSaving(true);
+    setInstructorGuidanceMessage("");
+    try {
+      const response = await fetch(`/api/courses/${courseId}/learner/instructor-guidance`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: instructorGuidanceDraft }),
+      });
+      const result = await response.json() as InstructorGuidance & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not save instructor guidance.");
+      setInstructorGuidance(result);
+      setInstructorGuidanceDraft(result.body);
+      setInstructorGuidanceMessage("Instructor guidance saved for this class.");
+    } catch (err) {
+      setInstructorGuidanceMessage((err as Error).message);
+    } finally {
+      setInstructorGuidanceSaving(false);
+    }
+  }
+
+  async function uploadInstructorGuidanceFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || instructorGuidanceUploading) return;
+    setInstructorGuidanceUploading(true);
+    setInstructorGuidanceMessage("");
+    try {
+      await uploadMaterial(courseId, file, "study-guide");
+      setInstructorGuidanceMessage(`${file.name} was added to this class as a study guide.`);
+      await refreshClassData();
+    } catch (err) {
+      setInstructorGuidanceMessage((err as Error).message);
+    } finally {
+      setInstructorGuidanceUploading(false);
+    }
   }
 
   const parsedTopicScope = parseInstructorTopicList(topicScopeText);
@@ -769,6 +977,8 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const reviewedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
   const displayedConfidence = reopenedAttempt ? reopenedAttempt.confidence : confidence;
   const displayedHintCount = reopenedAttempt ? reopenedAttempt.hintCount : hintCount;
+  const upcomingWorkedExampleTopic = nextWorkedExampleTopic();
+  const advanceWorkedExampleAfterCorrect = content?.method === "worked-example" && reviewedAnswerCorrect;
   const displayedIndependence = reopenedAttempt?.independence ?? (usedOutsideHelp ? "assisted" : displayedHintCount > 0 ? "hinted" : "independent");
   const independenceSummary = displayedIndependence === "assisted" ? "outside help recorded" : displayedIndependence === "hinted" ? "in-app hints used" : displayedIndependence === "independent" ? "independent attempt" : "support not recorded";
   const confidenceSummary = displayedConfidence == null ? "confidence not recorded" : `confidence ${Math.round(displayedConfidence * 100)}%`;
@@ -791,11 +1001,41 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
   const shouldReviewLesson = Boolean(content && !reviewedAnswerCorrect && reviewedConfidence != null && reviewedConfidence >= 0.75);
 
   const focusedCheck = Boolean(content && studyTab === "check");
-  return <main className={`study-page${focusedCheck ? " study-page--check-focus" : ""}`}>
-    <button className="back-link" type="button" onClick={onBack}>← {courseTitle}</button><header className="study-heading"><div><p className="eyebrow">{courseTitle} · class study space</p><h1>Learn something now.</h1><p>This class has its own topics and learning history. Pick a topic and approach, ask questions, and add a schedule only if you want one.</p></div><button className="button-secondary" type="button" onClick={() => setBudgetOpen((open) => !open)}>{budgetOpen ? "Close time budget" : "Plan my time (optional)"}</button></header>
+  return <main className={`study-page${focusedCheck ? " study-page--check-focus" : ""}${isAssignmentWorkspace ? " study-page--assignment" : ""}${focus ? " study-page--assignment-focus" : ""}${chatOpen ? " study-page--chat-open" : ""}`}>
+    <button className="back-link" type="button" onClick={onBack}>← {courseTitle}</button>
+    {isAssignmentWorkspace ? <section className="assignment-session" aria-labelledby="assignment-session-title">
+      <div className="assignment-session__head"><div><p className="section-kicker">Assignment learning session · {courseTitle}</p><h1 id="assignment-session-title">{assignmentTitle}</h1><p>Work through the ideas this homework uses. Lessons, questions, and saved attempts stay attached to this PDF.</p></div><div className="assignment-session__completion" role="img" aria-label={`${assignmentUnderstandingPercent}% approximate understanding across this assignment`}><span className="assignment-session__pie" style={{ background: `conic-gradient(#718f6d ${assignmentUnderstandingPercent}%, #e6eae2 ${assignmentUnderstandingPercent}% 100%)` }}><span>{assignmentUnderstandingPercent}%</span></span><span><strong>Estimated understanding</strong><small>across {assignmentTopicActivity.length} topics</small></span></div><a className="button-secondary" href={`/api/courses/${courseId}/materials/${initialSourceMaterialId}/file`} target="_blank" rel="noreferrer">Open original PDF ↗</a></div>
+      <div className="assignment-session__summary"><strong>{assignmentLearningPath.length} learning topics</strong><span>{assignmentCheckedTopicCount}/{assignmentLearningPath.length} topics with scored checks · {assignmentSessions.length} saved session{assignmentSessions.length === 1 ? "" : "s"}</span></div>
+      <p className="assignment-session__note">Rough estimate from recent scored answers; newer answers count more. This is not a calibrated measure.</p>
+      {assignmentTopicActivity.length ? <ol className="assignment-session__topics">{assignmentTopicActivity.map((item, index) => {
+        const savedForTopic = assignmentSessions.filter((session) => session.topic === item.title);
+        const recentSession = savedForTopic[0];
+        const active = content?.topic === item.title;
+        return <li className={active ? "assignment-session__topic assignment-session__topic--active" : "assignment-session__topic"} key={item.title}>
+          <div className="assignment-session__topic-number">{String(index + 1).padStart(2, "0")}</div>
+          <div className="assignment-session__topic-copy"><small>{item.problem}</small><strong>{item.title}</strong><span>{item.focus}</span><div className="assignment-session__topic-progress assignment-session__topic-progress--understanding"><div><span>Understanding</span><span className="assignment-session__progress-track" role="progressbar" aria-label={`Estimated understanding for ${item.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.understandingPercent}><span style={{ width: `${item.understandingPercent}%` }} /></span><small>{item.understandingPercent}%{item.signal?.scoredAttemptCount ? ` · ${item.signal.scoredAttemptCount} scored check${item.signal.scoredAttemptCount === 1 ? "" : "s"}` : " · no scored checks yet"}</small></div></div></div>
+          <div className="assignment-session__topic-actions">{recentSession ? <button type="button" className="button-secondary" disabled={busy} onClick={() => void reopenSession(recentSession.sessionId)}>Resume</button> : null}<button type="button" className="button-primary" disabled={busy} onClick={() => openAssignmentTopicSession(item.title, "explanation")}>{active ? "Open lesson" : "Learn"}</button><button type="button" className="button-secondary" disabled={busy} onClick={() => openAssignmentTopicSession(item.title, "quiz")}>Practice</button></div>
+        </li>;
+      })}</ol> : <p className="assignment-session__empty">No topics have been mapped to this file yet. You can still use the PDF above and start a focused session from the class study space.</p>}
+      {assignmentSessions.length ? <div className="assignment-session__history"><h2>Continue a saved session</h2>{assignmentSessions.slice(0, 6).map((session) => <article key={session.sessionId}><div><strong>{session.topic}</strong><span>{studyMethodLabel(session.method)} · {session.attemptCount} saved check{session.attemptCount === 1 ? "" : "s"}{session.latestOutcome ? ` · latest ${session.latestOutcome}` : ""}</span></div><button type="button" className="button-secondary" disabled={busy} onClick={() => void reopenSession(session.sessionId)}>Resume</button></article>)}</div> : null}
+    </section> : null}
+    <header className="study-heading"><div><p className="eyebrow">{courseTitle} · class study space</p><h1>Learn something now.</h1><p>This class has its own topics and learning history. Pick a topic and approach, ask questions, and add a schedule only if you want one.</p></div><button className="button-secondary" type="button" onClick={() => setBudgetOpen((open) => !open)}>{budgetOpen ? "Close time budget" : "Plan my time (optional)"}</button></header>
     <form className="study-start" onSubmit={beginStudy}><label htmlFor="study-topic">What would you like to understand?</label><div className="study-start__row"><input id="study-topic" value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="e.g. Bayes' theorem, recursion, quantum measurement" /><button className="button-primary" disabled={busy || !topic.trim()}>{busy ? "Preparing…" : "Start learning →"}</button></div>{studySourceMaterialId || studyAssessmentId ? <div className="study-start__scope" role="status"><span>{studySourceMaterialId ? `Grounded in ${sourceProgress.find(({ materialId }) => materialId === studySourceMaterialId)?.title ?? "the selected course material"}` : ""}{studySourceMaterialId && studyAssessmentId ? " · " : ""}{studyAssessmentId ? `Tracked under ${assessmentScopes.find(({ id }) => id === studyAssessmentId)?.title ?? "the selected assessment scope"}` : ""}. Lessons and checks will stay connected to this evidence.</span><button type="button" onClick={() => { setStudySourceMaterialId(undefined); setStudyAssessmentId(undefined); }}>Clear study scope</button></div> : null}<div className="study-methods" aria-label="Choose a learning approach">{studyMethods.map(({ value, label }) => <button type="button" key={value} aria-pressed={method === value} className={method === value ? "study-method study-method--active" : "study-method"} onClick={() => setMethod(value)}>{label}</button>)}</div><p className="study-method-description" aria-live="polite">{studyMethods.find(({ value }) => value === method)?.description}</p><small>{studySourceMaterialId ? "The lesson and knowledge check will use the selected course material." : studyAssessmentId ? "The lesson and knowledge check will be tracked under the selected assessment scope." : "No notes required. Without course materials, explanations use general knowledge and are marked as not course-verified."}</small></form>
     <section className="topic-scope-panel">
-      <div className="topic-scope-panel__heading"><div><p className="section-kicker">Instructor guidance</p><h2>Paste an exam topic list</h2><p>Save the professor’s wording as this class’s learner-provided exam scope.</p></div><button className="button-secondary" type="button" aria-expanded={topicScopeOpen} onClick={() => setTopicScopeOpen((open) => !open)}>{topicScopeOpen ? "Close topic list" : "Add topic list"}</button></div>
+      <div className="topic-scope-panel__heading"><div><p className="section-kicker">Instructor guidance</p><h2>What did your instructor say?</h2><p>Save exam topics, required solution methods, clarifications, or other class guidance.</p></div></div>
+      <form className="instructor-guidance-form" onSubmit={(event) => void saveInstructorGuidance(event)}>
+        <label htmlFor="instructor-guidance-text">Class guidance</label>
+        <textarea id="instructor-guidance-text" maxLength={12000} value={instructorGuidanceDraft} onChange={(event) => { setInstructorGuidanceDraft(event.target.value); setInstructorGuidanceMessage(""); }} placeholder="For example: The professor said to solve Problem 3 using the density matrix method. The exam will cover tensor products and partial traces; proofs are not required." />
+        <div className="instructor-guidance-form__actions">
+          <button className="button-primary" disabled={instructorGuidanceSaving}>{instructorGuidanceSaving ? "Saving…" : "Save guidance"}</button>
+          <button className="button-secondary" type="button" disabled={instructorGuidanceUploading} onClick={() => guidanceFileInput.current?.click()}>{instructorGuidanceUploading ? "Uploading…" : "Upload a file"}</button>
+          <input ref={guidanceFileInput} className="instructor-guidance-file-input" type="file" accept=".pdf,.md,.txt,.docx,.pptx,application/pdf,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" aria-label="Upload instructor guidance file" onChange={(event) => void uploadInstructorGuidanceFile(event)} />
+        </div>
+        <small>Text is saved to this class. Uploaded files are added to Course materials as study guides.</small>
+        {instructorGuidanceMessage ? <p className="topic-scope-panel__success" role="status">{instructorGuidanceMessage}</p> : null}
+        {instructorGuidance.updatedAt ? <small>Last saved {new Date(instructorGuidance.updatedAt).toLocaleString()}</small> : null}
+      </form>
+      <div className="topic-scope-panel__heading topic-scope-panel__heading--secondary"><div><h3>Exam topic lists</h3><p>Track topics separately so study progress and priorities stay organized.</p></div><button className="button-secondary" type="button" aria-expanded={topicScopeOpen} onClick={() => setTopicScopeOpen((open) => !open)}>{topicScopeOpen ? "Close topic list" : "Add or update a topic list"}</button></div>
       {topicScopeMessage ? <p className="topic-scope-panel__success" role="status">{topicScopeMessage}</p> : null}
       {topicScopeOpen ? <form id="topic-scope-editor" onSubmit={(event) => void saveInstructorTopicList(event)}>
         {topicScopeHasDraft ? <p className="topic-scope-panel__draft-note" role="status">Draft saved in this browser tab. It will be here if you leave this page and return.</p> : null}
@@ -891,12 +1131,13 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
     <section className="pattern-panel"><div className="study-memory__head"><div><p className="section-kicker">Pattern review · this class only</p><h2>Learning patterns</h2></div><button className="button-secondary" type="button" disabled={patternBusy || !progress.some((item) => item.attemptCount)} onClick={() => void reviewPatterns("user-request")}>{patternBusy ? "Reviewing…" : "Review my history"}</button></div><p className="pattern-panel__note">Reviews happen only when you request one or end a study session. They never run in the background or after every answer.</p>{patterns.length ? <div className="pattern-list">{patterns.map((pattern) => <article className="pattern-card" key={pattern.id}><div className="pattern-card__head"><span>{pattern.kind.replaceAll("-", " ")}</span><select aria-label={`Update status for ${pattern.claim}`} value={pattern.status} onChange={(event) => void updatePattern(pattern.id, event.target.value)}><option value="emerging">Emerging</option><option value="reinforced">Reinforced</option><option value="mixed">Mixed evidence</option><option value="weakened">Weakened</option><option value="dismissed">Dismiss</option></select></div><h3><MathText inline content={pattern.claim} /></h3><div className="pattern-card__rationale"><MathText content={pattern.statusRationale} /></div><small>{Math.round(pattern.confidence * 100)}% confidence · supports {pattern.supportingAttemptIds.length} attempt(s) · counterexamples {pattern.counterexampleAttemptIds.length}</small><details className="pattern-evidence"><summary>Inspect attempts</summary>{([["Supporting evidence", pattern.supportingEvidence], ["Counterexamples", pattern.counterexampleEvidence]] as Array<[string, PatternEvidence[]]>).map(([label, evidence]) => <div key={label}><strong>{label}</strong>{evidence.length ? evidence.map((attempt) => <article key={attempt.id}><b><MathText inline content={attempt.conceptTitle} /> · {attempt.outcome}</b>{attempt.response ? <div className="pattern-evidence__response"><MathText content={attempt.response} /></div> : <span> — no written response</span>}<small>{studyMethodLabel(attempt.method)} · {attempt.confidence == null ? "confidence not recorded" : `${Math.round(attempt.confidence * 100)}% confidence`} · {attempt.hintCount} hint(s)</small></article>) : <p>No attempts linked.</p>}</div>)}</details></article>)}</div> : <p className="pattern-panel__empty">No patterns reviewed yet. Study a topic, then request a review or end that session to create a provisional evidence summary.</p>}</section>
     {content ? <div className={recallInProgress ? "study-columns study-columns--recall" : "study-columns"}>
       <div className="study-main">
-        <div className="study-session-meta"><span>{content.topic}</span><span>{content.sourceBasis === "general-knowledge" ? "General knowledge · not checked against your course" : sessionSourceTitle ? `Course-grounded · ${sessionSourceTitle}` : "Course-grounded"}</span></div>
+        <div className="study-session-meta"><span>{content.topic}</span><span>{content.sourceBasis === "general-knowledge" ? "General knowledge · not checked against your course" : sessionSourceTitle ? `Course-grounded · ${sessionSourceTitle}` : "Course-grounded"}</span>{focusedCheck && !recallInProgress ? <button type="button" className="button-secondary study-chat-toggle" aria-expanded={chatOpen} aria-controls="study-side-chat" onClick={() => setChatOpen((open) => !open)}>{chatOpen ? "Close side chat" : "Ask about this question"}</button> : null}{generationTimingLabel ? <small className="generation-timing">{generationTimingLabel}</small> : null}</div>
         {content.sourceMaterialId && sourceProgress.find(({ materialId }) => materialId === content.sourceMaterialId)?.mediaType === "application/pdf" ? <a className="study-source-link" href={`/api/courses/${courseId}/materials/${content.sourceMaterialId}/file`} target="_blank" rel="noreferrer">Check notation in original PDF ↗</a> : null}
         <button className="button-secondary pattern-end-button" type="button" disabled={patternBusy || !saved} onClick={() => void reviewPatterns("session-end")}>{patternBusy ? "Reviewing session…" : "End session and review patterns"}</button>
         <div className="study-tabs" role="tablist" aria-label="Study session">
           <button id="study-tab-lesson" type="button" role="tab" tabIndex={studyTab === "lesson" ? 0 : -1} aria-selected={studyTab === "lesson"} aria-controls="study-panel-lesson" disabled={recallInProgress} onKeyDown={navigateStudyTabs} onClick={() => selectStudyTab("lesson")}>Lesson</button>
           <button id="study-tab-check" type="button" role="tab" tabIndex={studyTab === "check" ? 0 : -1} aria-selected={studyTab === "check"} aria-controls="study-panel-check" onKeyDown={navigateStudyTabs} onClick={() => selectStudyTab("check")}>Knowledge check</button>
+          {saved || reopenedAttempt ? <button id="study-tab-review" type="button" role="tab" tabIndex={studyTab === "review" ? 0 : -1} aria-selected={studyTab === "review"} aria-controls="study-panel-review" onKeyDown={navigateStudyTabs} onClick={() => void openSessionReview()}>Session review</button> : null}
         </div>
         <section className="lesson-card" role="tabpanel" id="study-panel-lesson" aria-labelledby="study-tab-lesson" hidden={studyTab !== "lesson"}>
           <p className="section-kicker">{method === "worked-example" ? "Worked example" : method === "analogy" ? "A helpful analogy" : "Core idea"}</p>
@@ -912,16 +1153,24 @@ export function StudyPage({ courseId, courseTitle, initialTopic, initialSourceMa
           {openResponse ? <label className="free-recall-response">{teachBack ? "Teach it back" : "Your explanation"}<textarea maxLength={20000} rows={5} value={freeResponse} disabled={saved || Boolean(reopenedAttempt) || savingAttempt || Boolean(pendingAttempt.current)} onChange={(event) => updateFreeResponse(event.target.value)} placeholder={teachBack ? "Explain the idea as if you were teaching it to a student seeing it for the first time. Include why the main steps or relationships hold." : "Explain the idea from memory. Include the key terms, relationships, or steps you remember."} /></label> : <div className="answer-options" role="group" aria-label="Answer choices">{content.options.map((option,index) => {
             const isCorrect = index === content.answerIndex;
             const className = saved ? selected === index ? isCorrect ? "answer-option answer-option--correct" : "answer-option answer-option--wrong" : isCorrect ? "answer-option answer-option--correct" : "answer-option"
-              : selected === index ? "answer-option answer-option--selected" : "answer-option";
-            return <button type="button" key={`${index}-${option}`} disabled={saved || savingAttempt || Boolean(reopenedAttempt) || Boolean(pendingAttempt.current)} aria-pressed={selected === index} onClick={() => selectAnswer(index)} className={className}><span>{String.fromCharCode(65+index)}</span><MathText inline content={option} /></button>;
+              : selected === index ? confidence <= 0.5 ? "answer-option answer-option--unsure" : "answer-option answer-option--confident" : "answer-option";
+            return <button type="button" key={`${index}-${option}`} disabled={saved || savingAttempt || Boolean(reopenedAttempt) || Boolean(pendingAttempt.current)} aria-pressed={selected === index} aria-describedby="answer-confidence-instructions" onClick={() => selectAnswer(index)} className={className}><span>{String.fromCharCode(65+index)}</span><MathText inline content={option} /></button>;
           })}</div>}
-          {!saved && !reopenedAttempt ? <label className="confidence-input">How confident are you?<select value={confidence} onChange={(event) => updateConfidence(Number(event.target.value))}><option value={0.25}>Low</option><option value={0.5}>Somewhat</option><option value={0.75}>Confident</option><option value={1}>Very confident</option></select></label> : null}
+          {!openResponse && !saved && !reopenedAttempt ? <small className="answer-confidence-hint" id="answer-confidence-instructions">Click a choice once to select it confidently; click it again to mark it unsure, and a third time to return to confident.{selected !== null ? ` Selected answer: ${confidence <= 0.5 ? "unsure" : "confident"}.` : ""}</small> : null}
           {!saved && !reopenedAttempt ? <button className="button-primary check-submit" type="button" disabled={openResponse ? !freeResponse.trim() || savingAttempt || busy : selected === null || savingAttempt || busy} onClick={() => void submitAnswer()}>{savingAttempt ? "Saving response…" : openResponse ? "Save response & compare" : "Check answer"}</button> : null}
-          {saved ? <><div className={openResponse ? "answer-feedback" : reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{openResponse ? "Reference explanation" : reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong>{openResponse && reopenedAttempt?.response ? <div className="free-recall-saved"><strong>Your saved response</strong><MathText content={reopenedAttempt.response} /></div> : openResponse && freeResponse ? <div className="free-recall-saved"><strong>Your response</strong><MathText content={freeResponse} /></div> : null}<MathText content={content.feedback} /><small>{openResponse ? "Attempt saved · not graded · " : "Attempt saved · "}{independenceSummary} · {confidenceSummary} · {displayedHintCount} hint{displayedHintCount === 1 ? "" : "s"}.</small></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>The {openResponse ? "response" : "answer"} could not be saved to your progress: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => void nextQuestion()}>{busy ? "Preparing…" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!openResponse && (!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2) ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
-          {(!openResponse || saved || reopenedAttempt) ? <details className="lesson-recap"><summary>Show answer explanation</summary><MathText content={content.feedback} /></details> : null}
+          {saved ? <><div className={openResponse ? "answer-feedback" : reviewedAnswerCorrect ? "answer-feedback answer-feedback--good" : "answer-feedback answer-feedback--retry"}><strong>{openResponse ? "Reference explanation" : reviewedAnswerCorrect ? "That's right." : "Not quite yet."}</strong>{openResponse && reopenedAttempt?.response ? <div className="free-recall-saved"><strong>Your saved response</strong><MathText content={reopenedAttempt.response} /></div> : openResponse && freeResponse ? <div className="free-recall-saved"><strong>Your response</strong><MathText content={freeResponse} /></div> : null}<MathText content={content.feedback} /><small>{openResponse ? "Attempt saved · not graded · " : "Attempt saved · "}{independenceSummary} · {confidenceSummary} · {displayedHintCount} hint{displayedHintCount === 1 ? "" : "s"}.</small><button type="button" className="button-secondary explain-process-button" disabled={chatBusy} onClick={() => void explainCurrentProcess()}>{chatBusy ? "Preparing detailed explanation…" : "Explain this process in more detail"}</button></div>{attemptSaveError ? <div className="attempt-save-error" role="alert"><span>The {openResponse ? "response" : "answer"} could not be saved to your progress: {attemptSaveError}</span><button type="button" className="button-secondary" disabled={savingAttempt} onClick={() => void savePendingAttempt()}>{savingAttempt ? "Retrying…" : "Retry saving attempt"}</button></div> : <div className="study-next-step"><p>{answerFollowUp}</p><button className="button-primary" type="button" disabled={busy} onClick={() => advanceWorkedExampleAfterCorrect ? advanceWorkedExampleTopic() : void nextQuestion()}>{busy ? "Preparing…" : advanceWorkedExampleAfterCorrect ? upcomingWorkedExampleTopic ? `Next topic: ${upcomingWorkedExampleTopic.title} →` : "Choose another topic →" : content.method === "worked-example" ? "Similar question on this concept →" : "Another question on this concept →"}</button>{shouldReviewLesson ? <button className="button-secondary" type="button" disabled={busy} onClick={() => selectStudyTab("lesson")}>Review the lesson first →</button> : null}{!openResponse && (!reviewedAnswerCorrect || (reviewedConfidence ?? 0.5) <= 0.5 || displayedHintCount >= 2) ? <button className="button-secondary" type="button" disabled={busy} onClick={switchToReinforcementMethod}>Switch to {content.method === "worked-example" ? "a clear explanation" : "a worked example"} →</button> : null}<button type="button" className="button-secondary" onClick={() => void openSessionReview()}>Review session progress →</button><button className="study-retry-link" type="button" onClick={retryCurrentQuestion}>Try this exact question again</button></div>}</> : null}
+          {saved || reopenedAttempt ? <details className="lesson-recap"><summary>Show answer explanation</summary><MathText content={content.feedback} /></details> : null}
+        </section>
+        <section className="session-review-card" role="tabpanel" id="study-panel-review" aria-labelledby="study-tab-review" hidden={studyTab !== "review"}>
+          <p className="section-kicker">Session review</p>
+          <h2>{sessionReviewTitle}</h2>
+          <p className="session-review-card__summary">Your {openResponse ? "written response was saved for self-comparison" : reviewedAnswerCorrect ? "latest answer was correct" : "latest answer needs another look"}. {sessionReviewCheckedTopicCount}/{sessionReviewTopicCount} {isAssignmentWorkspace ? "assignment topics" : "topic"} have scored checks.</p>
+          <p className="assignment-session__note">Estimated understanding is a rough, recency-weighted signal from scored answers. It is not a calibrated mastery score.</p>
+          <div className="session-review-topics">{sessionReviewTopics.map((item) => <article className="session-review-topic" key={item.title}><div><strong>{item.title}</strong>{"problem" in item ? <small>{item.problem}</small> : null}</div><span className="assignment-session__progress-track" role="progressbar" aria-label={`Estimated understanding for ${item.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.understandingPercent}><span style={{ width: `${item.understandingPercent}%` }} /></span><strong>{item.understandingPercent}%</strong></article>)}</div>
+          <div className="session-review-card__export"><button type="button" className="button-secondary" disabled={obsidianExportBusy} onClick={() => void exportProgressToObsidian()}>{obsidianExportBusy ? "Updating Obsidian notes…" : "Save progress to Obsidian"}</button><small>Updates this class’s generated notes and preserves your personal notes.</small><p role="status">{obsidianExportMessage}</p></div>
         </section>
       </div>
-      {recallInProgress ? <aside className="study-chat study-chat--waiting" role="status"><p className="section-kicker">Free recall</p><h2>Try it from memory first.</h2><p>The lesson and side chat open after you save your response, so you can compare without seeing the explanation early.</p></aside> : <aside className="study-chat"><p className="section-kicker">Side chat</p><h2>Clarify a step.</h2><p>Ask a follow-up without losing your place in the lesson.</p><form onSubmit={askClarification}><textarea value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} placeholder="Which part should we unpack?" /><button className="button-secondary" disabled={chatBusy || !chatQuestion.trim()}>{chatBusy ? "Thinking…" : "Ask Codex"}</button></form>{chatAnswer ? <div className="chat-answer"><MathText content={chatAnswer.answer} />{chatAnswer.followUp ? <small>{chatAnswer.followUp}</small> : null}<span>{chatAnswer.sourceBasis === "general-knowledge" ? "General knowledge · not course-verified" : "Course-grounded"}</span></div> : <div className="chat-prompt">Try: “Can you explain why that step works?”</div>}<div className="session-recap"><span>Learning method</span><strong>{studyMethodLabel(content.method)}</strong><span>One check does not establish mastery. More evidence builds your profile.</span></div></aside>}
+      {recallInProgress ? <aside className="study-chat study-chat--waiting" role="status"><p className="section-kicker">Free recall</p><h2>Try it from memory first.</h2><p>The lesson and side chat open after you save your response, so you can compare without seeing the explanation early.</p></aside> : <aside id="study-side-chat" className="study-chat" hidden={focusedCheck && !chatOpen}><p className="section-kicker">Side chat</p><h2>Clarify a step.</h2><p>Ask a follow-up without losing your place.</p><form onSubmit={askClarification}><textarea value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} placeholder="Which part should we unpack?" /><button className="button-secondary" disabled={chatBusy || !chatQuestion.trim()}>{chatBusy ? "Thinking…" : "Ask Codex"}</button></form>{chatBusy ? <p className="chat-prompt" role="status">Preparing a detailed, step-by-step explanation…</p> : chatAnswer ? <div className="chat-answer"><MathText content={chatAnswer.answer} />{chatAnswer.followUp ? <small>{chatAnswer.followUp}</small> : null}<span>{chatAnswer.sourceBasis === "general-knowledge" ? "General knowledge · not course-verified" : "Course-grounded"}</span></div> : <div className="chat-prompt">Try: “Can you explain why that step works?”</div>}<div className="session-recap"><span>Learning method</span><strong>{studyMethodLabel(content.method)}</strong><span>One check does not establish mastery. More evidence builds your profile.</span></div></aside>}
     </div> : <div className="study-empty"><span>01</span><div><h2>Your next topic starts here.</h2><p>Try any topic, even if it isn’t in a course yet. Generated topic coverage is useful study support, but not a guarantee of exam coverage.</p></div></div>}
   </main>;
 }

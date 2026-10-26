@@ -263,6 +263,12 @@ export function openDatabase(databasePath: string) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS instructor_guidance (
+      course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
+      body TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS learner_concepts (
       id TEXT PRIMARY KEY,
       course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,

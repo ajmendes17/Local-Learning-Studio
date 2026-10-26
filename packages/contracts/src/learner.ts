@@ -1,5 +1,43 @@
 import { z } from "zod";
 
+export const HOMEWORK_THREE_LEARNING_PATH = [
+  { problem: "Problem 1", title: "Tensor Products and Local Operations", focus: "Build two-qubit vectors and matrices, apply local X gates, and track the CNOT control and target." },
+  { problem: "Problem 1", title: "Bell states and entanglement", focus: "Create the Bell state from |00⟩, then use its coefficients to show it cannot be a product state." },
+  { problem: "Problem 2", title: "Density matrices and pure versus mixed states", focus: "Write a state as a density operator and distinguish a pure joint state from a mixed reduced state." },
+  { problem: "Problem 2", title: "Partial trace and reduced states", focus: "Trace out one qubit by summing matching basis entries to find the state available to the other qubit." },
+  { problem: "Problem 2", title: "Measurement probabilities and conditional states", focus: "Use projectors to calculate Z and X measurement outcomes and the corresponding normalized states." },
+  { problem: "Problem 2", title: "Unknown outcomes and no-signalling", focus: "Average over outcomes and explain why a local observer cannot detect the remote measurement." },
+  { problem: "Problem 3", title: "Bell measurements and circuit decoding", focus: "Relate Bell-basis projectors to CNOT and Hadamard gates followed by computational-basis measurement." },
+  { problem: "Problem 3", title: "Teleportation and entanglement swapping", focus: "Track Bell outcomes, Pauli corrections, and why known and unknown outcomes describe different states." },
+] as const;
+
+export interface UnderstandingEvidence {
+  outcome: string;
+  independence?: string | null;
+  hintCount?: number;
+  createdAt?: string;
+}
+
+export function estimateUnderstandingPercent(evidence: readonly UnderstandingEvidence[]) {
+  const recent = evidence
+    .filter(({ outcome }) => outcome === "correct" || outcome === "incorrect")
+    .sort((left, right) => Date.parse(right.createdAt ?? "") - Date.parse(left.createdAt ?? ""))
+    .slice(0, 8);
+  if (!recent.length) return 0;
+  let weightedScore = 0;
+  let totalWeight = 0;
+  recent.forEach((attempt, index) => {
+    const recencyWeight = 0.72 ** index;
+    const supportAdjustment = attempt.independence === "independent" ? 1
+      : attempt.independence === "hinted" ? 0.78
+        : attempt.independence === "assisted" ? 0.58 : 0.85;
+    const outcomeScore = attempt.outcome === "correct" ? supportAdjustment : 1 - supportAdjustment;
+    weightedScore += outcomeScore * recencyWeight;
+    totalWeight += recencyWeight;
+  });
+  return Math.round(weightedScore / totalWeight * 100);
+}
+
 export function parseInstructorTopicList(raw: string): string[] {
   const seen = new Set<string>();
   const topics: string[] = [];
@@ -526,6 +564,17 @@ export const LearnerAssessmentUpdateSchema = z.object({
 }).refine((value) => Object.keys(value).length > 0, { message: "At least one assessment field is required." });
 export type LearnerAssessmentUpdate = z.infer<typeof LearnerAssessmentUpdateSchema>;
 
+export const InstructorGuidanceResponseSchema = z.object({
+  body: z.string().max(12000),
+  updatedAt: z.string().datetime().nullable(),
+});
+export type InstructorGuidanceResponse = z.infer<typeof InstructorGuidanceResponseSchema>;
+
+export const InstructorGuidanceUpdateSchema = z.object({
+  body: z.string().trim().max(12000),
+});
+export type InstructorGuidanceUpdate = z.infer<typeof InstructorGuidanceUpdateSchema>;
+
 export const LearnerAssessmentTopicsAppendSchema = z.object({
   topics: z.array(z.object({
     title: z.string().trim().min(1).max(200),
@@ -655,7 +704,7 @@ export const LearnerProfileResponseSchema = z.object({
     sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
     topicCount: z.number().int().nonnegative(), practicedTopicCount: z.number().int().nonnegative(),
     lastPracticedAt: z.string().nullable(),
-    topics: z.array(z.object({ conceptId: z.string().uuid(), title: z.string(), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), latestConfidence: z.number().min(0).max(1).nullable().optional(), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
+    topics: z.array(z.object({ conceptId: z.string().uuid(), title: z.string(), attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(), latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(), latestConfidence: z.number().min(0).max(1).nullable().optional(), recentEvidence: z.array(z.object({ outcome: z.enum(["correct", "incorrect"]), independence: z.enum(["independent", "hinted", "assisted", "unknown"]), hintCount: z.number().int().nonnegative(), createdAt: z.string() })).default([]), lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable() })),
   })),
   assessments: z.array(z.object({
     id: z.string().uuid(), title: z.string(), instructorText: z.string(), kind: z.enum(["exam", "quiz", "other"]),
@@ -668,6 +717,7 @@ export const LearnerProfileResponseSchema = z.object({
     attemptCount: z.number().int().nonnegative(), scoredAttemptCount: z.number().int().nonnegative(), correctCount: z.number().int().nonnegative(), independentScoredAttemptCount: z.number().int().nonnegative(), independentCorrectCount: z.number().int().nonnegative(),
     latestOutcome: z.enum(["correct", "incorrect", "incomplete", "unsupported", "not-graded"]).nullable(),
     latestConfidence: z.number().min(0).max(1).nullable().optional(),
+    recentEvidence: z.array(z.object({ outcome: z.enum(["correct", "incorrect"]), independence: z.enum(["independent", "hinted", "assisted", "unknown"]), hintCount: z.number().int().nonnegative(), createdAt: z.string() })).default([]),
     lastPracticedAt: z.string().nullable(), sessionCount: z.number().int().nonnegative(), lastSessionAt: z.string().nullable(),
   })),
 });

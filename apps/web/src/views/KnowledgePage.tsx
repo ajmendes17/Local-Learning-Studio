@@ -16,7 +16,7 @@ function activityLabel(attemptCount: number, sessionCount: number) {
   return "No practice yet";
 }
 
-function topicState(topic: LearnerProfileResponse["concepts"][number]) {
+function topicState(topic: Pick<LearnerProfileResponse["concepts"][number], "attemptCount" | "sessionCount" | "scoredAttemptCount" | "latestOutcome" | "correctCount">) {
   if (!topic.attemptCount) return topic.sessionCount ? "Lesson studied" : "Not started";
   if (!topic.scoredAttemptCount) return "Recall recorded · not graded";
   if (["incorrect", "incomplete", "unsupported", "not-graded"].includes(topic.latestOutcome ?? "")) return "Needs another pass";

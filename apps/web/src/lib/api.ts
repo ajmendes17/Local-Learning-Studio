@@ -8,10 +8,12 @@ import {
   CourseMaterialSchema,
   CourseSummarySchema,
   SourceClassificationArtifactSchema,
+  AssessmentReconciliationResponseSchema,
   type CreateCourseRequest,
   type ApiError,
   type MaterialKind,
 } from "@local-learning-studio/contracts";
+import type { AssessmentReconciliationResponse } from "@local-learning-studio/contracts";
 
 export type ApiErrorInfo = Pick<ApiError, "error" | "detail" | "diagnostics">;
 
@@ -119,4 +121,14 @@ export async function acceptCourseMap(
     { method: "POST" },
   );
   return CourseMapArtifactSchema.parse(await readResponse(response));
+}
+
+export async function reconcileCourseAssessments(courseId: string): Promise<AssessmentReconciliationResponse> {
+  const response = await fetch(`/api/courses/${courseId}/assessment-reconciliation`, { method: "POST" });
+  return AssessmentReconciliationResponseSchema.parse(await readResponse(response));
+}
+
+export async function mergeObsidianAssessmentNotes(courseId: string, canonicalRecordKey: string, duplicateRecordKeys: string[]) {
+  const response = await fetch(`/api/courses/${courseId}/assessment-reconciliation/merge`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canonicalRecordKey, duplicateRecordKeys }) });
+  return await readResponse(response) as { mergedCount: number; kept: string; removed: string[] };
 }

@@ -25,6 +25,7 @@ of being copied into every skill.
 | Take quiz | `generate-course-quiz` | Create a balanced assessment with validated keys, rubrics, source coverage, and difficulty distribution | Terra |
 | Review mistakes | `plan-remediation` | Convert recent errors and retention evidence into the smallest useful remediation session and plan revision | Terra |
 | Review learning patterns | `review-learning-patterns` | Propose provisional patterns from a bounded same-class attempt history and prior snapshot, only on explicit triggers | Terra |
+| Reconcile assessment scope | `reconcile-assessments` | Group duplicate course-map and Obsidian assessment records, then compare exam-specific evidence with scheduled coverage | Sol |
 
 Study actions run inside a selected class workspace. Their inputs include only
 that class's concept profile, relevant evidence, and any selected passages;
