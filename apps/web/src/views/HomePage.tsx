@@ -12,6 +12,7 @@ interface HomePageProps {
   error: string | null;
   onCreate: (input: CreateCourseRequest) => Promise<void>;
   onOpen: (courseId: string) => void;
+  onCanvasImport: () => void;
 }
 
 export function HomePage({
@@ -20,6 +21,7 @@ export function HomePage({
   error,
   onCreate,
   onOpen,
+  onCanvasImport,
 }: HomePageProps) {
   const [creating, setCreating] = useState(false);
   const materialCount = useMemo(
@@ -38,14 +40,14 @@ export function HomePage({
             workspace.
           </p>
         </div>
-        <button
+        <div className="library-actions"><button type="button" className="button-secondary button-primary--large" onClick={onCanvasImport}>Import from Canvas</button><button
           type="button"
           className="button-primary button-primary--large"
           onClick={() => setCreating(true)}
         >
           <span aria-hidden="true">+</span>
           New class
-        </button>
+        </button></div>
       </section>
 
       <section className="library-content" aria-labelledby="classes-heading">

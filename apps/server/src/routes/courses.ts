@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { extname } from "node:path";
 import {
   CourseDetailSchema,
   CourseListResponseSchema,
@@ -9,9 +7,8 @@ import {
 } from "@local-learning-studio/contracts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { MaterialProcessor } from "../extraction/material-processor.js";
+import type { MaterialIngestion } from "../extraction/material-ingestion.js";
 import type { CourseLibrary } from "../storage/course-library.js";
-import type { MaterialStorage } from "../storage/material-storage.js";
 import type { SourceLibrary } from "../storage/source-library.js";
 
 const courseIdSchema = z.string().uuid();
@@ -19,12 +16,10 @@ const passageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional().default(100),
   offset: z.coerce.number().int().nonnegative().optional().default(0),
 });
-const supportedExtensions = new Set([".docx", ".md", ".pdf", ".pptx", ".txt"]);
 
 interface CourseRouteOptions {
   library: CourseLibrary;
-  materialProcessor: MaterialProcessor;
-  materialStorage: MaterialStorage;
+  ingestion: MaterialIngestion;
   sourceLibrary: SourceLibrary;
 }
 
@@ -36,7 +31,7 @@ export async function registerCourseRoutes(
   app: FastifyInstance,
   options: CourseRouteOptions,
 ) {
-  const { library, materialProcessor, materialStorage, sourceLibrary } = options;
+  const { library, ingestion, sourceLibrary } = options;
 
   app.get("/api/courses", async () =>
     CourseListResponseSchema.parse({ courses: library.listCourses() }),
@@ -142,8 +137,7 @@ export async function registerCourseRoutes(
       return reply.code(400).send({ error: "Choose one file to upload." });
     }
 
-    const extension = extname(part.filename).toLowerCase();
-    if (!supportedExtensions.has(extension)) {
+    if (!ingestion.supports(part.filename)) {
       part.file.resume();
       return reply.code(415).send({
         error: "This file type is not supported.",
@@ -151,37 +145,7 @@ export async function registerCourseRoutes(
       });
     }
 
-    const materialId = randomUUID();
-    const stored = await materialStorage.store(
-      parsedId.data,
-      materialId,
-      part.filename,
-      part.file,
-    );
-
-    let material;
-    try {
-      material = library.createMaterial({
-        id: materialId,
-        courseId: parsedId.data,
-        originalName: part.filename,
-        storedName: stored.storedName,
-        mediaType: part.mimetype || "application/octet-stream",
-        kind: parsedKind.data,
-        sizeBytes: stored.sizeBytes,
-        initialStatus: materialProcessor.canExtract(part.filename)
-          ? "processing"
-          : "stored",
-      });
-    } catch (error) {
-      await materialStorage.remove(parsedId.data, stored.storedName);
-      throw error;
-    }
-
-    const processed = await materialProcessor.process(
-      material,
-      materialStorage.pathFor(parsedId.data, stored.storedName),
-    );
+    const processed = await ingestion.ingest(parsedId.data, part.filename, part.mimetype || "application/octet-stream", parsedKind.data, part.file);
     return reply.code(201).send(processed);
   });
 }

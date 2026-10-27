@@ -28,7 +28,7 @@ interface CourseRow {
 const courseSelect = `
   SELECT
     courses.*,
-    (SELECT COUNT(*) FROM materials WHERE course_id = courses.id)
+    (SELECT COUNT(*) FROM materials WHERE course_id = courses.id AND is_active = 1)
       AS material_count,
     (SELECT COUNT(*) FROM modules WHERE course_id = courses.id)
       AS module_count,
@@ -114,7 +114,7 @@ export class CourseLibrary {
           error_message AS errorMessage,
           created_at AS createdAt
         FROM materials
-        WHERE course_id = ?
+        WHERE course_id = ? AND is_active = 1
         ORDER BY created_at DESC
       `)
       .all(courseId) as unknown as CourseMaterial[];
@@ -145,7 +145,12 @@ export class CourseLibrary {
       `)
       .all(courseId) as unknown as CourseAssessment[];
 
-    return { ...course, materials, modules, assessments };
+    for (const material of materials) {
+      const source = this.database.prepare("SELECT source_url AS url, imported_at AS importedAt FROM canvas_material_sources WHERE material_id = ?").get(material.id) as { url: string; importedAt: string } | undefined;
+      if (source) material.source = { provider: "canvas", ...source };
+    }
+    const canvas = this.database.prepare("SELECT source_url AS sourceUrl, remote_id AS remoteId, module_count AS moduleCount, last_imported_at AS lastImportedAt FROM canvas_courses WHERE course_id = ?").get(courseId) as CourseDetail["canvas"];
+    return { ...course, materials, modules, assessments, ...(canvas ? { canvas } : {}) };
   }
 
   createMaterial(record: NewMaterialRecord): CourseMaterial {

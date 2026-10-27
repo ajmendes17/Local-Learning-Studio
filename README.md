@@ -101,6 +101,7 @@ The foundation includes:
 - Clickable class cards and per-class workspaces
 - A class-creation workflow
 - Per-class PDF, Markdown, text, DOCX, and PPTX uploads
+- Canvas course preview and selected import into new or existing classes, with source links and duplicate-safe explicit refresh
 - Markdown, plain-text, text-PDF, DOCX, and PPTX extraction into source passages
 - Page, line, paragraph, slide, and heading provenance with passage hashes
 - Explicit extraction states and visible failure reasons
@@ -131,6 +132,11 @@ boundary and [PROGRESS.md](./PROGRESS.md) for implementation order and
 acceptance criteria. Settled product and model-routing decisions live in
 [PRODUCT-PLAN.md](./docs/PRODUCT-PLAN.md), with the implemented narrow skill split
 in [SKILL-ARCHITECTURE.md](./docs/SKILL-ARCHITECTURE.md).
+
+For the Canvas connection and import workflow, see
+[CANVAS-IMPORT.md](./docs/CANVAS-IMPORT.md). Configure `CANVAS_ACCESS_TOKEN` and
+`CANVAS_BASE_URL` in the local environment; tokens stay on the server. A
+multiuser deployment should use institution-approved OAuth.
 
 ## Privacy and cost boundary
 

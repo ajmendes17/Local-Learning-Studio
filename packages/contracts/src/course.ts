@@ -61,6 +61,7 @@ export const CourseMaterialSchema = z.object({
   passageCount: z.number().int().nonnegative(),
   errorMessage: z.string().nullable(),
   createdAt: z.string(),
+  source: z.object({ provider: z.literal("canvas"), url: z.string().url(), importedAt: z.string() }).optional(),
 });
 export type CourseMaterial = z.infer<typeof CourseMaterialSchema>;
 
@@ -99,6 +100,7 @@ export const CourseDetailSchema = CourseSummarySchema.extend({
   materials: z.array(CourseMaterialSchema),
   modules: z.array(CourseModuleSchema),
   assessments: z.array(CourseAssessmentSchema),
+  canvas: z.object({ sourceUrl: z.string().url(), remoteId: z.string(), moduleCount: z.number().int().nonnegative(), lastImportedAt: z.string().nullable() }).optional(),
 });
 export type CourseDetail = z.infer<typeof CourseDetailSchema>;
 

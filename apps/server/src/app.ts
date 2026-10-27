@@ -9,6 +9,11 @@ import {
 import Fastify from "fastify";
 import { CodexRunner } from "./codex/codex-runner.js";
 import { MaterialProcessor } from "./extraction/material-processor.js";
+import { MaterialIngestion } from "./extraction/material-ingestion.js";
+import { CanvasClient, type CanvasConnectionOptions } from "./canvas/canvas-client.js";
+import { CanvasImportService } from "./canvas/canvas-import-service.js";
+import { CanvasLibrary } from "./storage/canvas-library.js";
+import { registerCanvasRoutes } from "./routes/canvas.js";
 import {
   LearningWorkflowService,
   type LearningCodexClient,
@@ -31,9 +36,10 @@ export interface AppOptions {
   databasePath?: string;
   courseRoot?: string;
   codex?: LearningCodexClient;
+  canvas?: CanvasConnectionOptions;
 }
 
-function findProjectRoot() {
+export function findProjectRoot() {
   let current = dirname(fileURLToPath(import.meta.url));
   const filesystemRoot = parse(current).root;
 
@@ -56,8 +62,10 @@ export function buildApp(options: AppOptions = {}) {
   const materialStorage = new MaterialStorage(courseRoot);
   const sourceLibrary = new SourceLibrary(database);
   sourceLibrary.recoverInterruptedExtractions();
-  const materialProcessor = new MaterialProcessor(sourceLibrary);
   const codex = options.codex ?? new CodexRunner({ projectRoot });
+  const materialProcessor = new MaterialProcessor(sourceLibrary);
+  const ingestion = new MaterialIngestion(library, materialStorage, materialProcessor);
+  const canvas = new CanvasImportService(new CanvasClient(options.canvas ?? { baseUrl: "https://canvas.instructure.com" }), new CanvasLibrary(database), library, ingestion);
   const artifacts = new LearningArtifactLibrary(database);
   const structures = new CourseStructureLibrary(database);
   const learning = new LearningWorkflowService(
@@ -84,10 +92,10 @@ export function buildApp(options: AppOptions = {}) {
 
   void app.register(registerCourseRoutes, {
     library,
-    materialStorage,
-    materialProcessor,
+    ingestion,
     sourceLibrary,
   });
+  void app.register(async (scope) => registerCanvasRoutes(scope, canvas));
   void app.register(registerCodexRoutes, { codex });
   void app.register(registerLearningRoutes, { learning });
   void app.register(registerLearnerRoutes, { learner, codex, courses: library });
@@ -107,6 +115,7 @@ export function buildApp(options: AppOptions = {}) {
   });
 
   app.addHook("onClose", async () => {
+    await canvas.close();
     database.close();
   });
 

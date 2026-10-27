@@ -23,6 +23,7 @@ import {
 } from "./lib/api";
 import { CoursePage } from "./views/CoursePage";
 import { HomePage } from "./views/HomePage";
+import { CanvasImportDialog } from "./components/CanvasImportDialog";
 import { InfoPage } from "./views/InfoPage";
 import { HandTrackingPage } from "./views/HandTrackingPage";
 import { StudyPage } from "./views/StudyPage";
@@ -57,6 +58,7 @@ export function App() {
   const [learningError, setLearningError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [canvasImport, setCanvasImport] = useState<{ courseId?: string; courseUrl?: string } | null>(null);
 
   const loadLibrary = useCallback(async () => {
     try {
@@ -150,6 +152,13 @@ export function App() {
     setArtifacts(await getLearningArtifacts(courseId));
   }
 
+  const handleCanvasImported = useCallback(async (courseId: string) => {
+    await Promise.all([loadLibrary(), loadCourse(courseId)]);
+    const path = `/courses/${courseId}`;
+    if (window.location.pathname !== path) window.history.pushState({}, "", path);
+    setRoute({ kind: "course", courseId });
+  }, [loadLibrary, loadCourse]);
+
   async function handleAnalyzeSources(regenerate: boolean) {
     if (route.kind !== "course") return;
     setLearningAction("analyzing");
@@ -227,6 +236,7 @@ export function App() {
           onBuildMap={handleBuildCourseMap}
           onAcceptMap={handleAcceptCourseMap}
           onStudy={() => navigate(`/courses/${route.courseId}/study`)}
+          onCanvasImport={() => setCanvasImport({ courseId: route.courseId, courseUrl: selectedCourse?.canvas?.sourceUrl })}
         />
       ) : route.kind === "hand-tracking" ? (
         <HandTrackingPage />
@@ -239,8 +249,10 @@ export function App() {
           error={error}
           onCreate={handleCreate}
           onOpen={(courseId) => navigate(`/courses/${courseId}`)}
+          onCanvasImport={() => setCanvasImport({})}
         />
       )}
+      {canvasImport && <CanvasImportDialog courses={courses} existingCourseId={canvasImport.courseId} courseUrl={canvasImport.courseUrl} onClose={() => { try { localStorage.removeItem("canvas-import-job"); } catch { /* Browser storage is optional. */ } setCanvasImport(null); }} onImported={handleCanvasImported} />}
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import {
   ApiErrorSchema,
+  CanvasStatusSchema, CanvasPreviewSchema, CanvasImportStartedSchema, CanvasImportJobSchema,
+  type CanvasImportRequest,
   CodexStatusResponseSchema,
   CourseLearningArtifactsResponseSchema,
   CourseMapArtifactSchema,
@@ -11,6 +13,19 @@ import {
   type CreateCourseRequest,
   type MaterialKind,
 } from "@local-learning-studio/contracts";
+
+export async function getCanvasStatus() {
+  return CanvasStatusSchema.parse(await readResponse(await fetch("/api/canvas/status")));
+}
+export async function previewCanvasCourse(courseUrl: string) {
+  return CanvasPreviewSchema.parse(await readResponse(await fetch("/api/canvas/preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseUrl }) })));
+}
+export async function importCanvasCourse(input: CanvasImportRequest) {
+  return CanvasImportStartedSchema.parse(await readResponse(await fetch("/api/canvas/imports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) })));
+}
+export async function getCanvasImport(jobId: string) {
+  return CanvasImportJobSchema.parse(await readResponse(await fetch(`/api/canvas/imports/${jobId}`)));
+}
 
 async function readResponse(response: Response) {
   const body: unknown = await response.json().catch(() => null);

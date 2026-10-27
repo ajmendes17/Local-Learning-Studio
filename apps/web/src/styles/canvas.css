@@ -1,0 +1,54 @@
+.library-actions { display: flex; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
+.canvas-dialog { width: min(960px, 100%); }
+.canvas-copy, .canvas-connection { color: var(--muted); font-size: .8rem; line-height: 1.6; }
+.canvas-connection { margin: 0; }
+.canvas-preview { display: grid; gap: 18px; padding-top: 26px; margin-top: 26px; border-top: 1px solid var(--line); }
+.canvas-preview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.canvas-preview-heading h3, .canvas-progress h3 { margin: 5px 0 0; font-size: 1.25rem; line-height: 1.35; overflow-wrap: anywhere; }
+.canvas-preview-heading a, .canvas-resource a, .material-row__name a { color: var(--moss); font-size: .75rem; }
+.canvas-preview-heading a { flex-shrink: 0; }
+.canvas-access-summary { margin: 0; padding: 12px 15px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: .78rem; background: var(--white); }
+.canvas-warnings { padding: 13px 16px; border-radius: 7px; color: #6f5a32; background: #f4ead0; font-size: .76rem; }
+.canvas-warnings summary { cursor: pointer; font-weight: 650; }
+.canvas-warnings ul { padding-left: 20px; }
+.canvas-dialog select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 6px; padding: 0 12px; color: var(--ink); background: var(--white); }
+.canvas-course-fields, .canvas-selection { display: grid; gap: 14px; }
+.canvas-selection-actions { display: flex; gap: 18px; flex-wrap: wrap; }
+.canvas-resources { list-style: none; padding: 0; margin: 0; max-height: 380px; overflow-y: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--white); }
+.canvas-resources li + li { border-top: 1px solid var(--line); }
+.canvas-dialog label.canvas-resource { display: grid; grid-template-columns: 20px minmax(0, 1fr) 24px; gap: 12px; align-items: start; padding: 15px; cursor: pointer; }
+.canvas-dialog .canvas-resource input { min-height: 0; padding: 0; width: 17px; height: 17px; margin-top: 3px; accent-color: var(--moss); }
+.canvas-resource span { display: grid; gap: 4px; min-width: 0; }
+.canvas-resource strong, .canvas-job-items strong { font-size: .8rem; overflow-wrap: anywhere; }
+.canvas-resource small, .canvas-job-items small { display: block; color: var(--muted); font-size: .7rem; font-weight: 400; line-height: 1.45; }
+.canvas-resource:has(input:disabled) { background: #f4f1e9; }
+.canvas-resource a { font-size: 1rem; text-align: right; }
+.canvas-import-footer { position: sticky; bottom: -30px; margin: 0 -10px -10px; padding: 14px 10px; background: var(--paper); border-top: 1px solid var(--line); align-items: center; justify-content: space-between; }
+.canvas-import-footer > span { font-size: .8rem; color: var(--muted); }
+.canvas-progress progress { width: 100%; height: 12px; accent-color: var(--moss); margin-top: 22px; }
+.canvas-job-items li { padding: 13px 15px; display: grid; gap: 6px; }
+.canvas-job-items .form-error { color: #873f38; }
+.canvas-import-issues { margin-top: 18px; padding: 14px; border: 1px solid #cfa39d; border-radius: 7px; background: #fcf0ed; }
+.canvas-import-issues h4 { margin: 0; color: #873f38; font-size: .85rem; }
+.canvas-import-issues > p { font-size: .75rem; line-height: 1.5; color: #873f38; }
+.canvas-import-issues .canvas-resources { max-height: 180px; }
+.status-pill--needs-review { color: #6f5a32; background: #f4ead0; }
+.image-review-passage { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.image-review-passage h3 { font-size: .95rem; }
+.image-review-passage img { display: block; width: 100%; height: auto; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 5px; background: white; }
+.image-review-passage textarea { width: 100%; min-height: 230px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; font: .85rem/1.6 monospace; resize: vertical; }
+.image-review-dialog label.image-review-confirm { display: flex; align-items: start; gap: 10px; margin-top: 24px; line-height: 1.5; }
+.image-review-confirm input { width: 18px; min-height: 18px; margin: 0; }
+.canvas-course-connection { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 24px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); }
+.canvas-course-connection strong { font-size: .85rem; }
+.canvas-course-connection p { margin: 6px 0 0; font-size: .75rem; color: var(--muted); line-height: 1.5; }
+.canvas-course-connection button { flex-shrink: 0; }
+@media (max-width: 700px) {
+  .canvas-preview-heading, .canvas-course-connection { flex-direction: column; }
+  .canvas-dialog { padding: 24px 18px; }
+  .canvas-selection-actions { gap: 12px; }
+  .library-actions { width: 100%; }
+  .canvas-import-footer { bottom: -24px; }
+}
+.material-category { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.8rem; }
+.material-category select { width: auto; max-width: 100%; padding: 0.3rem 0.5rem; font: inherit; }

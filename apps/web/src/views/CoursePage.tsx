@@ -25,6 +25,7 @@ interface CoursePageProps {
   onBuildMap: (regenerate: boolean) => Promise<void>;
   onAcceptMap: () => Promise<void>;
   onStudy: () => void;
+  onCanvasImport: () => void;
 }
 
 const materialKindLabels: Record<MaterialKind, string> = {
@@ -69,6 +70,7 @@ function MaterialRow({ material }: { material: CourseMaterial }) {
       </span>
       <span className="material-row__name">
         <strong>{material.originalName}</strong>
+        {material.source ? <span><a href={material.source.url} target="_blank" rel="noreferrer">Canvas source</a></span> : null}
         <span>
           {materialKindLabels[material.kind]} · {formatBytes(material.sizeBytes)}
         </span>
@@ -103,6 +105,7 @@ export function CoursePage({
   onBuildMap,
   onAcceptMap,
   onStudy,
+  onCanvasImport,
 }: CoursePageProps) {
   if (loading && !course) {
     return <main className="course-loading">Opening class…</main>;
@@ -165,6 +168,7 @@ export function CoursePage({
             <p>Files are saved only inside this class.</p>
           </div>
           <MaterialUpload onUpload={onUpload} />
+          <div className="canvas-course-connection"><div><strong>{course.canvas ? "Connected to Canvas" : "Add resources from Canvas"}</strong><p>{course.canvas ? `${course.canvas.moduleCount} Canvas modules | ${course.canvas.lastImportedAt ? `Last imported ${new Date(course.canvas.lastImportedAt).toLocaleString()}` : "Import in progress"}` : "Bring in your syllabus, lectures and course pages alongside your own files."}</p></div><button type="button" className="button-secondary" onClick={onCanvasImport}>{course.canvas ? "Refresh from Canvas" : "Import from Canvas"}</button></div>
           {course.materials.length > 0 ? (
             <ul className="material-list">
               {course.materials.map((material) => (

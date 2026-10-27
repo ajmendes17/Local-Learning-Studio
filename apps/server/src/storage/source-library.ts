@@ -121,7 +121,7 @@ export class SourceLibrary {
           material_id AS materialId,
           content_hash AS contentHash
         FROM source_passages
-        WHERE course_id = ?
+        WHERE course_id = ? AND material_id IN (SELECT id FROM materials WHERE is_active = 1 AND status = 'ready')
         ORDER BY material_id, ordinal
       `)
       .all(courseId) as unknown as PassageHashRow[];

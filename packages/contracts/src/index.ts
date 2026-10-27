@@ -1,4 +1,5 @@
 export * from "./common.js";
+export * from "./canvas.js";
 export * from "./codex.js";
 export * from "./course.js";
 export * from "./course-map.js";

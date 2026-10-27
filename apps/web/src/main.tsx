@@ -10,6 +10,7 @@ import "./styles/responsive.css";
 import "./styles/knowledge.css";
 import "./styles/study.css";
 import "./styles/hand-tracking.css";
+import "./styles/canvas.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

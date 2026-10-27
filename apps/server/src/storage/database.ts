@@ -317,6 +317,33 @@ export function openDatabase(databasePath: string) {
   `);
 
   createSourcePassagesTable(database);
+  ensureColumn(database, "materials", "is_active", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(database, "materials", "kind_overridden", "INTEGER NOT NULL DEFAULT 0");
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS canvas_courses (
+      origin TEXT NOT NULL, remote_id TEXT NOT NULL,
+      course_id TEXT NOT NULL UNIQUE REFERENCES courses(id) ON DELETE CASCADE,
+      source_url TEXT NOT NULL, module_count INTEGER NOT NULL, last_imported_at TEXT,
+      PRIMARY KEY (origin, remote_id)
+    );
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS canvas_resources (
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      resource_key TEXT NOT NULL, material_id TEXT NOT NULL REFERENCES materials(id),
+      content_hash TEXT NOT NULL, source_url TEXT NOT NULL, imported_at TEXT NOT NULL,
+      PRIMARY KEY(course_id, resource_key)
+    );
+    CREATE TABLE IF NOT EXISTS canvas_import_jobs (
+      id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      payload_json TEXT NOT NULL CHECK(json_valid(payload_json))
+    );
+    CREATE TABLE IF NOT EXISTS canvas_material_sources (
+      material_id TEXT PRIMARY KEY REFERENCES materials(id) ON DELETE CASCADE,
+      source_url TEXT NOT NULL, imported_at TEXT NOT NULL
+    );
+  `);
   migrateLegacySourcePassages(database);
   for (const table of ["learner_assessments", "learner_topics", "learner_concepts", "study_attempts", "mastery_evidence"]) {
     ensureColumn(database, table, "course_id", "TEXT REFERENCES courses(id) ON DELETE CASCADE");
